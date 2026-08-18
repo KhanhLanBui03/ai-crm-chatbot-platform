@@ -14,7 +14,7 @@ spring:
         - id: main-backend-route
           uri: lb://MAIN-BACKEND-SERVICE
           predicates:
-            - Path=/api/auth/**, /api/users/**, /api/chatbots/**, /api/documents/**, /api/customers/**, /api/conversations/**, /api/messages/**, /api/leads/**, /api/products/**, /api/businesses/**
+            - Path=/api/auth/**, /api/business/**, /api/businesses/**, /api/chatbots/**, /api/documents/**, /api/customers/**, /api/conversations/**, /api/messages/**, /api/leads/**, /api/products/**, /api/dashboard/**, /api/public/chat/**
         - id: mcp-tool-route
           uri: lb://MCP-TOOL-SERVICE
           predicates:
