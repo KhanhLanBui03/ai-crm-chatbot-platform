@@ -1,0 +1,7 @@
+CREATE TABLE messages (
+    id BIGSERIAL PRIMARY KEY,
+    content TEXT NOT NULL,
+    sender VARCHAR(50) NOT NULL,
+    conversation_id BIGINT REFERENCES conversations(id) ON DELETE CASCADE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

@@ -1,0 +1,9 @@
+CREATE TABLE conversations (
+    id BIGSERIAL PRIMARY KEY,
+    session_id VARCHAR(255) NOT NULL UNIQUE,
+    status VARCHAR(50) NOT NULL,
+    customer_id BIGINT REFERENCES customers(id),
+    chatbot_id BIGINT REFERENCES chatbots(id),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

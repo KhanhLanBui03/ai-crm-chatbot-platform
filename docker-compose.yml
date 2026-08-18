@@ -1,0 +1,115 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: aicrm-postgres
+    environment:
+      POSTGRES_DB: aicrm_db
+      POSTGRES_USER: aicrm_user
+      POSTGRES_PASSWORD: aicrm_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  qdrant:
+    image: qdrant/qdrant
+    container_name: aicrm-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  redis:
+    image: redis:7
+    container_name: aicrm-redis
+    ports:
+      - "6379:6379"
+
+  discovery-server:
+    build:
+      context: ./backend-java/discovery-server
+    container_name: aicrm-discovery-server
+    ports:
+      - "8761:8761"
+
+  api-gateway:
+    build:
+      context: ./backend-java/api-gateway
+    container_name: aicrm-api-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      - discovery-server
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
+
+  main-backend-service:
+    build:
+      context: ./backend-java/main-backend-service
+    container_name: aicrm-main-backend-service
+    ports:
+      - "8081:8081"
+    depends_on:
+      - postgres
+      - discovery-server
+      - ai-service-python
+    environment:
+      SERVER_PORT: 8081
+      SPRING_PROFILES_ACTIVE: dev
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: aicrm_db
+      DB_USERNAME: aicrm_user
+      DB_PASSWORD: aicrm_password
+      AI_SERVICE_URL: http://ai-service-python:8000
+      MCP_TOOL_SERVICE_URL: http://mcp-tool-service:8082
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
+
+  mcp-tool-service:
+    build:
+      context: ./backend-java/mcp-tool-service
+    container_name: aicrm-mcp-tool-service
+    ports:
+      - "8082:8082"
+    depends_on:
+      - discovery-server
+      - main-backend-service
+    environment:
+      SERVER_PORT: 8082
+      MAIN_BACKEND_SERVICE_URL: http://main-backend-service:8081
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
+
+  ai-service-python:
+    build:
+      context: ./ai-service-python/langgraph-rag-service
+    container_name: aicrm-ai-service-python
+    ports:
+      - "8000:8000"
+    depends_on:
+      - qdrant
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: document_chunks
+      MCP_TOOL_SERVICE_URL: http://mcp-tool-service:8082
+      BACKEND_SERVICE_URL: http://main-backend-service:8081
+      OPENAI_API_KEY: your_openai_api_key
+      GEMINI_API_KEY: your_gemini_api_key
+
+  frontend-react:
+    build:
+      context: ./frontend-react/aicrm-frontend
+    container_name: aicrm-frontend-react
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api-gateway
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080
+
+volumes:
+  postgres_data:
+  qdrant_data:
