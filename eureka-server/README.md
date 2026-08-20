@@ -15,6 +15,15 @@ Service registry. Gateway định tuyến qua `lb://` nhờ đăng ký ở đây
 
 Vận hành thật thì đảo ngược cả ba.
 
+## Cấu trúc package
+
+```
+com.thesis.crm.eureka
+└── EurekaServerApplication.java     @EnableEurekaServer
+```
+
+Không cần sub-package: toàn bộ hành vi đến từ annotation và `application.yml`.
+
 ## Bẫy với `ai-service` (Python)
 
 FastAPI **không tự đăng ký** với Eureka. Dùng `py-eureka-client`: đăng ký lúc khởi động,
@@ -23,4 +32,4 @@ tiến trình đã chết trong khoảng 90 giây. Xem kế hoạch mục 4.4.
 
 ## TODO
 
-- [ ] `EurekaServerApplication.java` + `@EnableEurekaServer`
+- [ ] Cấu hình `config/` nếu cần tuỳ biến ngoài `application.yml`

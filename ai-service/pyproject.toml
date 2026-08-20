@@ -8,17 +8,10 @@ dynamic = ["dependencies"]
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
 
-[tool.setuptools]
-packages = [
-    "api",
-    "orchestrator",
-    "rag",
-    "mcp_client",
-    "scoring",
-    "clustering",
-    "eval",
-    "common",
-]
+# app/  = mã phục vụ request
+# eval/ = harness thí nghiệm, import ngược vào app.* nhưng KHÔNG thuộc ứng dụng
+[tool.setuptools.packages.find]
+include = ["app*", "eval*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

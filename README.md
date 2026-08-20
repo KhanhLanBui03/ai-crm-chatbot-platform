@@ -108,6 +108,7 @@ Mỗi quyết định một file trong [`docs/adr/`](docs/adr/) — nguồn tr�
 | [0007](docs/adr/0007-pgvector-thay-vector-db-rieng.md) | pgvector trong cùng cụm PostgreSQL |
 | [0008](docs/adr/0008-web-dashboard-react-vite-thay-nextjs.md) | web-dashboard React + Vite (lệch so với kế hoạch) |
 | [0009](docs/adr/0009-kafka-che-do-zookeeper-thay-kraft.md) | Kafka chế độ ZooKeeper (lệch so với kế hoạch) |
+| [0010](docs/adr/0010-ai-service-app-src-layout.md) | ai-service `app/` src-layout (lệch so với kế hoạch) |
 
 ---
 
@@ -147,18 +148,25 @@ Sau khi chốt, mỗi bên tự dựng bản giả lập của bên kia và làm
 │
 │   ── TRACK A ──
 ├── eureka-server/
-├── gateway/
-├── java-core/              platform · engagement · sales · analytics
+├── gateway/                config · filter · security · exception
+├── java-core/              4 bounded context, mỗi context đủ tầng:
+│   │                       controller · dto · entity · repository · service/impl
+│   ├── platform/  engagement/  sales/  analytics/
+│   ├── client/  config/  security/  common/
 │   └── src/main/resources/db/migration/     Flyway, dải V1xx
 ├── web-dashboard/          React + Vite
 ├── web-widget/             Vite
 ├── loadtest/               k6
 │
 │   ── TRACK B ──
-└── ai-service/
-    ├── orchestrator/       đồ thị LangGraph
-    ├── rag/                ingest · retrieve · rerank · generate
-    ├── mcp_client/  scoring/  clustering/
+└── ai-service/             app/ src-layout (ADR-0010)
+    ├── app/
+    │   ├── api/            bề mặt HTTP có phiên bản
+    │   ├── core/           config · logging · metrics · eureka
+    │   ├── db/  schemas/  repositories/
+    │   ├── domain/         orchestrator · rag · mcp_client · scoring · clustering
+    │   ├── integrations/   java_core · llm · kafka
+    │   └── workers/        consumer nền
     ├── migration/          Flyway, dải V2xx
     └── eval/
         ├── golden_set.jsonl      150 câu — tài sản giá trị nhất

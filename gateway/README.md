@@ -13,6 +13,19 @@ Spring Cloud Gateway: điểm vào duy nhất cho widget, dashboard và webhook 
 | `/api/v1/**` | `lb://java-core` | 20 req/s, burst 40 |
 | `/ai/v1/**` | `lb://ai-service` | 5 req/s, burst 10 — gọi mô hình đắt hơn nhiều |
 
+## Cấu trúc package
+
+Phẳng — gateway chỉ có một miền, không có bounded context nào để tách.
+
+```
+com.thesis.crm.gateway
+├── GatewayApplication.java
+├── config/        CorsConfig · RouteConfig · SecurityConfig · RateLimiterConfig
+├── filter/        TraceIdFilter · TenantContextFilter
+├── security/      JwtAuthConverter · TenantKeyResolver (rate limit theo tenant)
+└── exception/     GatewayExceptionHandler
+```
+
 ## Quy ước bắt buộc
 
 - Gateway **chỉ xác thực** JWT, không phát hành. `java-core` phát hành và công bố khóa
@@ -23,7 +36,6 @@ Spring Cloud Gateway: điểm vào duy nhất cho widget, dashboard và webhook 
 
 ## TODO
 
-- [ ] `GatewayApplication.java`
 - [ ] Filter gắn `X-Trace-Id` vào MDC
 - [ ] `KeyResolver` cho rate limit theo `tenant_id`, không theo IP
 - [ ] Nginx đứng trước (TLS, chặn rác, giới hạn kích thước body)
