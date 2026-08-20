@@ -23,5 +23,6 @@ Mỗi quyết định kiến trúc một file. Nguồn trực tiếp cho **chư�
 | 0006 | Tìm kiếm lai vector + BM25, hợp nhất RRF, xếp hạng lại | KH mục 4.2, 7.1 |
 | 0007 | pgvector trong cùng cụm PostgreSQL thay vì vector DB riêng | KH mục 4.2 |
 | 0008 | web-dashboard dùng React + Vite thay vì Next.js 15 | Lệch so với KH |
+| 0009 | Kafka chạy ở chế độ ZooKeeper thay vì KRaft | Lệch so với KH |
 
 `KH` = tài liệu `Ke-hoach-do-an-Chatbot-AI-CRM-v2-nhom-2-nguoi.docx`.

@@ -22,7 +22,7 @@ TOPICS=(
 
 echo "Tạo topic trên ${CONTAINER} (${BOOTSTRAP})..."
 for t in "${TOPICS[@]}"; do
-  docker exec "$CONTAINER" /opt/kafka/bin/kafka-topics.sh \
+  docker exec "$CONTAINER" kafka-topics \
     --bootstrap-server "$BOOTSTRAP" \
     --create --if-not-exists \
     --topic "$t" \
@@ -33,4 +33,4 @@ done
 
 echo
 echo "Danh sách topic hiện có:"
-docker exec "$CONTAINER" /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$BOOTSTRAP" --list
+docker exec "$CONTAINER" kafka-topics --bootstrap-server "$BOOTSTRAP" --list

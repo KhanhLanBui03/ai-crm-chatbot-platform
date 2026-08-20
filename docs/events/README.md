@@ -33,3 +33,8 @@ nghiệp vụ, và cho phép mở rộng bằng cách tăng số phân vùng mà
 
 Tường minh bằng `scripts/create-topics.sh` để tái lập được, dù môi trường phát triển có bật
 tạo topic tự động.
+
+Cụm chạy ở **chế độ ZooKeeper** (ADR-0009), không phải KRaft như kế hoạch mục 4.3 ghi.
+Điều này **không ảnh hưởng** tới producer/consumer: client chỉ nói chuyện với broker qua
+`bootstrap.servers`, không kết nối ZooKeeper. Lược đồ sự kiện, khóa phân vùng và cơ chế
+chống trùng ở trang này giữ nguyên.
