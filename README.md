@@ -14,19 +14,24 @@ Kế hoạch đầy đủ: [`docs/Ke-hoach-do-an-Chatbot-AI-CRM-v2-nhom-2-nguoi.
 ```bash
 git clone <repo> && cd ai-crm-chatbot-platform
 
-# 1. Hạ tầng — chạy được ngay, không cần code
+# 1. Cấu hình. Nếu máy bạn đã có PostgreSQL/Redis chiếm cổng, đổi *_HOST_PORT ở đây.
+cp .env.example .env
+
+# 2. Hạ tầng — chạy được ngay, không cần code
 docker compose up -d postgres redis kafka
 docker compose ps                    # cả ba phải "healthy"
 
-# 2. Khai báo topic Kafka tường minh
+# 3. Khai báo topic Kafka tường minh
 bash scripts/create-topics.sh        # phải hiện đủ 5 topic
 
-# 3. Toàn bộ dịch vụ (cần code — xem "Trạng thái" bên dưới)
+# 4. Toàn bộ dịch vụ (cần code — xem "Trạng thái" bên dưới)
 docker compose up -d
 
-# 4. Quan sát hệ thống, khi cần
+# 5. Quan sát hệ thống, khi cần
 docker compose --profile observability up -d
 ```
+
+Dừng lại: `docker compose down` (thêm `-v` nếu muốn xóa luôn dữ liệu).
 
 **Trạng thái hiện tại:** repo đang ở bước *dựng khung*. Bước 1 và 2 chạy được ngay;
 bước 3 sẽ báo lỗi build cho tới khi mỗi service có mã nguồn — đó là dự kiến.
@@ -44,6 +49,10 @@ bước 3 sẽ báo lỗi build cho tới khi mỗi service có mã nguồn — 
 | PostgreSQL + pgvector | 5432 | — | — |
 | Redis | 6379 | — | — |
 | Kafka | 9092 / **29092** | trong Docker / từ máy chủ | — |
+
+Ba cổng cuối là cổng **trên máy chủ**, đổi được bằng `POSTGRES_HOST_PORT`,
+`REDIS_HOST_PORT`, `KAFKA_HOST_PORT` trong `.env`. Cổng bên trong mạng Docker không đổi —
+các service luôn gọi nhau bằng `postgres:5432`, `redis:6379`, `kafka:9092`.
 | Prometheus | 9090 | http://localhost:9090 | profile `observability` |
 | Grafana | 3000 | http://localhost:3000 | profile `observability` |
 
