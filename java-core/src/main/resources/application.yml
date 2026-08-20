@@ -1,0 +1,86 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: java-core
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${DB_NAME:thesis_crm}
+    # ADR-0001: KHÔNG dùng tài khoản chủ bảng ở runtime — chủ bảng bypass RLS.
+    # Migration chạy bằng DB_MIGRATION_USER, ứng dụng chạy bằng DB_USERNAME.
+    username: ${DB_USERNAME:crm_app}
+    password: ${DB_PASSWORD:changeme}
+    hikari:
+      maximum-pool-size: 20
+
+  jpa:
+    hibernate:
+      ddl-auto: validate   # schema do Flyway quản, Hibernate chỉ kiểm tra
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    schemas: platform,engagement,sales,analytics
+    # Dải V1xx thuộc Track A — xem db/migration/README.md
+    user: ${DB_MIGRATION_USER:crm_owner}
+    password: ${DB_MIGRATION_PASSWORD:changeme}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:kafka:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+    consumer:
+      group-id: analytics-cg
+      auto-offset-reset: earliest
+      # Kế hoạch mục 4.3: xác nhận offset THỦ CÔNG, không tự động.
+      # Tự động xác nhận có thể ghi offset trước khi xử lý xong → mất sự kiện.
+      enable-auto-commit: false
+    listener:
+      ack-mode: manual_immediate
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://eureka-server:8761/eureka}
+    registry-fetch-interval-seconds: 10
+  instance:
+    prefer-ip-address: true        # BẮT BUỘC trong Docker — kế hoạch mục 4.4
+    lease-renewal-interval-in-seconds: 10
+    lease-expiration-duration-in-seconds: 30
+
+# Cấu hình riêng của ứng dụng
+crm:
+  outbox:
+    # ADR-0003: @Scheduled mỗi 500ms, lấy lô 100 bản ghi chưa phát
+    poll-interval-ms: 500
+    batch-size: 100
+  tenant:
+    # Biến phiên dùng cho RLS policy: SET LOCAL app.tenant_id = ...
+    session-variable: app.tenant_id
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: java-core

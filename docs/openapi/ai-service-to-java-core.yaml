@@ -1,0 +1,60 @@
+# Giao ước: java-core GỌI ai-service
+# Track B viết đặc tả, Track A rà soát. Hạn chốt: 07/09 (kế hoạch mục 1.3).
+openapi: 3.1.0
+info:
+  title: ai-service API (dành cho java-core)
+  version: 0.1.0-draft
+  description: |
+    java-core gọi được gì để yêu cầu trả lời, yêu cầu tóm tắt, yêu cầu chấm điểm.
+    TODO: chốt trước 07/09.
+servers:
+  - url: http://ai-service:8000
+    description: nội bộ mạng Docker
+  - url: http://gateway:8080
+    description: qua gateway (lb://ai-service)
+
+paths:
+  /v1/answer:
+    post:
+      summary: Sinh câu trả lời cho một lượt hội thoại
+      description: |
+        Đi qua đồ thị LangGraph. Trả về câu trả lời kèm trích dẫn chunk_id, hoặc
+        cờ `refused` khi không đủ căn cứ, hoặc cờ `handoff` khi cần chuyển nhân viên.
+      # TODO: request (tenant_id, conversation_id, message, history), response (answer,
+      #       citations[], route, refused, handoff, groundedness_score, latency_ms, cost_vnd)
+
+  /v1/summarize:
+    post:
+      summary: Tóm tắt một hội thoại
+      # TODO
+
+  /v1/leads/score:
+    post:
+      summary: Chấm điểm một lead từ nội dung hội thoại
+      # TODO: trả về score, model_version, features (jsonb) — java-core ghi vào sales.LEAD_SCORES
+
+  /v1/documents/ingest:
+    post:
+      summary: Nạp một tài liệu vào chỉ mục tri thức
+      description: Thường được kích hoạt bất đồng bộ qua topic `crm.document.v1`.
+      # TODO
+
+  /health:
+    get:
+      summary: Healthcheck cho Docker Compose và Eureka
+  /metrics:
+    get:
+      summary: Số liệu Prometheus (prometheus-client)
+
+components:
+  parameters:
+    TenantId:
+      name: X-Tenant-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    TraceId:
+      name: X-Trace-Id
+      in: header
+      required: true
+      schema: { type: string }

@@ -1,0 +1,17 @@
+{
+  "name": "web-widget",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Widget chat nhúng vào website khách hàng — Vite vanilla TS. Track A.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  }
+}

@@ -1,0 +1,32 @@
+[project]
+name = "ai-service"
+version = "0.1.0"
+description = "Khối AI: RAG, LangGraph, MCP, chấm điểm Lead, phân nhóm chủ đề, khung đánh giá. Track B."
+requires-python = ">=3.11"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools]
+packages = [
+    "api",
+    "orchestrator",
+    "rag",
+    "mcp_client",
+    "scoring",
+    "clustering",
+    "eval",
+    "common",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

@@ -1,0 +1,76 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway
+
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false   # định tuyến tường minh, không tự sinh từ Eureka
+      routes:
+        # Định tuyến qua lb:// — Eureka phân giải, không hardcode host:port (ADR-0004)
+        - id: java-core
+          uri: lb://java-core
+          predicates:
+            - Path=/api/v1/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+
+        - id: ai-service
+          uri: lb://ai-service
+          predicates:
+            - Path=/ai/v1/**
+          filters:
+            - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # JWT RS256 — java-core phát hành, gateway chỉ xác thực bằng khóa công khai
+          jwk-set-uri: ${JWK_SET_URI:http://java-core:8081/.well-known/jwks.json}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://eureka-server:8761/eureka}
+    # Kế hoạch mục 4.4: giảm thời gian hội tụ ở môi trường phát triển
+    registry-fetch-interval-seconds: 10
+  instance:
+    # BẮT BUỘC trong Docker: mặc định Eureka đăng ký bằng hostname container,
+    # gateway thường không phân giải được (kế hoạch mục 4.4)
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 10
+    lease-expiration-duration-in-seconds: 30
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,gateway
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO

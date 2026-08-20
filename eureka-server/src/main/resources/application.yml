@@ -1,0 +1,32 @@
+server:
+  port: 8761
+
+spring:
+  application:
+    name: eureka-server
+
+eureka:
+  client:
+    # Server không tự đăng ký với chính mình khi chạy một nút
+    register-with-eureka: false
+    fetch-registry: false
+  server:
+    # Kế hoạch mục 4.4: tắt self-preservation ở môi trường phát triển.
+    # Bật lại (true) khi vận hành thật.
+    enable-self-preservation: false
+    eviction-interval-timer-in-ms: 5000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    com.netflix.eureka: WARN
+    com.netflix.discovery: WARN

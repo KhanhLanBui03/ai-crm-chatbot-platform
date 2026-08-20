@@ -1,0 +1,66 @@
+# Giao ước: ai-service GỌI java-core
+# Track A viết đặc tả, Track B rà soát. Hạn chốt: 07/09 (kế hoạch mục 1.3).
+#
+# Đây là bề mặt DUY NHẤT ai-service được phép chạm vào dữ liệu nghiệp vụ (ADR-0002).
+# ai-service không kết nối trực tiếp tới các schema platform/engagement/sales/analytics.
+openapi: 3.1.0
+info:
+  title: java-core internal API (dành cho ai-service)
+  version: 0.1.0-draft
+  description: |
+    ai-service gọi được gì để đọc hội thoại, ghi lead, ghi tương tác AI.
+    TODO: chốt trước 07/09.
+servers:
+  - url: http://java-core:8081
+    description: nội bộ mạng Docker
+  - url: http://gateway:8080
+    description: qua gateway (lb://java-core)
+
+paths:
+  # --- Đọc hội thoại (engagement) ---
+  /internal/conversations/{conversationId}:
+    get:
+      summary: Đọc một hội thoại kèm lịch sử tin nhắn
+      # TODO: parameters, responses
+  /internal/conversations/{conversationId}/messages:
+    get:
+      summary: Đọc tin nhắn của hội thoại, có phân trang
+      # TODO
+
+  # --- Ghi lead / điểm lead (sales) ---
+  # Track B ghi qua API này, KHÔNG ghi thẳng vào schema sales (mục 9)
+  /internal/leads:
+    post:
+      summary: Tạo lead từ tín hiệu do AI trích xuất
+      # TODO
+  /internal/leads/{leadId}/score:
+    put:
+      summary: Ghi điểm lead — sales.LEAD_SCORES (score, model_version, features)
+      # TODO
+
+  # --- Ghi tương tác AI (ai) ---
+  /internal/ai-interactions:
+    post:
+      summary: Ghi một lượt gọi AI — ai.AI_INTERACTIONS
+      # TODO: cost_vnd, latency_ms, retrieved_chunk_ids, groundedness_score, refused
+
+components:
+  securitySchemes:
+    internalJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT RS256 nội bộ; mọi request bắt buộc mang tenant context.
+  parameters:
+    TenantId:
+      name: X-Tenant-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    TraceId:
+      name: X-Trace-Id
+      in: header
+      required: true
+      schema: { type: string }
+security:
+  - internalJwt: []
