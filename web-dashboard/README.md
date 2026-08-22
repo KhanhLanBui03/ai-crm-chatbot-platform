@@ -14,8 +14,10 @@ src/
 ├── api/          axiosClient + một file mỗi nhóm endpoint
 ├── components/   ui/ (nguyên thủy dùng chung) · layout/
 ├── features/     mỗi màn hình nghiệp vụ một thư mục, tự chứa
-│   ├── auth/ conversations/ contacts/ leads/
-│   └── deals/ documents/ analytics/ settings/
+│   ├── auth/ conversations/ contacts/ leads/ deals/
+│   ├── analytics/ settings/ knowledge/ ai-agent/
+│   └── audit/
+├── mocks/        dữ liệu giả + handler MSW, một file mỗi nhóm endpoint
 ├── hooks/  styles/  types/  utils/
 ```
 
@@ -32,11 +34,19 @@ xuống ~2,5 tuần-người. Đây không phải cắt phạm vi — chức nă
 ## Chạy thử
 
 ```bash
+cp .env.example .env   # BƯỚC ĐẦU TIÊN, không bỏ qua được — xem ghi chú ngay dưới
 npm install
 npm run dev            # :5173 — VITE_USE_MOCK=true là chạy trên tầng mock MSW
 npm run typecheck
+npm run build
 npm run gen:api        # sinh lại src/types/api-schema.d.ts từ docs/openapi/dashboard-api.yaml
 ```
+
+> **Quên `cp .env.example .env` thì đăng nhập hỏng mà không hiểu vì sao.** `.env` không được
+> commit (`.gitignore`), nên bản vừa clone về chưa có nó. Thiếu `VITE_USE_MOCK=true` thì tầng
+> mock **không khởi động**, mọi lời gọi đi thẳng qua Vite proxy tới gateway `:8080` — mà gateway
+> chưa chạy. Màn đăng nhập hiện đúng một dòng `Request failed with status code 500`, không có
+> chữ nào chỉ ra nguyên nhân. Đã dựng lại đúng tình huống này trên một bản clone sạch.
 
 Tầng mock chặn ở **tầng mạng** (Service Worker), không phải tầng axios — nên `axiosClient` viết
 y hệt như khi gọi backend thật. Đặt `VITE_USE_MOCK=false` trong `.env` là gọi gateway `:8080`,
