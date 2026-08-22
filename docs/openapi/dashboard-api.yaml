@@ -1,0 +1,4821 @@
+# Giao ước: web-dashboard GỌI java-core qua gateway
+#
+# Khác hai file còn lại trong thư mục này: đây KHÔNG phải giao ước liên làn. Cả web-dashboard lẫn
+# java-core đều thuộc Track A, nên sửa file này không phải đơn phương đổi hợp đồng với Track B.
+# Nhưng nó vẫn là hợp đồng: `web-dashboard/src/types/api.d.ts` sinh tự động từ đây bằng
+# `npx openapi-typescript`, và tầng mock MSW phải trả đúng hình dạng ghi ở đây.
+#
+# Dẫn xuất từ ma trận UC → bảng (`docs/erd-ai-crm.md` mục 16) và 58 màn hình SCR001–SCR058.
+# Mọi enum lấy nguyên văn từ ràng buộc CHECK của ERD — không phát minh giá trị mới.
+#
+# BA QUY TẮC BẤT BIẾN CỦA TOÀN BỘ FILE
+#
+#   1. `tenantId` KHÔNG BAO GIỜ xuất hiện trong body, query hay path. Máy chủ đọc từ JWT.
+#      Nhận `tenantId` từ phía gọi là biến mọi endpoint thành đường vòng qua RLS (ADR-0001).
+#   2. Mọi phản hồi bọc trong `ApiResponse` — khớp `com.thesis.crm.common.response.ApiResponse`.
+#      `axiosClient` bóc vỏ ở interceptor, nên mã màn hình nhận thẳng `data`.
+#   3. Tiền tố `/api/v1/**`. Gateway KHÔNG StripPrefix cho nhánh này (khác nhánh `/ai/v1/**`
+#      có `StripPrefix=1`) — java-core nhận nguyên đường dẫn kể cả `/api/v1`.
+openapi: 3.1.0
+
+info:
+  title: web-dashboard API
+  version: 0.1.0-draft
+  description: |
+    Bề mặt HTTP mà bảng điều khiển quản trị gọi. Phủ 58 màn hình SCR001–SCR058.
+
+    **Phân quyền** đọc từ `platform.roles.permissions` (jsonb), không phải từ tên vai trò.
+    ERD chỉ có hai vai trò: `TENANT_ADMIN` và `AGENT`. Endpoint nào đòi quyền quản trị thì ghi
+    rõ ở `description`; máy chủ vẫn là nơi quyết định, phía trình duyệt chỉ ẩn/hiện cho gọn mắt.
+
+    **Phân trang** dùng một vỏ duy nhất `Page` cho toàn bộ endpoint danh sách, trừ tin nhắn của
+    một hội thoại — chỗ đó dùng con trỏ (`CursorPage`) vì danh sách tăng liên tục ở đầu.
+
+servers:
+  - url: http://localhost:8080
+    description: gateway ở môi trường phát triển
+  - url: /
+    description: cùng origin ở môi trường thật
+
+security:
+  - tenantJwt: []
+
+tags:
+  - name: Xác thực
+    description: SCR001–SCR005, SCR011 — đăng ký, đăng nhập, phiên làm việc
+  - name: Người dùng
+    description: SCR008–SCR010 — mời người dùng, phân quyền
+  - name: Doanh nghiệp
+    description: SCR006, SCR007, SCR012–SCR015 — hồ sơ, gói dịch vụ, hạn mức
+  - name: Kênh
+    description: SCR016–SCR018 — Zalo OA, Facebook, Web Widget
+  - name: Hộp thư
+    description: SCR019–SCR023 — hội thoại, tin nhắn, chuyển giao, phân công
+  - name: Khách hàng
+    description: SCR024–SCR028 — danh bạ, ghi chú, thẻ, hợp nhất
+  - name: Tri thức
+    description: SCR029–SCR034 — tài liệu, đoạn tài liệu, khoảng trống tri thức
+  - name: Tác tử AI
+    description: SCR035–SCR040 — MCP, công cụ, nhật ký gọi công cụ, giám sát
+  - name: Bán hàng
+    description: SCR041–SCR047 — cơ hội tiềm năng, cơ hội bán hàng, hoạt động
+  - name: Phân tích
+    description: SCR048–SCR053 — bảng điều khiển, phễu, chủ đề, hiệu quả AI, xuất báo cáo
+  - name: Kiểm toán
+    description: SCR054–SCR058 — nhật ký kiểm toán, xóa dữ liệu cá nhân
+
+paths:
+  # ══════════════════════════════════════════════════════════════════════════════
+  # A. Xác thực và phiên làm việc — UC001, UC002, UC003
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  /api/v1/auth/register:
+    post:
+      tags: [Xác thực]
+      summary: SCR001 — đăng ký tài khoản doanh nghiệp
+      description: |
+        UC001. Tạo `tenants` + `users` (quản trị viên đầu tiên) + `subscriptions` gói TRIAL +
+        `usage_records` của chu kỳ đầu, tất cả trong một transaction. Gửi thư xác thực
+        (`auth_tokens.purpose = EMAIL_VERIFICATION`).
+
+        `email` phải duy nhất **toàn hệ thống**, không chỉ trong một doanh nghiệp — hệ quả là một
+        địa chỉ thư không thể thuộc hai doanh nghiệp.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DangKyRequest' }
+      responses:
+        '201':
+          description: Đã tạo doanh nghiệp, đang chờ xác thực thư
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/DangKyResult' } }
+        '409': { $ref: '#/components/responses/Trung' }
+        '422': { $ref: '#/components/responses/DuLieuKhongHopLe' }
+
+  /api/v1/auth/verify-email:
+    post:
+      tags: [Xác thực]
+      summary: SCR002 — xác thực địa chỉ thư
+      description: UC001 bước 9. Mã dùng một lần, hết hạn thì gọi `resend-verification`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/OkRong' }
+        '410':
+          description: Mã đã hết hạn hoặc đã dùng
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/auth/resend-verification:
+    post:
+      tags: [Xác thực]
+      summary: Gửi lại thư xác thực
+      description: UC001 luồng 9.2.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '202': { $ref: '#/components/responses/OkRong' }
+
+  /api/v1/auth/login:
+    post:
+      tags: [Xác thực]
+      summary: SCR003 — đăng nhập
+      description: |
+        UC002. Trả `accessToken` (RS256, thời hạn ngắn, **không** lưu ở cơ sở dữ liệu) trong thân
+        phản hồi, và đặt mã làm mới vào cookie `HttpOnly` — mã làm mới không bao giờ đi qua
+        JavaScript. Mỗi lần đăng nhập tạo một dòng `platform.user_sessions`.
+
+        Sai 5 lần trong 15 phút thì khóa tài khoản (`users.locked_until`), trả 423.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DangNhapRequest' }
+      responses:
+        '200':
+          description: Đăng nhập thành công
+          headers:
+            Set-Cookie:
+              description: '`refresh_token=…; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth`'
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/KetQuaDangNhap' } }
+        '401': { $ref: '#/components/responses/ChuaXacThuc' }
+        '423':
+          description: Tài khoản bị khóa tạm thời sau nhiều lần sai mật khẩu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Xác thực]
+      summary: Làm mới mã truy cập
+      description: |
+        Đọc mã làm mới từ cookie, đối chiếu `user_sessions.refresh_token_hash`, kiểm
+        `revoked_at IS NULL`. `axiosClient` gọi endpoint này bằng axios trần — không đi qua
+        interceptor, nếu không nó tự đệ quy khi chính lời gọi làm mới trả về 401.
+      security: []
+      responses:
+        '200':
+          description: Mã truy cập mới
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: object
+                        required: [accessToken]
+                        properties:
+                          accessToken: { type: string }
+        '401': { $ref: '#/components/responses/ChuaXacThuc' }
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Xác thực]
+      summary: Đăng xuất
+      description: Đặt `user_sessions.revoked_at` với `revoked_reason = LOGOUT` và xóa cookie.
+      responses:
+        '200': { $ref: '#/components/responses/OkRong' }
+
+  /api/v1/auth/forgot-password:
+    post:
+      tags: [Xác thực]
+      summary: SCR004 — yêu cầu đặt lại mật khẩu
+      description: |
+        Luôn trả 202 kể cả khi địa chỉ thư không tồn tại — phản hồi khác nhau sẽ biến endpoint này
+        thành công cụ dò xem địa chỉ nào có tài khoản.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '202': { $ref: '#/components/responses/OkRong' }
+
+  /api/v1/auth/reset-password:
+    post:
+      tags: [Xác thực]
+      summary: SCR005 — đặt lại mật khẩu bằng mã
+      description: |
+        Thành công thì thu hồi toàn bộ phiên đang mở của người dùng đó
+        (`revoked_reason = PASSWORD_CHANGED`).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { type: string, minLength: 8 }
+      responses:
+        '200': { $ref: '#/components/responses/OkRong' }
+        '410':
+          description: Mã đã hết hạn hoặc đã dùng
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/me:
+    get:
+      tags: [Xác thực]
+      summary: Hồ sơ của chính người đang đăng nhập
+      description: |
+        Không nhận tham số nào — máy chủ đọc `userId` và `tenantId` từ JWT. Trả kèm `permissions`
+        đã tính sẵn từ `roles.permissions` để giao diện ẩn/hiện mục điều hướng.
+      responses:
+        '200':
+          description: Hồ sơ người dùng
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/NguoiDungHienTai' } }
+
+  /api/v1/me/sessions:
+    get:
+      tags: [Xác thực]
+      summary: SCR011 — các phiên đăng nhập đang mở
+      description: |
+        UC002 bước 5. Hiển thị địa chỉ IP và trình duyệt để người dùng tự nhận ra phiên lạ.
+        Chỉ trả phiên còn hiệu lực (`revoked_at IS NULL` và chưa hết hạn).
+      responses:
+        '200':
+          description: Danh sách phiên
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/PhienDangNhap' }
+
+  /api/v1/me/sessions/{sessionId}:
+    delete:
+      tags: [Xác thực]
+      summary: Thu hồi một phiên đăng nhập
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200': { $ref: '#/components/responses/OkRong' }
+        '404': { $ref: '#/components/responses/KhongThay' }
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # B. Người dùng và phân quyền — UC003
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  /api/v1/users:
+    get:
+      tags: [Người dùng]
+      summary: SCR008 — danh sách người dùng
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+        - $ref: '#/components/parameters/TuKhoa'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/TrangThaiNguoiDung' }
+        - name: roleCode
+          in: query
+          schema: { $ref: '#/components/schemas/MaVaiTro' }
+      responses:
+        '200':
+          description: Trang người dùng
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/NguoiDung' }
+    post:
+      tags: [Người dùng]
+      summary: SCR009 — mời người dùng mới
+      description: |
+        UC003 bước 4–7. Tạo `users` ở trạng thái `PENDING` (chưa có `password_hash`) và một
+        `auth_tokens` với `purpose = USER_INVITATION` có thời hạn. Vượt `plans.max_users` thì 409.
+
+        Cần quyền quản trị.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MoiNguoiDungRequest' }
+      responses:
+        '201':
+          description: Đã gửi lời mời
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/NguoiDung' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '409':
+          description: Địa chỉ thư đã tồn tại, hoặc đã chạm hạn mức người dùng của gói
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Người dùng]
+      summary: Chi tiết một người dùng
+      responses:
+        '200':
+          description: Người dùng
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/NguoiDung' } }
+        '404': { $ref: '#/components/responses/KhongThay' }
+    patch:
+      tags: [Người dùng]
+      summary: Đổi họ tên hoặc vai trò
+      description: |
+        UC003 bước 2. Đổi vai trò ghi `audit_logs` với `action = ROLE_CHANGED` kèm `before`/`after`.
+        Không tự hạ vai trò của chính mình khi mình là quản trị viên cuối cùng — trả 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fullName: { type: string, maxLength: 200 }
+                roleCode: { $ref: '#/components/schemas/MaVaiTro' }
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/NguoiDung' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '409':
+          description: Không thể hạ vai trò của quản trị viên cuối cùng
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/users/{userId}/disable:
+    post:
+      tags: [Người dùng]
+      summary: Vô hiệu hóa người dùng
+      description: |
+        UC003 luồng 3a. Đặt `status = DISABLED` **và** thu hồi mọi phiên đang mở
+        (`revoked_reason = USER_DISABLED`) trong cùng transaction. Hội thoại đang phụ trách được
+        trả về hàng chờ chung.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200': { $ref: '#/components/responses/OkRong' }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+
+  /api/v1/users/{userId}/resend-invitation:
+    post:
+      tags: [Người dùng]
+      summary: Gửi lại lời mời
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '202': { $ref: '#/components/responses/OkRong' }
+
+  /api/v1/roles:
+    get:
+      tags: [Người dùng]
+      summary: SCR010 — ma trận phân quyền
+      description: |
+        Hai vai trò do hệ thống định nghĩa, doanh nghiệp không tự tạo vai trò mới. Màn hình hiển
+        thị `permissions` (jsonb) dưới dạng ma trận, không phải bốn vai trò cứng như bản mô tả
+        màn hình ban đầu — xem ADR-0011 mục Hệ quả.
+      responses:
+        '200':
+          description: Danh sách vai trò kèm ma trận quyền
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/VaiTro' }
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # C. Doanh nghiệp, gói dịch vụ, hạn mức — UC004, UC005, UC006
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  /api/v1/tenant:
+    get:
+      tags: [Doanh nghiệp]
+      summary: SCR007 — hồ sơ doanh nghiệp
+      description: Không có tham số `tenantId` — máy chủ đọc từ JWT.
+      responses:
+        '200':
+          description: Hồ sơ doanh nghiệp
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/DoanhNghiep' } }
+    patch:
+      tags: [Doanh nghiệp]
+      summary: Cập nhật hồ sơ doanh nghiệp
+      description: |
+        UC004. Ghi `audit_logs` kèm `before`/`after`. Tính hợp lệ của `businessHours` (giờ mở phải
+        trước giờ đóng) kiểm ở tầng ứng dụng — ERD cố ý không đặt ràng buộc này ở jsonb.
+
+        Cần quyền quản trị.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CapNhatDoanhNghiepRequest' }
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/DoanhNghiep' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '422': { $ref: '#/components/responses/DuLieuKhongHopLe' }
+
+  /api/v1/plans:
+    get:
+      tags: [Doanh nghiệp]
+      summary: SCR013 — bảng so sánh gói dịch vụ
+      description: |
+        `plans` không có `tenant_id` — gói do quản trị hệ thống định nghĩa ở cấp nền tảng, mọi
+        doanh nghiệp đọc chung. Sắp theo `sort_order`.
+      responses:
+        '200':
+          description: Danh sách gói đang bán
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/GoiDichVu' }
+
+  /api/v1/subscription:
+    get:
+      tags: [Doanh nghiệp]
+      summary: SCR012 — thuê bao hiện tại
+      description: |
+        Kèm `scheduledPlan` khi doanh nghiệp đã đặt lịch hạ gói — hạ gói chỉ có hiệu lực từ chu kỳ
+        kế tiếp (UC005 luồng 6.3), nên hai gói cùng tồn tại trong một khoảng thời gian.
+      responses:
+        '200':
+          description: Thuê bao
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/ThueBao' } }
+
+  /api/v1/subscription/change:
+    post:
+      tags: [Doanh nghiệp]
+      summary: Nâng hoặc hạ gói
+      description: |
+        UC005. **Nâng gói** áp dụng ngay và cập nhật luôn `usage_records.conversation_quota` của
+        chu kỳ hiện tại (bước 8). **Hạ gói** ghi vào `scheduled_plan_id` và chỉ hiệu lực từ chu kỳ
+        sau. Phản hồi nêu rõ mốc hiệu lực để giao diện không nói sai với người dùng.
+
+        Cần quyền quản trị.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planCode]
+              properties:
+                planCode: { $ref: '#/components/schemas/MaGoi' }
+      responses:
+        '200':
+          description: Đã đổi gói hoặc đã đặt lịch đổi
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/ThueBao' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '409':
+          description: Gói đích không hợp lệ, hoặc mức dùng hiện tại đã vượt hạn mức của gói định hạ xuống
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/usage:
+    get:
+      tags: [Doanh nghiệp]
+      summary: SCR014 — hạn mức sử dụng của chu kỳ hiện tại
+      description: |
+        UC006. Bốn hạn mức thật theo ERD: **hội thoại**, **token**, **người dùng**, **tài liệu**.
+        Bản mô tả màn hình ban đầu nêu hạn mức dung lượng — ERD không có, xem ADR-0011.
+
+        `warnedAt` là mốc chạm 80%, `blockedAt` là mốc chạm 100% — chạm trần thì ngừng xử lý tự
+        động nhưng **vẫn nhận tin nhắn** của khách, không mất dữ liệu.
+      responses:
+        '200':
+          description: Mức sử dụng chu kỳ hiện tại
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/HanMucSuDung' } }
+
+  /api/v1/usage/daily:
+    get:
+      tags: [Doanh nghiệp]
+      summary: SCR015 — mức sử dụng theo ngày
+      description: |
+        UC006 bước 5–7. Tách theo kênh **hoặc** theo nhánh xử lý AI — cả hai đều là phép cộng trên
+        `analytics.usage_metrics_daily`. Không gộp hai chiều trong một lần gọi vì một hội thoại đi
+        qua nhiều nhánh, gộp lại sẽ nhân đôi số đếm.
+      parameters:
+        - $ref: '#/components/parameters/TuNgay'
+        - $ref: '#/components/parameters/DenNgay'
+        - name: groupBy
+          in: query
+          description: Chiều tách số liệu
+          schema:
+            type: string
+            enum: [channel, route]
+            default: channel
+      responses:
+        '200':
+          description: Chuỗi số liệu theo ngày
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/DiemSuDungNgay' }
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # D. Kênh kết nối — UC008, UC009
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  /api/v1/channels:
+    get:
+      tags: [Kênh]
+      summary: SCR016 — danh sách kênh đã kết nối
+      description: |
+        Chỉ Zalo OA và Facebook nằm ở `channel_integrations`. Web Widget **không** là một dòng của
+        bảng này — nó có bảng cấu hình riêng (`widget_configs`), xem `/api/v1/widget-config`.
+
+        Không bao giờ trả `credentialsEncrypted` hay `webhookSecretEncrypted` — bí mật của kênh là
+        bề mặt tấn công T1, chúng không có lý do gì để rời khỏi máy chủ.
+      responses:
+        '200':
+          description: Danh sách kênh
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Kenh' }
+    post:
+      tags: [Kênh]
+      summary: SCR017 — kết nối một kênh mới
+      description: |
+        UC008. Bí mật gửi lên đây được mã hóa trước khi ghi (`key_id` ghi lại khóa nào đã dùng, để
+        luân chuyển khóa về sau). Kênh vào trạng thái `PENDING_VERIFY` cho tới khi webhook được
+        xác minh.
+
+        Một tài khoản Zalo OA hoặc Facebook Page chỉ được **một** doanh nghiệp kết nối — ràng buộc
+        duy nhất này cố ý vượt ra ngoài phạm vi một doanh nghiệp, nếu không webhook sẽ không định
+        tuyến xác định được. Trùng thì trả 409.
+
+        Cần quyền quản trị.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaoKenhRequest' }
+      responses:
+        '201':
+          description: Đã tạo, chờ xác minh webhook
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/Kenh' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '409':
+          description: Tài khoản này đã được một doanh nghiệp khác kết nối
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/channels/{channelId}:
+    parameters:
+      - $ref: '#/components/parameters/ChannelId'
+    patch:
+      tags: [Kênh]
+      summary: Cập nhật cấu hình kênh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                accountName: { type: string, maxLength: 200 }
+                rateLimitPerMinute: { type: integer }
+                credentials:
+                  type: string
+                  description: Mã truy cập mới; chỉ gửi khi cần luân chuyển
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/Kenh' } }
+    delete:
+      tags: [Kênh]
+      summary: Ngắt kết nối kênh
+      description: |
+        UC008 luồng 4a. Đặt `disconnected_at` và **giữ nguyên** toàn bộ hội thoại, tin nhắn cũ —
+        ngắt kênh không phải là xóa lịch sử.
+      responses:
+        '200': { $ref: '#/components/responses/OkRong' }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+
+  /api/v1/channels/{channelId}/verify:
+    post:
+      tags: [Kênh]
+      summary: Xác minh webhook của kênh
+      description: |
+        UC008 bước 9. Thất bại thì kênh **ở lại** `PENDING_VERIFY` kèm `lastError` để chẩn đoán,
+        chứ không rơi về `DISCONNECTED` — người dùng cần biết mình đang dở ở đâu.
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+      responses:
+        '200':
+          description: Kết quả xác minh
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/Kenh' } }
+
+  /api/v1/widget-config:
+    get:
+      tags: [Kênh]
+      summary: SCR018 — cấu hình Web Widget
+      description: |
+        Một cấu hình cho mỗi doanh nghiệp. Giao diện widget đọc động từ máy chủ, nên đổi màu hay
+        lời chào **không** cần sinh lại mã nhúng (UC009 luồng 4a).
+      responses:
+        '200':
+          description: Cấu hình widget
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/CauHinhWidget' } }
+    put:
+      tags: [Kênh]
+      summary: Lưu cấu hình Web Widget
+      description: |
+        `allowedDomains` là danh sách trắng tên miền được nhúng; widget đối chiếu tên miền gốc ở
+        mỗi lần khởi tạo và ghi nhận nỗ lực truy cập bị từ chối.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LuuCauHinhWidgetRequest' }
+      responses:
+        '200':
+          description: Đã lưu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/CauHinhWidget' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+
+  /api/v1/widget-config/snippet:
+    get:
+      tags: [Kênh]
+      summary: Mã nhúng widget
+      description: |
+        Trả đoạn thẻ script để dán vào website. Chỉ chứa `publicKey` — khóa công khai, không phải
+        bí mật; nó có mặt trong mã nguồn trang của khách hàng nên phải an toàn khi lộ.
+      responses:
+        '200':
+          description: Đoạn mã nhúng
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: object
+                        required: [publicKey, snippet]
+                        properties:
+                          publicKey: { type: string }
+                          snippet: { type: string }
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # E. Hộp thư và hội thoại — UC012, UC013, UC014, UC015
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  /api/v1/conversations:
+    get:
+      tags: [Hộp thư]
+      summary: SCR019 — hộp thư hợp nhất
+      description: |
+        UC012. Sắp theo `last_message_at DESC` — có index đúng hình dạng này. Dùng sẵn
+        `lastMessagePreview` và `unreadCount` đã tính trên `conversations`, không join sang
+        `messages` để đếm.
+
+        `scope=mine` lọc theo `assigned_user_id` bằng `userId` trong JWT, `scope=unassigned` lọc
+        `assigned_user_id IS NULL`. Cả hai đều **không** nhận `userId` từ phía gọi.
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+        - $ref: '#/components/parameters/TuKhoa'
+        - name: scope
+          in: query
+          description: '`mine` = của tôi · `unassigned` = chờ nhận · `all` = tất cả'
+          schema:
+            type: string
+            enum: [all, mine, unassigned]
+            default: all
+        - name: status
+          in: query
+          description: Danh sách trạng thái, ngăn cách bằng dấu phẩy
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/TrangThaiHoiThoai' }
+          style: form
+          explode: false
+        - name: channelType
+          in: query
+          schema: { $ref: '#/components/schemas/LoaiKenh' }
+        - name: tagId
+          in: query
+          description: Lọc gián tiếp qua `conversations.contact_id` — thẻ gắn ở cấp khách hàng
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Trang hội thoại
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/HoiThoaiTomTat' }
+
+  /api/v1/conversations/{conversationId}:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    get:
+      tags: [Hộp thư]
+      summary: SCR020 — chi tiết hội thoại kèm tin nhắn gần nhất
+      description: |
+        Trả trang tin nhắn **mới nhất** kèm theo. Cuộn lên xem tin cũ hơn thì gọi
+        `/messages` với con trỏ.
+      responses:
+        '200':
+          description: Chi tiết hội thoại
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/HoiThoaiChiTiet' } }
+        '404': { $ref: '#/components/responses/KhongThay' }
+
+  /api/v1/conversations/{conversationId}/context:
+    get:
+      tags: [Hộp thư]
+      summary: Khung ngữ cảnh bên phải màn hộp thư
+      description: |
+        Gộp bốn nguồn cho cột phải: hồ sơ khách hàng, bản tóm tắt gần nhất
+        (`ai.conversation_summaries`), lượt xử lý AI gần nhất (`ai.ai_interactions` — độ bám nguồn,
+        trích dẫn, lý do từ chối), và điểm tiềm năng hiện tại.
+
+        Gộp một lời gọi thay vì bốn: cột phải luôn hiện cùng lúc với hội thoại, tách ra chỉ tạo
+        bốn trạng thái tải rời rạc nhấp nháy cạnh nhau.
+      responses:
+        '200':
+          description: Ngữ cảnh hội thoại
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/NguCanhHoiThoai' } }
+
+  /api/v1/conversations/{conversationId}/messages:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    get:
+      tags: [Hộp thư]
+      summary: Tin nhắn của hội thoại, phân trang bằng con trỏ
+      description: |
+        Con trỏ chứ không phải số trang: tin nhắn mới đến liên tục ở đầu danh sách, phân trang bằng
+        offset sẽ làm lệch cửa sổ và hiện lặp tin đã đọc. Con trỏ là `createdAt` của tin cũ nhất
+        đang hiển thị.
+      parameters:
+        - name: before
+          in: query
+          description: Lấy tin cũ hơn mốc này
+          schema: { type: string, format: date-time }
+        - $ref: '#/components/parameters/CoSize'
+      responses:
+        '200':
+          description: Trang tin nhắn
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/CursorPage'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/TinNhan' }
+    post:
+      tags: [Hộp thư]
+      summary: Nhân viên gửi tin nhắn
+      description: |
+        UC013. Tin nhắn ghi ở `delivery_status = PENDING`, việc gửi thật ra kênh là bất đồng bộ —
+        thất bại thì giãn cách tăng dần và tăng `retry_count`, không mất tin.
+
+        Ngoài cửa sổ gửi chủ động của nền tảng (`sendWindowHours`) thì trả 409 kèm thông báo rõ,
+        vì đó là giới hạn của Zalo/Facebook chứ không phải lỗi của người dùng.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+                contentType:
+                  $ref: '#/components/schemas/LoaiNoiDung'
+                cannedResponseId:
+                  type: [string, 'null']
+                  format: uuid
+                  description: Ghi nhận mẫu câu đã dùng, để tăng `canned_responses.usage_count`
+      responses:
+        '201':
+          description: Đã ghi nhận, đang gửi
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/TinNhan' } }
+        '409':
+          description: Ngoài cửa sổ thời gian nền tảng cho phép gửi chủ động
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/conversations/{conversationId}/assign:
+    post:
+      tags: [Hộp thư]
+      summary: SCR021 — phân công hội thoại cho nhân viên
+      description: |
+        UC015. Bỏ trống `assigneeUserId` là **tự nhận về mình** — thao tác thường gặp nhất ở màn
+        hộp thư. Ghi `audit_logs` với `action = CONVERSATION_ASSIGNED`.
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                assigneeUserId:
+                  type: [string, 'null']
+                  format: uuid
+                  description: Bỏ trống để tự nhận
+                reason: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: Đã phân công
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/HoiThoaiTomTat' } }
+
+  /api/v1/conversations/{conversationId}/handoff:
+    post:
+      tags: [Hộp thư]
+      summary: Chuyển giao giữa tác tử AI và nhân viên
+      description: |
+        UC014. Hai chiều: `BOT_TO_AGENT` tắt `auto_reply_enabled`, `AGENT_TO_BOT` bật lại.
+        `countsAgainstAiQuality` do máy chủ quyết định, không nhận từ phía gọi — chuyển giao vì hết
+        hạn mức (`QUOTA_EXCEEDED`) **không** tính vào chỉ số chất lượng của tác tử AI, và để phía
+        trình duyệt quyết định điều đó thì chỉ số tự đánh giá được.
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [direction, reason]
+              properties:
+                direction:
+                  type: string
+                  enum: [BOT_TO_AGENT, AGENT_TO_BOT]
+                reason: { $ref: '#/components/schemas/LyDoChuyenGiao' }
+      responses:
+        '200':
+          description: Đã chuyển giao
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/SuKienChuyenGiao' } }
+
+  /api/v1/conversations/{conversationId}/status:
+    post:
+      tags: [Hộp thư]
+      summary: Đổi trạng thái hội thoại
+      description: Chuyển sang `RESOLVED` hoặc `CLOSED`. Kích hoạt tóm tắt hội thoại (trigger `CLOSING`).
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [RESOLVED, CLOSED]
+                closedReason: { type: [string, 'null'], maxLength: 50 }
+      responses:
+        '200':
+          description: Đã đổi trạng thái
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/HoiThoaiTomTat' } }
+
+  /api/v1/conversations/{conversationId}/read:
+    post:
+      tags: [Hộp thư]
+      summary: Đánh dấu đã đọc
+      description: Đặt `last_read_at` và `unread_count = 0`.
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      responses:
+        '200': { $ref: '#/components/responses/OkRong' }
+
+  /api/v1/canned-responses:
+    get:
+      tags: [Hộp thư]
+      summary: Mẫu câu trả lời
+      description: |
+        Khác với gợi ý câu trả lời của tác tử AI — gợi ý đó truy hồi động từ kho tri thức, còn đây
+        là mẫu do doanh nghiệp soạn sẵn, gọi bằng gõ tắt.
+      parameters:
+        - $ref: '#/components/parameters/TuKhoa'
+      responses:
+        '200':
+          description: Danh sách mẫu câu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/MauCauTraLoi' }
+
+  /api/v1/assignment-rules:
+    get:
+      tags: [Hộp thư]
+      summary: SCR022 — quy tắc phân công tự động
+      description: Dùng chung cho hội thoại (UC015) và cơ hội tiềm năng (UC031) qua cột `appliesTo`.
+      parameters:
+        - name: appliesTo
+          in: query
+          schema:
+            type: string
+            enum: [CONVERSATION, LEAD]
+      responses:
+        '200':
+          description: Danh sách quy tắc, sắp theo `priority`
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/QuyTacPhanCong' }
+    post:
+      tags: [Hộp thư]
+      summary: SCR023 — tạo quy tắc phân công
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LuuQuyTacPhanCongRequest' }
+      responses:
+        '201':
+          description: Đã tạo
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/QuyTacPhanCong' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+
+  /api/v1/assignment-rules/{ruleId}:
+    parameters:
+      - name: ruleId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Hộp thư]
+      summary: Sửa quy tắc phân công
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LuuQuyTacPhanCongRequest' }
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/QuyTacPhanCong' } }
+    delete:
+      tags: [Hộp thư]
+      summary: Xóa quy tắc phân công
+      responses:
+        '200': { $ref: '#/components/responses/OkRong' }
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # F. Khách hàng — UC016, UC017
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  /api/v1/contacts:
+    get:
+      tags: [Khách hàng]
+      summary: SCR026 — danh bạ khách hàng
+      description: |
+        UC016. Tìm theo tên dùng chỉ mục trigram; tìm theo số điện thoại và địa chỉ thư dùng chỉ
+        mục bộ phận. Mặc định sắp theo `last_interaction_at DESC`.
+
+        Mặc định **ẩn** bản ghi `status = MERGED` — chúng còn tồn tại để giữ liên kết cũ, không
+        phải để hiện trong danh bạ.
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+        - $ref: '#/components/parameters/TuKhoa'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/TrangThaiKhachHang' }
+        - name: tagId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: hasConsent
+          in: query
+          description: Lọc theo đồng ý xử lý dữ liệu cá nhân (Nghị định 13)
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Trang khách hàng
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/KhachHang' }
+    post:
+      tags: [Khách hàng]
+      summary: SCR027 — tạo khách hàng thủ công
+      description: |
+        UC016 luồng 1b. Khách tạo tay thường có `primaryChannel = PHONE`.
+
+        Trùng số điện thoại hoặc địa chỉ thư **không bị chặn** — máy chủ trả 201 kèm
+        `duplicateCandidates` để giao diện gợi ý hợp nhất. ERD cố ý không đặt ràng buộc duy nhất
+        ở đây, vì chặn cứng sẽ làm luồng hợp nhất đã đặc tả không thực hiện được.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LuuKhachHangRequest' }
+      responses:
+        '201':
+          description: Đã tạo, kèm cảnh báo trùng nếu có
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/TaoKhachHangResult' } }
+
+  /api/v1/contacts/{contactId}:
+    parameters:
+      - $ref: '#/components/parameters/ContactId'
+    get:
+      tags: [Khách hàng]
+      summary: SCR024 — hồ sơ khách hàng
+      description: |
+        Kèm thẻ, danh tính trên từng kênh, và số đếm hội thoại / cơ hội tiềm năng / cơ hội bán hàng.
+        Dòng thời gian hoạt động lấy riêng ở `/api/v1/activities?contactId=…` — nó phân trang, còn
+        hồ sơ thì không.
+      responses:
+        '200':
+          description: Hồ sơ khách hàng
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/KhachHangChiTiet' } }
+        '404': { $ref: '#/components/responses/KhongThay' }
+    patch:
+      tags: [Khách hàng]
+      summary: Sửa hồ sơ khách hàng
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LuuKhachHangRequest' }
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/KhachHangChiTiet' } }
+
+  /api/v1/contacts/{contactId}/merge:
+    post:
+      tags: [Khách hàng]
+      summary: SCR025 — hợp nhất hai hồ sơ khách hàng
+      description: |
+        UC016 luồng 4a–5a. `{contactId}` là bản ghi **được giữ lại**; bản ghi trong body bị đánh
+        dấu `MERGED` với `merged_into_contact_id` trỏ về bản giữ lại — không xóa vật lý, nên mọi
+        liên kết cũ vẫn phân giải được.
+
+        Chuyển sang bản giữ lại: danh tính kênh, hội thoại, ghi chú, thẻ, cơ hội tiềm năng, cơ hội
+        bán hàng, hoạt động. Ghi `audit_logs` với `action = CONTACT_MERGED` kèm ảnh chụp cả hai
+        bản ghi ở `before` — thao tác này không hoàn tác được nên bằng chứng phải đầy đủ.
+      parameters:
+        - $ref: '#/components/parameters/ContactId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mergedContactId]
+              properties:
+                mergedContactId:
+                  type: string
+                  format: uuid
+                  description: Bản ghi bị hợp nhất vào `{contactId}`
+                fieldChoices:
+                  type: object
+                  additionalProperties: { type: string }
+                  description: Chọn giá trị giữ lại cho từng trường khi hai bản ghi khác nhau
+      responses:
+        '200':
+          description: Đã hợp nhất
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/KhachHangChiTiet' } }
+        '409':
+          description: Một trong hai bản ghi đã ở trạng thái MERGED hoặc ANONYMIZED
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/contacts/{contactId}/notes:
+    parameters:
+      - $ref: '#/components/parameters/ContactId'
+    get:
+      tags: [Khách hàng]
+      summary: Ghi chú nội bộ về khách hàng
+      description: Sắp theo thời gian giảm dần. Ghi chú đã xóa mềm không trả về.
+      responses:
+        '200':
+          description: Danh sách ghi chú
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/GhiChu' }
+    post:
+      tags: [Khách hàng]
+      summary: SCR028 — thêm ghi chú
+      description: |
+        UC017. Hệ thống **nhắc** khi nội dung có dấu hiệu chứa dữ liệu cá nhân nhạy cảm
+        (`flaggedSensitive`) nhưng không chặn — quyết định là của người nhập.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+                conversationId:
+                  type: [string, 'null']
+                  format: uuid
+                  description: Khi ghi chú mở từ khung bên cạnh hội thoại
+      responses:
+        '201':
+          description: Đã thêm
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/GhiChu' } }
+
+  /api/v1/tags:
+    get:
+      tags: [Khách hàng]
+      summary: Danh sách thẻ
+      description: Kèm `usageCount` để đối chiếu với `plans.max_tags`.
+      responses:
+        '200':
+          description: Danh sách thẻ
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/The' }
+    post:
+      tags: [Khách hàng]
+      summary: Tạo thẻ
+      description: |
+        UC017 luồng 8.1. Trùng tên kể cả khi khác chữ hoa chữ thường hoặc khác dấu thì trả về
+        **thẻ đã có** với mã 200, không tạo bản ghi trùng — so sánh trên `lower(unaccent(name))`.
+        Chạm `plans.max_tags` thì 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 60 }
+                color: { type: [string, 'null'], maxLength: 9 }
+      responses:
+        '200':
+          description: Thẻ đã tồn tại, trả về bản ghi hiện có
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/The' } }
+        '201':
+          description: Đã tạo thẻ mới
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/The' } }
+        '409':
+          description: Đã chạm hạn mức số thẻ của gói
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/contacts/{contactId}/tags/{tagId}:
+    parameters:
+      - $ref: '#/components/parameters/ContactId'
+      - name: tagId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    put:
+      tags: [Khách hàng]
+      summary: Gắn thẻ cho khách hàng
+      description: Thẻ gắn ở **cấp khách hàng**, không phải cấp hội thoại.
+      responses:
+        '200': { $ref: '#/components/responses/OkRong' }
+    delete:
+      tags: [Khách hàng]
+      summary: Gỡ thẻ khỏi khách hàng
+      responses:
+        '200': { $ref: '#/components/responses/OkRong' }
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # G. Kho tri thức — UC018, UC019, UC020, UC025
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  /api/v1/documents:
+    get:
+      tags: [Tri thức]
+      summary: SCR030 — danh sách tài liệu tri thức
+      description: |
+        UC020. Tài liệu thuộc schema `knowledge` của Track B, nhưng dashboard đọc **qua java-core**
+        chứ không gọi thẳng ai-service — cùng lý do ADR-0002 cấm chiều ngược lại.
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+        - $ref: '#/components/parameters/TuKhoa'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/TrangThaiTaiLieu' }
+        - name: sourceType
+          in: query
+          schema: { $ref: '#/components/schemas/LoaiNguonTaiLieu' }
+      responses:
+        '200':
+          description: Trang tài liệu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/TaiLieu' }
+    post:
+      tags: [Tri thức]
+      summary: SCR029 — tải lên tài liệu
+      description: |
+        UC018. Tệp lưu ở đường dẫn **có chứa `tenantId`** — cô lập ngay ở tầng kho lưu trữ, không
+        chỉ ở truy vấn. Tài liệu vào `PENDING`, việc nạp và lập chỉ mục chạy bất đồng bộ qua
+        `ingestion_jobs`; theo dõi tiến độ ở `/api/v1/ingestion-jobs`.
+
+        Vượt `plans.max_documents` hoặc vượt giới hạn dung lượng mỗi tệp thì 409.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, title]
+              properties:
+                file: { type: string, format: binary }
+                title: { type: string, maxLength: 300 }
+                description: { type: [string, 'null'] }
+                language: { type: string, default: vi }
+      responses:
+        '202':
+          description: Đã nhận, đang xếp hàng nạp
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/TaiLieu' } }
+        '409':
+          description: Chạm hạn mức tài liệu của gói, hoặc tệp vượt dung lượng cho phép
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+        '415':
+          description: Định dạng không được hỗ trợ
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/documents/{documentId}:
+    parameters:
+      - $ref: '#/components/parameters/DocumentId'
+    get:
+      tags: [Tri thức]
+      summary: Chi tiết tài liệu kèm lần nạp gần nhất
+      responses:
+        '200':
+          description: Tài liệu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/TaiLieuChiTiet' } }
+        '404': { $ref: '#/components/responses/KhongThay' }
+    delete:
+      tags: [Tri thức]
+      summary: Xóa tài liệu
+      description: |
+        UC020 luồng 11.2. Từ chối khi tài liệu đang `PROCESSING` — xóa giữa chừng sẽ để lại đoạn
+        tài liệu mồ côi trong chỉ mục vector. Xóa thành công thì các đoạn bị xóa theo (CASCADE).
+      responses:
+        '200': { $ref: '#/components/responses/OkRong' }
+        '409':
+          description: Tài liệu đang được xử lý, không xóa được lúc này
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/documents/{documentId}/reindex:
+    post:
+      tags: [Tri thức]
+      summary: Nạp lại tài liệu
+      description: |
+        UC019 luồng 1a. Tạo `ingestion_jobs` mới với `trigger = REINDEX`. Bản cũ **giữ nguyên** cho
+        tới khi bản mới nạp xong mới chuyển đổi — không có khoảng thời gian kho tri thức bị trống.
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '202':
+          description: Đã xếp hàng nạp lại
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/CongViecNap' } }
+
+  /api/v1/documents/{documentId}/chunks:
+    get:
+      tags: [Tri thức]
+      summary: SCR032 — các đoạn của một tài liệu
+      description: |
+        Không trả cột `embedding` (vector 1024 chiều) — nó vô nghĩa với người xem và tốn vài chục
+        KB mỗi đoạn. Trả `sectionPath` để người dùng biết đoạn nằm ở mục nào của tài liệu gốc.
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+      responses:
+        '200':
+          description: Trang đoạn tài liệu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/DoanTaiLieu' }
+
+  /api/v1/knowledge/search:
+    get:
+      tags: [Tri thức]
+      summary: SCR031 — tìm thử trong kho tri thức
+      description: |
+        Chạy đúng đường truy hồi mà tác tử AI dùng (lai vector + từ khóa, hợp nhất RRF, xếp hạng
+        lại — ADR-0006), để quản trị viên kiểm chứng xem tài liệu đã nạp có tìm ra được không.
+
+        Máy chủ **bắt buộc lọc `tenant_id` ngay trong truy vấn vector**, không lọc sau khi lấy kết
+        quả về (ADR-0007, bề mặt T6): lọc sau nghĩa là đoạn của doanh nghiệp khác đã rời khỏi cơ sở
+        dữ liệu và đi vào bộ nhớ tiến trình rồi.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+        - name: topK
+          in: query
+          schema: { type: integer, default: 5, maximum: 20 }
+      responses:
+        '200':
+          description: Các đoạn truy hồi được, kèm điểm
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/KetQuaTruyHoi' }
+
+  /api/v1/ingestion-jobs:
+    get:
+      tags: [Tri thức]
+      summary: SCR033 — tiến độ nạp tài liệu
+      description: |
+        Bảy chặng: `QUEUED` → `EXTRACTING` → `CHUNKING` → `EMBEDDING` → `INDEXING` → `DONE`, cộng
+        `FAILED` và `PAUSED`. `PAUSED` là khi vượt hạn mức token giữa chừng — công việc dừng lại
+        chờ chu kỳ mới chứ không hỏng.
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+        - name: state
+          in: query
+          schema: { $ref: '#/components/schemas/TrangThaiCongViecNap' }
+      responses:
+        '200':
+          description: Trang công việc nạp
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/CongViecNap' }
+
+  /api/v1/knowledge-gaps:
+    get:
+      tags: [Tri thức]
+      summary: SCR034 — khoảng trống tri thức
+      description: |
+        UC025, UC039. Câu hỏi tác tử AI đã từ chối vì không đủ căn cứ, gom theo câu hỏi tương đương
+        thay vì mỗi cách diễn đạt một dòng. Sắp theo `occurrenceCount` giảm dần — đây là danh sách
+        việc cần làm để cải thiện kho tri thức.
+
+        `distinctContactCount` quan trọng hơn `occurrenceCount`: cùng một câu hỏi bị từ chối bởi
+        **nhiều khách khác nhau** là tín hiệu mạnh hơn một khách hỏi đi hỏi lại.
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [OPEN, RESOLVED, IGNORED]
+            default: OPEN
+        - name: gapType
+          in: query
+          schema: { $ref: '#/components/schemas/LoaiKhoangTrong' }
+      responses:
+        '200':
+          description: Trang khoảng trống tri thức
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/KhoangTrongTriThuc' }
+
+  /api/v1/knowledge-gaps/{gapId}:
+    patch:
+      tags: [Tri thức]
+      summary: Đánh dấu khoảng trống đã xử lý hoặc bỏ qua
+      parameters:
+        - name: gapId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [RESOLVED, IGNORED]
+                resolvedDocumentId:
+                  type: [string, 'null']
+                  format: uuid
+                  description: Tài liệu vừa bổ sung để lấp khoảng trống này
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/KhoangTrongTriThuc' } }
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # H. Tác tử AI, MCP và giám sát — UC021, UC024, UC027, UC028
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  /api/v1/mcp-servers:
+    get:
+      tags: [Tác tử AI]
+      summary: SCR037 — máy chủ MCP đã cấu hình
+      description: |
+        Không bao giờ trả `encryptedSecret` — thông tin xác thực nằm ở bảng riêng
+        (`mcp_credentials`) chính là để tiến trình đọc cấu hình không chạm tới bí mật. Chỉ trả
+        `hasCredential` để giao diện biết đã cấu hình hay chưa.
+      responses:
+        '200':
+          description: Danh sách máy chủ MCP
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/MayChuMcp' }
+    post:
+      tags: [Tác tử AI]
+      summary: SCR038 — thêm máy chủ MCP
+      description: |
+        UC021. `specVersion` được **ghim**: không tương thích thì từ chối kết nối và nêu rõ phiên
+        bản hệ thống hỗ trợ, thay vì cố chạy rồi hỏng giữa chừng.
+
+        Cần quyền quản trị.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LuuMayChuMcpRequest' }
+      responses:
+        '201':
+          description: Đã tạo, chưa bắt tay
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/MayChuMcp' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+
+  /api/v1/mcp-servers/{serverId}:
+    parameters:
+      - $ref: '#/components/parameters/ServerId'
+    patch:
+      tags: [Tác tử AI]
+      summary: Sửa cấu hình máy chủ MCP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LuuMayChuMcpRequest' }
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/MayChuMcp' } }
+    delete:
+      tags: [Tác tử AI]
+      summary: Ngắt kết nối máy chủ MCP
+      description: |
+        UC021 luồng 2a. Thu hồi thông tin xác thực nhưng **giữ nguyên nhật ký gọi công cụ** — nhật
+        ký là bằng chứng kiểm toán, ngắt kết nối không phải lý do xóa nó.
+      responses:
+        '200': { $ref: '#/components/responses/OkRong' }
+
+  /api/v1/mcp-servers/{serverId}/handshake:
+    post:
+      tags: [Tác tử AI]
+      summary: Bắt tay và dò danh sách công cụ
+      description: |
+        UC021 bước 6–9. Công cụ dò được ghi vào `tool_registry` với `enabled = false` — **mặc định
+        tắt**, chỉ công cụ được bật tường minh mới khả dụng với tác tử AI.
+
+        `description` do máy chủ MCP cung cấp là **dữ liệu không đáng tin**: nó đi vào lời nhắc gửi
+        mô hình nên là một bề mặt tiêm chỉ thị. Giao diện hiển thị nó như văn bản thuần, không diễn
+        giải markdown.
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Kết quả bắt tay kèm công cụ dò được
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: object
+                        required: [server, tools]
+                        properties:
+                          server: { $ref: '#/components/schemas/MayChuMcp' }
+                          tools:
+                            type: array
+                            items: { $ref: '#/components/schemas/CongCu' }
+        '409':
+          description: Phiên bản đặc tả MCP không tương thích
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/tools:
+    get:
+      tags: [Tác tử AI]
+      summary: SCR039 — sổ đăng ký công cụ
+      parameters:
+        - name: serverId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: enabled
+          in: query
+          schema: { type: boolean }
+        - name: riskLevel
+          in: query
+          schema: { $ref: '#/components/schemas/MucRuiRo' }
+      responses:
+        '200':
+          description: Danh sách công cụ
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/CongCu' }
+
+  /api/v1/tools/{toolId}:
+    patch:
+      tags: [Tác tử AI]
+      summary: Bật, tắt hoặc duyệt lại lược đồ công cụ
+      description: |
+        Bật một công cụ có `riskLevel` khác `READ` thì `requiresConfirmation` **bắt buộc** bằng
+        true — ràng buộc này nằm ở tầng cơ sở dữ liệu, gửi false lên sẽ bị từ chối 422 chứ không
+        phải được ghi rồi bỏ qua.
+
+        `approveSchemaHash` là cách chấp nhận lược đồ đã đổi: khi máy chủ MCP đổi lược đồ, công cụ
+        tự tắt (`auto_disabled_reason = SCHEMA_HASH_CHANGED`) và chờ người duyệt lại — một máy chủ
+        bị chiếm quyền có thể đổi lược đồ để mở rộng những gì nó nhận được.
+      parameters:
+        - name: toolId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                requiresConfirmation: { type: boolean }
+                approveSchemaHash:
+                  type: boolean
+                  description: Chấp nhận lược đồ hiện tại, đặt `approvedSchemaHash = schemaHash`
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/CongCu' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '422': { $ref: '#/components/responses/DuLieuKhongHopLe' }
+
+  /api/v1/tool-calls:
+    get:
+      tags: [Tác tử AI]
+      summary: SCR035 — nhật ký gọi công cụ
+      description: |
+        **Mọi** lời gọi đều có mặt ở đây, kể cả lời gọi bị chặn — đó là bằng chứng định lượng cho
+        phần đánh giá an toàn. Lọc `guardResult=NEEDS_APPROVAL` ra đúng hàng chờ phê duyệt.
+
+        `arguments` đã che dữ liệu nhạy cảm trước khi ghi. `resultSummary` phải được hiển thị như
+        **dữ liệu**, không phải chỉ thị.
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+        - name: guardResult
+          in: query
+          schema: { $ref: '#/components/schemas/KetQuaKiemDuyet' }
+        - name: approvalStatus
+          in: query
+          schema: { $ref: '#/components/schemas/TrangThaiPheDuyet' }
+        - name: conversationId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/TuNgay'
+        - $ref: '#/components/parameters/DenNgay'
+      responses:
+        '200':
+          description: Trang nhật ký gọi công cụ
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/NhatKyGoiCongCu' }
+
+  /api/v1/tool-calls/{callId}/approval:
+    post:
+      tags: [Tác tử AI]
+      summary: SCR040 — duyệt hoặc từ chối một lời gọi công cụ
+      description: |
+        UC024 luồng 4.2. Chỉ áp dụng cho dòng có `guardResult = NEEDS_APPROVAL` và
+        `approvalStatus = PENDING`. Quá hạn thì chuyển `EXPIRED` và không duyệt được nữa — một lời
+        gọi ghi dữ liệu được duyệt sau nhiều giờ có thể đã không còn đúng ngữ cảnh.
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision:
+                  type: string
+                  enum: [APPROVED, REJECTED]
+                note: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: Đã ghi quyết định
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/NhatKyGoiCongCu' } }
+        '409':
+          description: Lời gọi không ở trạng thái chờ duyệt, hoặc đã quá hạn
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/ai-interactions:
+    get:
+      tags: [Tác tử AI]
+      summary: SCR036 — giám sát lượt xử lý của tác tử AI
+      description: |
+        UC039. Một dòng cho mỗi lượt xử lý: nhánh đã chọn, mô hình, số token, chi phí, độ trễ từng
+        chặng, độ bám nguồn, có từ chối hay không.
+
+        `discardedAnswer` là câu trả lời **không đạt ngưỡng bám nguồn nên bị hủy, không gửi cho
+        khách**. Giao diện phải nói rõ điều đó, nếu không người xem sẽ tưởng khách đã nhận được nó.
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+        - name: route
+          in: query
+          schema: { $ref: '#/components/schemas/NhanhXuLyAi' }
+        - name: refused
+          in: query
+          schema: { type: boolean }
+        - name: conversationId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/TuNgay'
+        - $ref: '#/components/parameters/DenNgay'
+      responses:
+        '200':
+          description: Trang lượt xử lý AI
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/LuotXuLyAi' }
+
+  /api/v1/ai-interactions/{interactionId}/feedback:
+    post:
+      tags: [Tác tử AI]
+      summary: Nhân viên đánh giá một câu trả lời của tác tử AI
+      description: |
+        UC027. Đánh giá lại thì **đóng dòng cũ** (`superseded_at = now()`) rồi chèn dòng mới, không
+        ghi đè tại chỗ — lịch sử đánh giá là dữ liệu phân tích, không phải trạng thái hiện tại.
+
+        Mỗi người đánh giá đúng một lần cho mỗi lượt tương tác.
+      parameters:
+        - name: interactionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating]
+              properties:
+                rating:
+                  type: string
+                  enum: [POSITIVE, NEGATIVE]
+                reasonCode: { $ref: '#/components/schemas/LyDoDanhGia' }
+                comment: { type: [string, 'null'] }
+      responses:
+        '201':
+          description: Đã ghi đánh giá
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/DanhGiaAi' } }
+
+  /api/v1/safety-events:
+    get:
+      tags: [Tác tử AI]
+      summary: Cảnh báo an toàn
+      description: |
+        `threatSurface` nối thẳng tới `docs/threat-model.md` (T1–T8), nên bảng này dùng được luôn
+        cho phần đánh giá an toàn của báo cáo.
+
+        `evidence` chỉ chứa trích đoạn **đã che**, không lưu nguyên văn nội dung tấn công.
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+        - name: severity
+          in: query
+          schema: { $ref: '#/components/schemas/MucNghiemTrong' }
+        - name: eventType
+          in: query
+          schema: { $ref: '#/components/schemas/LoaiSuKienAnToan' }
+        - $ref: '#/components/parameters/TuNgay'
+        - $ref: '#/components/parameters/DenNgay'
+      responses:
+        '200':
+          description: Trang cảnh báo an toàn
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/SuKienAnToan' }
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # I. Bán hàng — UC030, UC032, UC033, UC034, UC035
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  /api/v1/leads:
+    get:
+      tags: [Bán hàng]
+      summary: SCR041 — danh sách cơ hội tiềm năng
+      description: |
+        UC032. Mặc định sắp theo `currentScore` giảm dần — có index đúng hình dạng này.
+        `source` phân biệt cơ hội do tác tử AI tự tạo với cơ hội nhân viên nhập tay; đây là trục
+        so sánh hai phễu ở màn phân tích.
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+        - $ref: '#/components/parameters/TuKhoa'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/TrangThaiLead' }
+        - name: source
+          in: query
+          schema: { $ref: '#/components/schemas/NguonLead' }
+        - name: ownerUserId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: minScore
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 100 }
+      responses:
+        '200':
+          description: Trang cơ hội tiềm năng
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/Lead' }
+    post:
+      tags: [Bán hàng]
+      summary: SCR043 — tạo cơ hội tiềm năng thủ công
+      description: |
+        `source` luôn là `MANUAL` ở endpoint này — cơ hội do tác tử AI tạo đi qua đường nội bộ
+        `/internal/leads`, không qua đây. `tenantId` không có trong body, khớp với
+        `CreateLeadRequest` đã có trong mã java-core.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaoLeadRequest' }
+      responses:
+        '201':
+          description: Đã tạo
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/Lead' } }
+
+  /api/v1/leads/{leadId}:
+    parameters:
+      - $ref: '#/components/parameters/LeadId'
+    get:
+      tags: [Bán hàng]
+      summary: SCR042 — chi tiết cơ hội tiềm năng
+      description: |
+        Kèm `topFactors` của lần chấm điểm gần nhất — thứ trả lời câu hỏi "vì sao khách này được
+        92 điểm?". Không có nó thì điểm số chỉ là một con số không ai tin.
+      responses:
+        '200':
+          description: Chi tiết cơ hội tiềm năng
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/LeadChiTiet' } }
+        '404': { $ref: '#/components/responses/KhongThay' }
+    patch:
+      tags: [Bán hàng]
+      summary: Cập nhật cơ hội tiềm năng
+      description: |
+        Chuyển sang `DISQUALIFIED` **bắt buộc** kèm `disqualifyReason` — nhãn này là phản hồi phục
+        vụ cải tiến mô hình chấm điểm, bỏ trống là mất dữ liệu học.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CapNhatLeadRequest' }
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/LeadChiTiet' } }
+        '422': { $ref: '#/components/responses/DuLieuKhongHopLe' }
+
+  /api/v1/leads/{leadId}/scores:
+    get:
+      tags: [Bán hàng]
+      summary: Lịch sử điểm tiềm năng
+      description: |
+        UC032 bước 6. `sales.lead_scores` chỉ ghi thêm — bản ghi cũ giữ nguyên `modelVersion` của
+        chúng, nên so sánh điểm qua các phiên bản mô hình là việc làm được.
+
+        `scoringMode` phân biệt điểm do mô hình học máy tính với điểm theo bảng luật dự phòng.
+      parameters:
+        - $ref: '#/components/parameters/LeadId'
+      responses:
+        '200':
+          description: Lịch sử điểm, mới nhất trước
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/DiemLead' }
+
+  /api/v1/leads/{leadId}/convert:
+    post:
+      tags: [Bán hàng]
+      summary: Chuyển cơ hội tiềm năng thành cơ hội bán hàng
+      description: |
+        UC033. Tạo `deals` với `source = AI_LEAD` nếu cơ hội tiềm năng do tác tử AI tạo, đặt
+        `leads.status = CONVERTED` và `converted_deal_id`.
+
+        Khách hàng đã có cơ hội bán hàng đang mở thì vẫn cho tạo nhưng trả kèm cảnh báo trong
+        `warnings` — chặn cứng sẽ sai với thực tế bán hàng.
+      parameters:
+        - $ref: '#/components/parameters/LeadId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, pipelineId, stageId]
+              properties:
+                title: { type: string, maxLength: 200 }
+                pipelineId: { type: string, format: uuid }
+                stageId: { type: string, format: uuid }
+                amount: { type: [number, 'null'] }
+                expectedCloseDate: { type: [string, 'null'], format: date }
+      responses:
+        '201':
+          description: Đã tạo cơ hội bán hàng
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/ChuyenDoiLeadResult' } }
+
+  /api/v1/pipelines:
+    get:
+      tags: [Bán hàng]
+      summary: Phễu bán hàng kèm các giai đoạn
+      description: |
+        Trả cả giai đoạn trong cùng một lời gọi — bảng Kanban cần đủ cột trước khi vẽ được gì, tách
+        hai lời gọi chỉ tạo một khung nhảy.
+      parameters:
+        - name: includeInactive
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Danh sách phễu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Pheu' }
+
+  /api/v1/deals:
+    get:
+      tags: [Bán hàng]
+      summary: SCR044 — cơ hội bán hàng, xếp theo phễu
+      description: |
+        Bảng Kanban gọi với `pipelineId` và nhận về đủ cơ hội của mọi giai đoạn, nhóm ở phía trình
+        duyệt theo `stageId`. Cơ hội quá `expectedCloseDate` mà vẫn `OPEN` được đánh dấu nổi bật —
+        `isOverdue` tính sẵn ở máy chủ để mọi màn hình dùng chung một định nghĩa.
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+        - name: pipelineId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: stageId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/TrangThaiDeal' }
+        - name: ownerUserId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Trang cơ hội bán hàng
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/Deal' }
+    post:
+      tags: [Bán hàng]
+      summary: SCR046 — tạo cơ hội bán hàng
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LuuDealRequest' }
+      responses:
+        '201':
+          description: Đã tạo
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/Deal' } }
+
+  /api/v1/deals/{dealId}:
+    parameters:
+      - $ref: '#/components/parameters/DealId'
+    get:
+      tags: [Bán hàng]
+      summary: SCR045 — chi tiết cơ hội bán hàng
+      description: Kèm lịch sử chuyển giai đoạn và các hoạt động gắn với cơ hội này.
+      responses:
+        '200':
+          description: Chi tiết cơ hội bán hàng
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/DealChiTiet' } }
+        '404': { $ref: '#/components/responses/KhongThay' }
+    patch:
+      tags: [Bán hàng]
+      summary: Cập nhật cơ hội bán hàng
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LuuDealRequest' }
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/DealChiTiet' } }
+
+  /api/v1/deals/{dealId}/stage:
+    post:
+      tags: [Bán hàng]
+      summary: Kéo cơ hội sang giai đoạn khác
+      description: |
+        UC034. Ghi một dòng `deal_stage_history` kèm `durationSeconds` đã ở giai đoạn trước — tính
+        sẵn để báo cáo "thời gian trung bình mỗi giai đoạn" không phải chạy cửa sổ trượt.
+
+        Giai đoạn đích có `requiredFields` mà cơ hội còn thiếu thì trả 422 kèm danh sách trường
+        thiếu, để giao diện mở đúng biểu mẫu bổ sung thay vì báo lỗi chung chung.
+
+        Giai đoạn `isWon`/`isLost` bắt buộc kèm `closeReason` khi là thua — lý do thua là dữ liệu
+        phân tích quan trọng nhất của phễu.
+      parameters:
+        - $ref: '#/components/parameters/DealId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stageId]
+              properties:
+                stageId: { type: string, format: uuid }
+                closeReason: { type: [string, 'null'], maxLength: 200 }
+      responses:
+        '200':
+          description: Đã chuyển giai đoạn
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/DealChiTiet' } }
+        '422':
+          description: Thiếu trường bắt buộc của giai đoạn đích
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          missingFields:
+                            type: array
+                            items: { type: string }
+
+  /api/v1/activities:
+    get:
+      tags: [Bán hàng]
+      summary: SCR047 — hoạt động chăm sóc và nhắc việc
+      description: |
+        UC035. Mỗi hoạt động gắn với **đúng một** trong hai: cơ hội tiềm năng hoặc cơ hội bán hàng
+        — ràng buộc ở tầng cơ sở dữ liệu, không phải quy ước.
+
+        `source` phân biệt hoạt động nhân viên chủ động tạo với hoạt động hệ thống sinh tự động khi
+        chuyển giao hội thoại; gộp chung sẽ làm sai chỉ số năng suất nhân viên.
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+        - name: contactId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: leadId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: dealId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: type
+          in: query
+          schema: { $ref: '#/components/schemas/LoaiHoatDong' }
+        - name: remindStatus
+          in: query
+          schema: { $ref: '#/components/schemas/TrangThaiNhacViec' }
+      responses:
+        '200':
+          description: Trang hoạt động
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/HoatDong' }
+    post:
+      tags: [Bán hàng]
+      summary: Ghi nhận một hoạt động
+      description: '`remindAt` trong quá khứ bị từ chối 422 — nhắc việc đã qua là vô nghĩa.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LuuHoatDongRequest' }
+      responses:
+        '201':
+          description: Đã ghi nhận
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/HoatDong' } }
+        '422': { $ref: '#/components/responses/DuLieuKhongHopLe' }
+
+  /api/v1/activities/{activityId}:
+    patch:
+      tags: [Bán hàng]
+      summary: Cập nhật kết quả hoạt động
+      parameters:
+        - name: activityId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                outcome: { $ref: '#/components/schemas/KetQuaHoatDong' }
+                content: { type: [string, 'null'] }
+                remindStatus: { $ref: '#/components/schemas/TrangThaiNhacViec' }
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/HoatDong' } }
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # J. Phân tích và báo cáo — UC036, UC037, UC038, UC039, UC042
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  /api/v1/analytics/overview:
+    get:
+      tags: [Phân tích]
+      summary: SCR006 và SCR048 — bảng điều khiển tổng quan
+      description: |
+        UC036. Đọc từ **mô hình đọc** `analytics.*` do tiến trình tiêu thụ sự kiện tổng hợp sẵn,
+        không truy vấn thẳng vào bảng giao dịch. Vì vậy phản hồi luôn kèm `updatedAt` — số liệu có
+        độ trễ, và giấu điều đó là nói dối người xem.
+
+        Số tổng của doanh nghiệp là phép cộng trên các chiều, không có dòng "tổng" riêng — cách này
+        loại bỏ khả năng tổng và chi tiết lệch nhau.
+      parameters:
+        - $ref: '#/components/parameters/TuNgay'
+        - $ref: '#/components/parameters/DenNgay'
+      responses:
+        '200':
+          description: Số liệu tổng quan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/TongQuan' } }
+
+  /api/v1/analytics/conversations:
+    get:
+      tags: [Phân tích]
+      summary: SCR049 — số liệu hội thoại theo ngày
+      parameters:
+        - $ref: '#/components/parameters/TuNgay'
+        - $ref: '#/components/parameters/DenNgay'
+        - name: groupBy
+          in: query
+          schema:
+            type: string
+            enum: [channel, assignee]
+            default: channel
+      responses:
+        '200':
+          description: Chuỗi số liệu hội thoại
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/DiemHoiThoaiNgay' }
+
+  /api/v1/analytics/funnel:
+    get:
+      tags: [Phân tích]
+      summary: SCR050 — phễu chuyển đổi
+      description: |
+        UC037. Năm bậc: hội thoại → hội thoại có tín hiệu quan tâm → cơ hội tiềm năng → cơ hội bán
+        hàng → chốt thắng. Tách theo `leadSource` để so hai phễu song song: phễu do tác tử AI tạo
+        và phễu nhân viên nhập tay — đây là con số trả lời "tác tử AI có đem lại doanh thu không".
+
+        Bậc nào bằng không vẫn giữ dòng với giá trị 0. Ẩn đi thì người xem không nhận ra điểm nghẽn.
+
+        `scoringEnabled = false` đánh dấu khoảng dữ liệu phát sinh **trước khi** bật chấm điểm tự
+        động — giao diện phải gạch chéo hoặc chú thích khoảng đó, nếu không nó bị đọc là tác tử AI
+        hoạt động kém.
+      parameters:
+        - $ref: '#/components/parameters/TuNgay'
+        - $ref: '#/components/parameters/DenNgay'
+        - name: leadSource
+          in: query
+          schema: { $ref: '#/components/schemas/NguonLead' }
+      responses:
+        '200':
+          description: Số liệu phễu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/BacPheu' }
+
+  /api/v1/analytics/topics:
+    get:
+      tags: [Phân tích]
+      summary: SCR052 — thống kê chủ đề hội thoại
+      description: |
+        UC038. `topicLabel` là nhãn **chụp lại tại thời điểm tổng hợp** — quản trị viên đổi tên chủ
+        đề về sau không làm số liệu cũ đổi theo.
+
+        `refusalCount` cao ở một chủ đề là gợi ý trực tiếp: bổ sung tài liệu cho chủ đề đó.
+      parameters:
+        - $ref: '#/components/parameters/TuNgay'
+        - $ref: '#/components/parameters/DenNgay'
+      responses:
+        '200':
+          description: Thống kê theo chủ đề
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ThongKeChuDe' }
+
+  /api/v1/analytics/ai-performance:
+    get:
+      tags: [Phân tích]
+      summary: SCR051 — hiệu quả và chi phí của tác tử AI
+      description: |
+        UC039. Gộp năm nguồn: phân bố nhánh xử lý, tỉ lệ phản hồi tích cực, lý do chuyển giao, độ
+        trễ từng chặng, và chi phí theo phiên bản mô hình.
+
+        Chuyển giao vì hết hạn mức **không** tính vào chỉ số chất lượng
+        (`countsAgainstAiQuality = false`) — nếu tính, một tháng chạm trần sẽ làm tác tử AI trông
+        như đột nhiên kém đi.
+      parameters:
+        - $ref: '#/components/parameters/TuNgay'
+        - $ref: '#/components/parameters/DenNgay'
+        - name: modelVersion
+          in: query
+          description: So sánh công bằng giữa các phiên bản mô hình
+          schema: { type: string }
+      responses:
+        '200':
+          description: Số liệu hiệu quả AI
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/HieuQuaAi' } }
+
+  /api/v1/reports/exports:
+    get:
+      tags: [Phân tích]
+      summary: SCR053 — danh sách tệp báo cáo đã xuất
+      description: Tệp quá `expiresAt` bị dọn — trạng thái chuyển `EXPIRED`, `fileUri` thành rỗng.
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+      responses:
+        '200':
+          description: Trang tệp báo cáo
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/TepBaoCao' }
+    post:
+      tags: [Phân tích]
+      summary: Yêu cầu xuất báo cáo
+      description: |
+        UC042. Chạy bất đồng bộ: trả 202 với trạng thái `QUEUED`, giao diện hỏi lại cho tới khi
+        `READY`.
+
+        `containsPersonalData = true` thì máy chủ **bắt buộc** nhận `confirmPersonalData = true`,
+        nếu không trả 422. Đây là bước xác nhận có ý thức trước khi dữ liệu cá nhân rời khỏi hệ
+        thống dưới dạng tệp — nghĩa vụ theo Nghị định 13.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reportType, format]
+              properties:
+                reportType: { $ref: '#/components/schemas/LoaiBaoCao' }
+                format:
+                  type: string
+                  enum: [CSV, XLSX, PDF]
+                params:
+                  type: object
+                  additionalProperties: true
+                  description: Khoảng thời gian, danh sách cột, điều kiện lọc
+                confirmPersonalData:
+                  type: boolean
+                  default: false
+      responses:
+        '202':
+          description: Đã xếp hàng
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/TepBaoCao' } }
+        '422':
+          description: Báo cáo chứa dữ liệu cá nhân nhưng chưa xác nhận
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/v1/reports/exports/{exportId}:
+    get:
+      tags: [Phân tích]
+      summary: Trạng thái một lần xuất báo cáo
+      parameters:
+        - name: exportId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Tệp báo cáo
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/TepBaoCao' } }
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # K. Kiểm toán và tuân thủ — UC040, UC041
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  /api/v1/audit-logs:
+    get:
+      tags: [Kiểm toán]
+      summary: SCR054 — nhật ký kiểm toán
+      description: |
+        UC040. Bảng **chỉ ghi thêm**: migration đã thu hồi quyền `UPDATE`/`DELETE` của `crm_app`
+        trên bảng này, nên tính bất biến được bảo đảm ở tầng cơ sở dữ liệu chứ không chỉ ở tầng
+        ứng dụng.
+
+        Bản ghi có `containsPersonalData = true` mặc định trả **đã che một phần**. Xem đầy đủ phải
+        gọi `/reveal` kèm lý do — và chính lần xem đó cũng được ghi vào nhật ký.
+
+        Quản trị viên doanh nghiệp chỉ thấy `audit_logs` của doanh nghiệp mình; nhật ký cấp nền
+        tảng nằm ở bảng riêng và không lộ ra endpoint nào của tài khoản doanh nghiệp.
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: actorId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: severity
+          in: query
+          schema: { $ref: '#/components/schemas/MucNghiemTrongKiemToan' }
+        - name: entityType
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/TuNgay'
+        - $ref: '#/components/parameters/DenNgay'
+      responses:
+        '200':
+          description: Trang nhật ký kiểm toán
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/BanGhiKiemToan' }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+
+  /api/v1/audit-logs/{logId}/reveal:
+    post:
+      tags: [Kiểm toán]
+      summary: Xem đầy đủ một bản ghi có dữ liệu cá nhân
+      description: |
+        UC040 luồng 6.3. `reason` bắt buộc. Chính thao tác này ghi thêm một dòng `audit_logs` — ai
+        đã mở dữ liệu cá nhân của khách hàng nào, lúc nào, vì lý do gì.
+      parameters:
+        - name: logId
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 10 }
+      responses:
+        '200':
+          description: Bản ghi đầy đủ
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/BanGhiKiemToan' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+
+  /api/v1/erasure-requests:
+    get:
+      tags: [Kiểm toán]
+      summary: SCR056 — yêu cầu xóa dữ liệu cá nhân
+      description: UC041, Nghị định 13/2023/NĐ-CP.
+      parameters:
+        - $ref: '#/components/parameters/Trang'
+        - $ref: '#/components/parameters/CoSize'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/TrangThaiYeuCauXoa' }
+      responses:
+        '200':
+          description: Trang yêu cầu xóa
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/YeuCauXoa' }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+
+  /api/v1/erasure-requests/preview:
+    get:
+      tags: [Kiểm toán]
+      summary: SCR055 — xem trước phạm vi ảnh hưởng trước khi xóa
+      description: |
+        UC041 bước 3–4. Liệt kê từng bảng sẽ bị chạm và thao tác dự kiến: xóa hẳn, ẩn danh hóa, hay
+        giữ lại dạng tổng hợp. Người duyệt phải thấy phạm vi **trước** khi quyết định, vì thao tác
+        này không hoàn tác được.
+      parameters:
+        - name: contactId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Phạm vi ảnh hưởng
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/MucXoa' }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+
+  /api/v1/erasure-requests/{requestId}:
+    get:
+      tags: [Kiểm toán]
+      summary: SCR057 — tiến độ xóa theo từng bảng
+      description: |
+        UC041 luồng 6.4. Chi tiết từng bảng cho biết chính xác chỗ nào đã xong — khi lỗi giữa
+        chừng, hệ thống chạy lại đúng phần dở dang thay vì để dữ liệu ở trạng thái nửa vời.
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Chi tiết yêu cầu xóa
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/YeuCauXoaChiTiet' } }
+
+  /api/v1/erasure-requests/{requestId}/execute:
+    post:
+      tags: [Kiểm toán]
+      summary: SCR058 — thực thi yêu cầu xóa
+      description: |
+        Chạy bất đồng bộ. Xong thì sinh biên bản xác nhận (`certificateUri`).
+
+        Phạm vi xóa **không vươn tới hệ thống bên ngoài** đã nhận dữ liệu qua MCP — giới hạn này
+        ghi vào `externalSystemsNote` và phải hiển thị cho người duyệt, không được im lặng bỏ qua.
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '202':
+          description: Đã bắt đầu thực thi
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/YeuCauXoaChiTiet' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '409':
+          description: Yêu cầu không ở trạng thái PENDING
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+# ══════════════════════════════════════════════════════════════════════════════════
+# THÀNH PHẦN DÙNG CHUNG
+# ══════════════════════════════════════════════════════════════════════════════════
+
+components:
+
+  securitySchemes:
+    tenantJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT RS256 do java-core cấp ở `/api/v1/auth/login`, thời hạn ngắn, **không** lưu ở cơ sở dữ
+        liệu — nó tự chứng thực. Yêu sách bắt buộc: `sub` (userId), `tenantId`, `roleCode`.
+
+        `tenantId` trong JWT là **nguồn duy nhất** xác định doanh nghiệp cho mọi truy vấn. Không
+        endpoint nào trong file này nhận `tenantId` từ phía gọi.
+
+  parameters:
+    Trang:
+      name: page
+      in: query
+      description: Số trang, đếm từ 0
+      schema: { type: integer, minimum: 0, default: 0 }
+    CoSize:
+      name: size
+      in: query
+      description: Số bản ghi mỗi trang
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    TuKhoa:
+      name: q
+      in: query
+      description: Từ khóa tìm kiếm, không phân biệt hoa thường và không phân biệt dấu
+      schema: { type: string }
+    TuNgay:
+      name: from
+      in: query
+      description: Ngày bắt đầu khoảng thống kê, tính theo múi giờ của doanh nghiệp
+      schema: { type: string, format: date }
+    DenNgay:
+      name: to
+      in: query
+      description: Ngày kết thúc khoảng thống kê
+      schema: { type: string, format: date }
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ChannelId:
+      name: channelId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ContactId:
+      name: contactId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ServerId:
+      name: serverId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    LeadId:
+      name: leadId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DealId:
+      name: dealId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    OkRong:
+      description: Thành công, không có dữ liệu trả về
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiResponse'
+              - properties: { data: { type: 'null' } }
+    ChuaXacThuc:
+      description: |
+        Thiếu mã truy cập, mã hết hạn, hoặc thông tin đăng nhập sai. `axiosClient` bắt mã 401 để
+        gọi làm mới token đúng một lần rồi thử lại request.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponse' }
+    KhongDuQuyen:
+      description: |
+        Đã xác thực nhưng `roles.permissions` không cho phép thao tác này. Phía trình duyệt cũng ẩn
+        nút tương ứng, nhưng **máy chủ mới là nơi quyết định** — ẩn nút chỉ là chuyện thẩm mỹ.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponse' }
+    KhongThay:
+      description: |
+        Không có bản ghi. Cũng là phản hồi khi bản ghi thuộc doanh nghiệp khác — RLS làm nó vô hình
+        chứ không trả 403, vì 403 sẽ xác nhận rằng định danh đó có tồn tại.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponse' }
+    Trung:
+      description: Vi phạm ràng buộc duy nhất
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponse' }
+    DuLieuKhongHopLe:
+      description: Dữ liệu không qua được kiểm tra ở tầng ứng dụng
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiResponse'
+              - properties:
+                  data:
+                    type: object
+                    description: Lỗi theo từng trường, khóa là tên trường
+                    additionalProperties: { type: string }
+
+  schemas:
+
+    # ── Vỏ dùng chung ──────────────────────────────────────────────────────────
+
+    ApiResponse:
+      type: object
+      description: |
+        Khớp `com.thesis.crm.common.response.ApiResponse`. `axiosClient` bóc `data` ngay ở
+        interceptor, nên component nhận thẳng kiểu bên trong.
+      required: [success, data, timestamp]
+      properties:
+        success: { type: boolean }
+        data: {}
+        message: { type: [string, 'null'] }
+        traceId:
+          type: [string, 'null']
+          description: Nối phản hồi lỗi với dòng log tương ứng. Gateway gắn `X-Trace-Id` cho mọi request.
+        timestamp: { type: string, format: date-time }
+
+    Page:
+      type: object
+      description: Vỏ phân trang dùng chung cho mọi endpoint danh sách.
+      required: [items, page, size, totalItems, totalPages]
+      properties:
+        items: { type: array, items: {} }
+        page: { type: integer }
+        size: { type: integer }
+        totalItems: { type: integer }
+        totalPages: { type: integer }
+
+    CursorPage:
+      type: object
+      description: |
+        Phân trang bằng con trỏ, chỉ dùng cho tin nhắn của một hội thoại. Không có `totalItems` —
+        đếm tổng trên một danh sách đang tăng liên tục vừa tốn vừa sai ngay khi trả về.
+      required: [items, hasMore]
+      properties:
+        items: { type: array, items: {} }
+        hasMore: { type: boolean }
+        nextCursor:
+          type: [string, 'null']
+          format: date-time
+          description: Truyền vào tham số `before` của lần gọi kế tiếp
+
+    # ── Enum, lấy nguyên văn từ ràng buộc CHECK của ERD ────────────────────────
+
+    MaVaiTro:
+      type: string
+      enum: [TENANT_ADMIN, AGENT]
+      description: '`platform.roles.code`. ERD chỉ có hai vai trò; doanh nghiệp không tự tạo vai trò mới.'
+    TrangThaiNguoiDung:
+      type: string
+      enum: [PENDING, ACTIVE, DISABLED]
+    MaGoi:
+      type: string
+      enum: [TRIAL, STARTER, GROWTH, PRO]
+    TrangThaiThueBao:
+      type: string
+      enum: [TRIALING, ACTIVE, PAST_DUE, EXPIRED, CANCELED]
+    TrangThaiDoanhNghiep:
+      type: string
+      enum: [TRIAL, ACTIVE, SUSPENDED, EXPIRED]
+    GiongDieuAi:
+      type: string
+      enum: [PROFESSIONAL, FRIENDLY, CONCISE]
+    LoaiKenh:
+      type: string
+      enum: [WEB_WIDGET, ZALO, FACEBOOK]
+    TrangThaiKenh:
+      type: string
+      enum: [DISCONNECTED, PENDING_VERIFY, ACTIVE, ERROR]
+    TrangThaiHoiThoai:
+      type: string
+      enum: [BOT_HANDLING, PENDING_AGENT, AGENT_HANDLING, RESOLVED, CLOSED]
+    LoaiNguoiGui:
+      type: string
+      enum: [CUSTOMER, BOT, AGENT, SYSTEM]
+    LoaiNoiDung:
+      type: string
+      enum: [TEXT, IMAGE, FILE, STICKER, LOCATION, SYSTEM_NOTE]
+      default: TEXT
+    TrangThaiGui:
+      type: string
+      enum: [PENDING, SENT, DELIVERED, FAILED]
+    LyDoChuyenGiao:
+      type: string
+      enum:
+        - CUSTOMER_REQUEST
+        - LOW_CONFIDENCE
+        - NO_GROUNDING
+        - NEGATIVE_SENTIMENT
+        - REPEATED_FAILURE
+        - WRITE_TOOL_APPROVAL
+        - QUOTA_EXCEEDED
+        - LLM_ERROR
+    TrangThaiKhachHang:
+      type: string
+      enum: [ACTIVE, MERGED, ANONYMIZED]
+    KenhChinh:
+      type: string
+      enum: [WEB_WIDGET, ZALO, FACEBOOK, PHONE]
+      description: '`PHONE` dành cho khách hàng nhân viên nhập tay.'
+    TrangThaiTaiLieu:
+      type: string
+      enum: [PENDING, PROCESSING, READY, FAILED, ARCHIVED]
+    LoaiNguonTaiLieu:
+      type: string
+      enum: [PDF, DOCX, TXT, MD, HTML, URL]
+    TrangThaiCongViecNap:
+      type: string
+      enum: [QUEUED, EXTRACTING, CHUNKING, EMBEDDING, INDEXING, DONE, FAILED, PAUSED]
+    LoaiKhoangTrong:
+      type: string
+      enum: [NOT_COVERED, OUT_OF_SCOPE_DATA, LOW_CONFIDENCE]
+    MucRuiRo:
+      type: string
+      enum: [READ, WRITE, DESTRUCTIVE]
+    KetQuaKiemDuyet:
+      type: string
+      enum: [ALLOWED, BLOCKED, NEEDS_APPROVAL]
+    LyDoChan:
+      type: string
+      enum:
+        - NOT_ALLOWLISTED
+        - TOOL_DISABLED
+        - SCHEMA_HASH_MISMATCH
+        - INVALID_ARGUMENTS
+        - CROSS_TENANT_IDENTIFIER
+        - RATE_LIMIT_EXCEEDED
+    TrangThaiPheDuyet:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED, EXPIRED]
+    KetQuaGoiCongCu:
+      type: string
+      enum: [SUCCESS, BUSINESS_ERROR, TIMEOUT, TRANSPORT_ERROR]
+    NhanhXuLyAi:
+      type: string
+      enum: [SMALL_TALK, RAG, TOOL_CALL, CLARIFY, HANDOFF, SUMMARY, EXTRACTION]
+    LyDoTuChoi:
+      type: string
+      enum: [NOT_COVERED, OUT_OF_SCOPE_DATA, LOW_CONFIDENCE, SAFETY_PROBE]
+    LyDoDanhGia:
+      type: string
+      enum: [WRONG_INFO, IRRELEVANT, INCOMPLETE, BAD_TONE]
+    MucNghiemTrong:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, CRITICAL]
+    LoaiSuKienAnToan:
+      type: string
+      enum:
+        - PROMPT_INJECTION_INPUT
+        - PROMPT_INJECTION_TOOL_RESULT
+        - PROMPT_INJECTION_DOCUMENT
+        - CROSS_TENANT_PROBE
+        - INTERNAL_DATA_PROBE
+        - TOOL_CALL_BLOCKED
+    BeMatDeDoa:
+      type: string
+      enum: [T1, T2, T3, T4, T5, T6, T7, T8]
+      description: Nối thẳng tới `docs/threat-model.md`.
+    TrangThaiLead:
+      type: string
+      enum: [NEW, CONTACTED, QUALIFIED, CONVERTED, DISQUALIFIED]
+    NguonLead:
+      type: string
+      enum: [AI_AUTO, MANUAL]
+    MucDo:
+      type: string
+      enum: [LOW, MEDIUM, HIGH]
+    TrangThaiDeal:
+      type: string
+      enum: [OPEN, WON, LOST]
+    NguonDeal:
+      type: string
+      enum: [AI_LEAD, MANUAL]
+    LoaiHoatDong:
+      type: string
+      enum: [CALL, MEETING, QUOTE, EMAIL, NOTE]
+    KetQuaHoatDong:
+      type: string
+      enum: [DONE, NO_ANSWER, REFUSED, NOT_INTERESTED, RESCHEDULED]
+    TrangThaiNhacViec:
+      type: string
+      enum: [NONE, PENDING, SENT, DONE, CANCELED]
+    LoaiBaoCao:
+      type: string
+      enum: [OVERVIEW, FUNNEL, TOPICS, AI_PERFORMANCE, AUDIT_LOG]
+    TrangThaiTepBaoCao:
+      type: string
+      enum: [QUEUED, RUNNING, READY, FAILED, EXPIRED]
+    MucNghiemTrongKiemToan:
+      type: string
+      enum: [INFO, WARNING, CRITICAL]
+    LoaiChuThe:
+      type: string
+      enum: [USER, AI_AGENT, SYSTEM, PLATFORM_ADMIN]
+    TrangThaiYeuCauXoa:
+      type: string
+      enum: [PENDING, IN_PROGRESS, COMPLETED, PARTIALLY_FAILED]
+    ThaoTacXoa:
+      type: string
+      enum: [DELETE, ANONYMIZE, KEEP_AGGREGATE]
+
+    # ── A. Xác thực và phiên ───────────────────────────────────────────────────
+
+    DangKyRequest:
+      type: object
+      description: |
+        Không có `tenantId` — chính lời gọi này tạo ra doanh nghiệp. `slug` do máy chủ sinh từ
+        `companyName` rồi bảo đảm duy nhất, không nhận từ phía gọi.
+      required: [companyName, fullName, email, password]
+      properties:
+        companyName: { type: string, maxLength: 200 }
+        industry: { type: [string, 'null'], maxLength: 100 }
+        fullName: { type: string, maxLength: 200 }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        timezone: { type: string, default: Asia/Ho_Chi_Minh }
+        acceptedTerms: { type: boolean }
+
+    DangKyResult:
+      type: object
+      required: [tenantId, slug, email]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+          description: |
+            Ngoại lệ duy nhất của quy tắc "không trả `tenantId`": lúc này người dùng chưa có JWT,
+            và giá trị này chỉ để hiển thị lại, không dùng làm tham số cho lời gọi nào.
+        slug: { type: string }
+        email: { type: string, format: email }
+        verificationRequired: { type: boolean }
+
+    DangNhapRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    KetQuaDangNhap:
+      type: object
+      required: [accessToken, nguoiDung]
+      properties:
+        accessToken:
+          type: string
+          description: JWT RS256, thời hạn ngắn. Mã làm mới đi bằng cookie `HttpOnly`, không nằm ở đây.
+        nguoiDung: { $ref: '#/components/schemas/NguoiDungHienTai' }
+
+    NguoiDungHienTai:
+      type: object
+      description: |
+        Cố ý **không** có `tenantId`: giao diện không bao giờ cần gửi nó đi đâu, và để nó ở đây chỉ
+        mời gọi ai đó đưa vào một tham số truy vấn.
+      required: [id, fullName, email, roleCode, permissions, tenantName, planName]
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        roleCode: { $ref: '#/components/schemas/MaVaiTro' }
+        permissions:
+          type: array
+          items: { type: string }
+          description: Đã làm phẳng từ `roles.permissions` (jsonb) thành danh sách khóa quyền
+        tenantName: { type: string }
+        planName: { type: string }
+
+    PhienDangNhap:
+      type: object
+      required: [id, issuedAt, expiresAt, isCurrent]
+      properties:
+        id: { type: string, format: uuid }
+        ipAddress: { type: [string, 'null'] }
+        userAgent: { type: [string, 'null'] }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        isCurrent:
+          type: boolean
+          description: Phiên đang dùng để gọi chính endpoint này — giao diện không cho tự thu hồi nó
+
+    # ── B. Người dùng và phân quyền ────────────────────────────────────────────
+
+    NguoiDung:
+      type: object
+      required: [id, email, roleCode, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: [string, 'null'] }
+        email: { type: string, format: email }
+        roleCode: { $ref: '#/components/schemas/MaVaiTro' }
+        roleName: { type: string }
+        status: { $ref: '#/components/schemas/TrangThaiNguoiDung' }
+        emailVerifiedAt: { type: [string, 'null'], format: date-time }
+        lastLoginAt: { type: [string, 'null'], format: date-time }
+        assignedConversationCount:
+          type: integer
+          description: Số hội thoại đang phụ trách — cần cho việc quyết định có vô hiệu hóa hay không
+        createdAt: { type: string, format: date-time }
+
+    MoiNguoiDungRequest:
+      type: object
+      required: [email, roleCode]
+      properties:
+        email: { type: string, format: email }
+        fullName: { type: [string, 'null'], maxLength: 200 }
+        roleCode: { $ref: '#/components/schemas/MaVaiTro' }
+
+    VaiTro:
+      type: object
+      required: [code, name, permissions]
+      properties:
+        code: { $ref: '#/components/schemas/MaVaiTro' }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        permissions:
+          type: object
+          description: |
+            Ma trận quyền, khóa là nhóm chức năng (`conversations`, `contacts`, `knowledge`,
+            `audit`…), giá trị là mức (`FULL`, `READ_WRITE`, `READ`, `NONE`). SCR010 hiển thị đúng
+            cấu trúc này thay vì bốn vai trò cứng.
+          additionalProperties: { type: string }
+        userCount: { type: integer }
+
+    # ── C. Doanh nghiệp, gói dịch vụ, hạn mức ──────────────────────────────────
+
+    DoanhNghiep:
+      type: object
+      required: [name, slug, status, timezone]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        industry: { type: [string, 'null'] }
+        timezone: { type: string }
+        defaultLocale: { type: string }
+        businessHours:
+          type: object
+          description: |
+            Giờ làm việc theo từng ngày trong tuần. Tính hợp lệ (giờ mở trước giờ đóng) kiểm ở tầng
+            ứng dụng — ERD cố ý không ràng buộc bên trong jsonb.
+          additionalProperties: true
+        aiTone: { $ref: '#/components/schemas/GiongDieuAi' }
+        leadScoreThreshold:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Điểm từ mức này trở lên thì tự tạo cơ hội tiềm năng
+        autoLeadCreation: { type: boolean }
+        autoLeadDailyLimit: { type: integer }
+        autoAssignEnabled: { type: boolean }
+        restrictAgentScope:
+          type: boolean
+          description: Nhân viên chỉ thấy khách hàng mình phụ trách
+        refusalHandoffThreshold:
+          type: integer
+          description: Số lần tác tử AI từ chối liên tiếp trước khi chuyển cho người
+        summaryTurnThreshold: { type: integer }
+        messageRetentionDays:
+          type: [integer, 'null']
+          description: Chính sách lưu trữ có thời hạn (Nghị định 13). `null` là giữ vô thời hạn.
+        status: { $ref: '#/components/schemas/TrangThaiDoanhNghiep' }
+
+    CapNhatDoanhNghiepRequest:
+      type: object
+      properties:
+        name: { type: string, maxLength: 200 }
+        industry: { type: [string, 'null'], maxLength: 100 }
+        timezone: { type: string }
+        businessHours: { type: object, additionalProperties: true }
+        aiTone: { $ref: '#/components/schemas/GiongDieuAi' }
+        leadScoreThreshold: { type: integer, minimum: 0, maximum: 100 }
+        autoLeadCreation: { type: boolean }
+        autoLeadDailyLimit: { type: integer, minimum: 0 }
+        autoAssignEnabled: { type: boolean }
+        restrictAgentScope: { type: boolean }
+        refusalHandoffThreshold: { type: integer, minimum: 1 }
+        summaryTurnThreshold: { type: integer, minimum: 1 }
+        messageRetentionDays: { type: [integer, 'null'], minimum: 1 }
+
+    GoiDichVu:
+      type: object
+      required: [code, name, monthlyPriceVnd, conversationQuota]
+      properties:
+        code: { $ref: '#/components/schemas/MaGoi' }
+        name: { type: string }
+        monthlyPriceVnd: { type: number }
+        conversationQuota:
+          type: integer
+          description: Hạn mức hội thoại mỗi chu kỳ — trục thu phí của mô hình dịch vụ
+        tokenQuota: { type: integer, format: int64 }
+        maxUsers: { type: integer }
+        maxDocuments: { type: integer }
+        maxTags: { type: integer }
+        sortOrder: { type: integer }
+        isCurrent: { type: boolean }
+
+    ThueBao:
+      type: object
+      required: [status, plan, periodStart, periodEnd]
+      properties:
+        status: { $ref: '#/components/schemas/TrangThaiThueBao' }
+        plan: { $ref: '#/components/schemas/GoiDichVu' }
+        periodStart: { type: string, format: date-time }
+        periodEnd: { type: string, format: date-time }
+        scheduledPlan:
+          oneOf:
+            - { $ref: '#/components/schemas/GoiDichVu' }
+            - { type: 'null' }
+          description: Gói sẽ áp dụng từ chu kỳ sau, khi doanh nghiệp đã đặt lịch hạ gói
+        scheduledEffectiveAt: { type: [string, 'null'], format: date-time }
+        readOnlyMode:
+          type: boolean
+          description: |
+            `true` khi thuê bao ở `PAST_DUE` hoặc `EXPIRED` — hệ thống chuyển sang chỉ đọc. Giao
+            diện dùng cờ này để tắt mọi nút ghi ở một chỗ thay vì rải điều kiện khắp 58 màn.
+
+    HanMucSuDung:
+      type: object
+      description: |
+        Bốn hạn mức thật theo ERD. Không có hạn mức dung lượng lưu trữ — bản mô tả màn hình ban đầu
+        nêu nó, ERD thì không (ADR-0011 mục Hệ quả).
+      required: [periodStart, periodEnd, conversations, tokens, users, documents]
+      properties:
+        periodStart: { type: string, format: date-time }
+        periodEnd: { type: string, format: date-time }
+        conversations: { $ref: '#/components/schemas/MotHanMuc' }
+        tokens: { $ref: '#/components/schemas/MotHanMuc' }
+        users: { $ref: '#/components/schemas/MotHanMuc' }
+        documents: { $ref: '#/components/schemas/MotHanMuc' }
+        costVnd: { type: number }
+        warnedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Mốc chạm 80%
+        blockedAt:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Mốc chạm 100%. Từ đây ngừng xử lý tự động nhưng **vẫn nhận tin nhắn** của khách —
+            không mất dữ liệu, chỉ mất phần trả lời tự động.
+
+    MotHanMuc:
+      type: object
+      required: [used, quota]
+      properties:
+        used: { type: integer, format: int64 }
+        quota: { type: integer, format: int64 }
+        percent: { type: number }
+
+    DiemSuDungNgay:
+      type: object
+      required: [statDate, conversations, promptTokens, completionTokens, costVnd]
+      properties:
+        statDate: { type: string, format: date }
+        channelType: { type: [string, 'null'] }
+        route:
+          oneOf:
+            - { $ref: '#/components/schemas/NhanhXuLyAi' }
+            - { type: 'null' }
+        conversations: { type: integer }
+        promptTokens: { type: integer, format: int64 }
+        completionTokens: { type: integer, format: int64 }
+        costVnd: { type: number }
+        cachedHits:
+          type: integer
+          description: Lượt dùng đệm ngữ nghĩa — không tính chi phí gọi mô hình
+        modelVersion: { type: string }
+
+    # ── D. Kênh ────────────────────────────────────────────────────────────────
+
+    Kenh:
+      type: object
+      description: Không bao giờ chứa bí mật của kênh — chúng là bề mặt tấn công T1.
+      required: [id, channelType, externalAccountId, status]
+      properties:
+        id: { type: string, format: uuid }
+        channelType:
+          type: string
+          enum: [ZALO, FACEBOOK]
+          description: Web Widget không nằm ở đây — nó có bảng cấu hình riêng
+        externalAccountId: { type: string }
+        accountName: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/TrangThaiKenh' }
+        tokenExpiresAt: { type: [string, 'null'], format: date-time }
+        verifiedAt: { type: [string, 'null'], format: date-time }
+        lastError: { type: [string, 'null'] }
+        sendWindowHours:
+          type: [integer, 'null']
+          description: Cửa sổ thời gian nền tảng cho phép gửi chủ động
+        rateLimitPerMinute: { type: [integer, 'null'] }
+        conversationCount: { type: integer }
+        disconnectedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    TaoKenhRequest:
+      type: object
+      required: [channelType, externalAccountId, credentials, webhookSecret]
+      properties:
+        channelType:
+          type: string
+          enum: [ZALO, FACEBOOK]
+        externalAccountId: { type: string, maxLength: 200 }
+        accountName: { type: [string, 'null'], maxLength: 200 }
+        credentials:
+          type: string
+          description: Mã truy cập của nền tảng. Máy chủ mã hóa trước khi ghi, không bao giờ trả lại.
+        webhookSecret: { type: string }
+
+    CauHinhWidget:
+      type: object
+      required: [publicKey, isActive, allowedDomains]
+      properties:
+        publicKey:
+          type: string
+          description: Khóa **công khai**, có mặt trong mã nguồn trang khách hàng — an toàn khi lộ
+        primaryColor: { type: [string, 'null'] }
+        position:
+          type: string
+          enum: [BOTTOM_RIGHT, BOTTOM_LEFT]
+        greetingMessage: { type: [string, 'null'] }
+        avatarUrl: { type: [string, 'null'] }
+        allowedDomains:
+          type: array
+          items: { type: string }
+          description: Danh sách trắng tên miền được nhúng widget
+        isActive: { type: boolean }
+
+    LuuCauHinhWidgetRequest:
+      type: object
+      properties:
+        primaryColor: { type: [string, 'null'], maxLength: 9 }
+        position:
+          type: string
+          enum: [BOTTOM_RIGHT, BOTTOM_LEFT]
+        greetingMessage: { type: [string, 'null'] }
+        avatarUrl: { type: [string, 'null'] }
+        allowedDomains:
+          type: array
+          items: { type: string }
+        isActive: { type: boolean }
+
+    # ── E. Hộp thư ─────────────────────────────────────────────────────────────
+
+    HoiThoaiTomTat:
+      type: object
+      description: |
+        Một dòng của danh sách hộp thư. `lastMessagePreview` và `unreadCount` lấy từ cột đã tính
+        sẵn trên `conversations`, không join sang `messages` — đây là truy vấn nóng nhất của toàn
+        hệ thống.
+      required: [id, contactId, contactName, channelType, status, lastMessageAt, unreadCount]
+      properties:
+        id: { type: string, format: uuid }
+        contactId: { type: string, format: uuid }
+        contactName: { type: string }
+        channelType: { $ref: '#/components/schemas/LoaiKenh' }
+        status: { $ref: '#/components/schemas/TrangThaiHoiThoai' }
+        assignedUserId: { type: [string, 'null'], format: uuid }
+        assignedUserName: { type: [string, 'null'] }
+        priority: { type: integer }
+        lastMessageAt: { type: string, format: date-time }
+        lastMessagePreview: { type: [string, 'null'] }
+        messageCount: { type: integer }
+        unreadCount: { type: integer }
+        tags:
+          type: array
+          items: { $ref: '#/components/schemas/The' }
+        startedAt: { type: string, format: date-time }
+
+    HoiThoaiChiTiet:
+      allOf:
+        - $ref: '#/components/schemas/HoiThoaiTomTat'
+        - type: object
+          required: [messages, autoReplyEnabled]
+          properties:
+            autoReplyEnabled:
+              type: boolean
+              description: Tác tử AI có đang tự trả lời hội thoại này không
+            botResolved: { type: [boolean, 'null'] }
+            consecutiveRefusals:
+              type: integer
+              description: Số lần tác tử AI từ chối liên tiếp — chạm ngưỡng thì tự chuyển cho người
+            firstResponseAt:
+              type: [string, 'null']
+              format: date-time
+              description: Chỉ ghi khi là phản hồi đầu tiên của **con người**, không tính bot
+            resolvedAt: { type: [string, 'null'], format: date-time }
+            closedReason: { type: [string, 'null'] }
+            messages:
+              type: array
+              items: { $ref: '#/components/schemas/TinNhan' }
+            hasMoreMessages: { type: boolean }
+
+    TinNhan:
+      type: object
+      required: [id, senderType, contentType, deliveryStatus, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        senderType: { $ref: '#/components/schemas/LoaiNguoiGui' }
+        senderUserId: { type: [string, 'null'], format: uuid }
+        senderName: { type: [string, 'null'] }
+        content: { type: [string, 'null'] }
+        contentType: { $ref: '#/components/schemas/LoaiNoiDung' }
+        deliveryStatus: { $ref: '#/components/schemas/TrangThaiGui' }
+        failureReason: { type: [string, 'null'] }
+        attachments:
+          type: array
+          items: { $ref: '#/components/schemas/TepDinhKem' }
+        aiInteractionId:
+          type: [string, 'null']
+          format: uuid
+          description: Với tin do bot gửi — mở ra lượt xử lý AI đã sinh ra nó
+        citations:
+          type: array
+          description: Nguồn tham chiếu kèm theo câu trả lời của tác tử AI
+          items: { $ref: '#/components/schemas/TrichDan' }
+        createdAt: { type: string, format: date-time }
+        sentAt: { type: [string, 'null'], format: date-time }
+
+    TepDinhKem:
+      type: object
+      required: [id, fileName, mimeType, sizeBytes, isSupported]
+      properties:
+        id: { type: string, format: uuid }
+        fileName: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+        isSupported:
+          type: boolean
+          description: |
+            Định dạng không hỗ trợ vẫn được ghi nhận và hiển thị, chỉ là **không** chuyển cho tác
+            tử AI. Ẩn đi thì nhân viên không biết khách đã gửi gì.
+        downloadUrl: { type: [string, 'null'] }
+
+    TrichDan:
+      type: object
+      required: [chunkId, documentId, documentTitle]
+      properties:
+        chunkId: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        documentTitle: { type: string }
+        sectionPath: { type: [string, 'null'] }
+        snippet: { type: [string, 'null'] }
+
+    NguCanhHoiThoai:
+      type: object
+      description: |
+        Cột phải của màn hộp thư — gộp bốn nguồn trong một lời gọi. Mọi trường đều có thể `null`:
+        hội thoại vừa mở thì chưa có tóm tắt, chưa có lượt xử lý AI, chưa có điểm tiềm năng.
+      required: [contact]
+      properties:
+        contact: { $ref: '#/components/schemas/KhachHang' }
+        summary:
+          oneOf:
+            - { $ref: '#/components/schemas/TomTatHoiThoai' }
+            - { type: 'null' }
+        lastAiInteraction:
+          oneOf:
+            - { $ref: '#/components/schemas/LuotXuLyAi' }
+            - { type: 'null' }
+        leadScore:
+          oneOf:
+            - { $ref: '#/components/schemas/DiemLead' }
+            - { type: 'null' }
+        openLeadId: { type: [string, 'null'], format: uuid }
+
+    TomTatHoiThoai:
+      type: object
+      description: Bốn phần có cấu trúc, không phải một đoạn văn tự do.
+      required: [trigger, generatedAt]
+      properties:
+        trigger:
+          type: string
+          enum: [HANDOFF, CLOSING, TURN_THRESHOLD, MANUAL]
+        mainNeed: { type: [string, 'null'] }
+        providedInfo: { type: [string, 'null'] }
+        unresolvedIssues: { type: [string, 'null'] }
+        nextSteps: { type: [string, 'null'] }
+        isStale:
+          type: boolean
+          description: |
+            Bản tóm tắt chưa cập nhật theo các lượt mới nhất. Hiển thị chỉ báo thay vì giấu — nhân
+            viên đọc tóm tắt cũ mà tưởng là mới thì tệ hơn không có tóm tắt.
+        modelVersion: { type: [string, 'null'] }
+        generatedAt: { type: string, format: date-time }
+
+    SuKienChuyenGiao:
+      type: object
+      required: [id, direction, reason, triggeredBy, occurredAt]
+      properties:
+        id: { type: string, format: uuid }
+        direction:
+          type: string
+          enum: [BOT_TO_AGENT, AGENT_TO_BOT]
+        reason: { $ref: '#/components/schemas/LyDoChuyenGiao' }
+        triggeredBy:
+          type: string
+          enum: [AI_AGENT, AGENT, SYSTEM]
+        countsAgainstAiQuality:
+          type: boolean
+          description: |
+            Máy chủ quyết định, không nhận từ phía gọi. Chuyển giao vì hết hạn mức không tính vào
+            chỉ số chất lượng của tác tử AI.
+        toUserId: { type: [string, 'null'], format: uuid }
+        queuedAt: { type: [string, 'null'], format: date-time }
+        acceptedAt: { type: [string, 'null'], format: date-time }
+        occurredAt: { type: string, format: date-time }
+
+    MauCauTraLoi:
+      type: object
+      required: [id, title, content]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        content: { type: string }
+        shortcut: { type: [string, 'null'] }
+        category: { type: [string, 'null'] }
+        usageCount: { type: integer }
+
+    QuyTacPhanCong:
+      type: object
+      required: [id, name, appliesTo, strategy, priority, isActive]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        appliesTo:
+          type: string
+          enum: [CONVERSATION, LEAD]
+        strategy:
+          type: string
+          enum: [LEAST_BUSY, ROUND_ROBIN, FIXED_USER]
+        channelType:
+          oneOf:
+            - { $ref: '#/components/schemas/LoaiKenh' }
+            - { type: 'null' }
+          description: Điều kiện áp dụng; `null` là mọi kênh
+        tagId: { type: [string, 'null'], format: uuid }
+        targetUserId:
+          type: [string, 'null']
+          format: uuid
+          description: Bắt buộc khi `strategy = FIXED_USER`
+        targetUserName: { type: [string, 'null'] }
+        maxConcurrent: { type: [integer, 'null'] }
+        priority:
+          type: integer
+          description: Thứ tự xét quy tắc — số nhỏ xét trước
+        isActive: { type: boolean }
+
+    LuuQuyTacPhanCongRequest:
+      type: object
+      required: [name, appliesTo, strategy]
+      properties:
+        name: { type: string, maxLength: 100 }
+        appliesTo:
+          type: string
+          enum: [CONVERSATION, LEAD]
+        strategy:
+          type: string
+          enum: [LEAST_BUSY, ROUND_ROBIN, FIXED_USER]
+        channelType:
+          oneOf:
+            - { $ref: '#/components/schemas/LoaiKenh' }
+            - { type: 'null' }
+        tagId: { type: [string, 'null'], format: uuid }
+        targetUserId: { type: [string, 'null'], format: uuid }
+        maxConcurrent: { type: [integer, 'null'], minimum: 1 }
+        priority: { type: integer, default: 0 }
+        isActive: { type: boolean, default: true }
+
+    # ── F. Khách hàng ──────────────────────────────────────────────────────────
+
+    KhachHang:
+      type: object
+      required: [id, status, consentGranted]
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: [string, 'null'] }
+        phone: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+        primaryChannel:
+          oneOf:
+            - { $ref: '#/components/schemas/KenhChinh' }
+            - { type: 'null' }
+        status: { $ref: '#/components/schemas/TrangThaiKhachHang' }
+        consentGranted:
+          type: boolean
+          description: Đã đồng ý xử lý dữ liệu cá nhân (Nghị định 13)
+        consentAt: { type: [string, 'null'], format: date-time }
+        tags:
+          type: array
+          items: { $ref: '#/components/schemas/The' }
+        lastInteractionAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    KhachHangChiTiet:
+      allOf:
+        - $ref: '#/components/schemas/KhachHang'
+        - type: object
+          properties:
+            mergedIntoContactId:
+              type: [string, 'null']
+              format: uuid
+              description: Khi bản ghi này đã bị hợp nhất vào bản khác
+            channelIdentities:
+              type: array
+              items: { $ref: '#/components/schemas/DanhTinhKenh' }
+            conversationCount: { type: integer }
+            openLeadCount: { type: integer }
+            openDealCount: { type: integer }
+            totalDealValue: { type: number }
+            anonymizedAt: { type: [string, 'null'], format: date-time }
+
+    DanhTinhKenh:
+      type: object
+      required: [id, channelType, externalUserId]
+      properties:
+        id: { type: string, format: uuid }
+        channelType: { $ref: '#/components/schemas/LoaiKenh' }
+        externalUserId: { type: string }
+        displayName: { type: [string, 'null'] }
+        avatarUrl: { type: [string, 'null'] }
+        originDomain: { type: [string, 'null'] }
+        lastSeenAt: { type: [string, 'null'], format: date-time }
+
+    LuuKhachHangRequest:
+      type: object
+      properties:
+        fullName: { type: [string, 'null'], maxLength: 200 }
+        phone: { type: [string, 'null'], maxLength: 30 }
+        email: { type: [string, 'null'], format: email }
+        primaryChannel: { $ref: '#/components/schemas/KenhChinh' }
+        consentGranted: { type: boolean }
+        consentSource:
+          type: string
+          enum: [WIDGET, ZALO, FACEBOOK, AGENT_MANUAL]
+
+    TaoKhachHangResult:
+      type: object
+      required: [contact, duplicateCandidates]
+      properties:
+        contact: { $ref: '#/components/schemas/KhachHangChiTiet' }
+        duplicateCandidates:
+          type: array
+          description: |
+            Khách hàng trùng số điện thoại hoặc địa chỉ thư. Chỉ **cảnh báo** rồi gợi ý hợp nhất,
+            không chặn — chặn cứng sẽ làm luồng hợp nhất đã đặc tả không thực hiện được.
+          items: { $ref: '#/components/schemas/KhachHang' }
+
+    GhiChu:
+      type: object
+      required: [id, content, authorUserId, authorName, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        content: { type: string }
+        conversationId: { type: [string, 'null'], format: uuid }
+        authorUserId: { type: string, format: uuid }
+        authorName: { type: string }
+        flaggedSensitive:
+          type: boolean
+          description: Có dấu hiệu chứa dữ liệu cá nhân nhạy cảm — hệ thống nhắc, không chặn
+        canEdit:
+          type: boolean
+          description: Chỉ tác giả hoặc quản trị viên sửa được
+        editedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    The:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        color: { type: [string, 'null'] }
+        usageCount: { type: integer }
+
+    # ── G. Kho tri thức ────────────────────────────────────────────────────────
+
+    TaiLieu:
+      type: object
+      required: [id, title, sourceType, fileName, sizeBytes, status, chunkCount, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: [string, 'null'] }
+        sourceType: { $ref: '#/components/schemas/LoaiNguonTaiLieu' }
+        fileName: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+        language: { type: string }
+        status: { $ref: '#/components/schemas/TrangThaiTaiLieu' }
+        chunkCount: { type: integer }
+        version: { type: integer }
+        errorMessage: { type: [string, 'null'] }
+        uploadedByName: { type: [string, 'null'] }
+        indexedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    TaiLieuChiTiet:
+      allOf:
+        - $ref: '#/components/schemas/TaiLieu'
+        - type: object
+          properties:
+            replacesDocumentId:
+              type: [string, 'null']
+              format: uuid
+              description: Bản này thay thế tài liệu nào — bản cũ giữ tới khi bản mới nạp xong
+            latestJob:
+              oneOf:
+                - { $ref: '#/components/schemas/CongViecNap' }
+                - { type: 'null' }
+            checksum: { type: [string, 'null'] }
+
+    CongViecNap:
+      type: object
+      required: [id, documentId, trigger, state, attempt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        documentTitle: { type: string }
+        trigger:
+          type: string
+          enum: [UPLOAD, REINDEX, REPLACE]
+        state: { $ref: '#/components/schemas/TrangThaiCongViecNap' }
+        attempt: { type: integer }
+        usedOcr:
+          type: boolean
+          description: Bản quét ảnh phải qua nhận dạng ký tự quang học
+        chunksCreated: { type: integer }
+        tokensUsed: { type: integer, format: int64 }
+        costVnd: { type: number }
+        errorCode: { type: [string, 'null'] }
+        errorMessage: { type: [string, 'null'] }
+        durationMs: { type: [integer, 'null'] }
+        startedAt: { type: [string, 'null'], format: date-time }
+        finishedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    DoanTaiLieu:
+      type: object
+      description: |
+        Không có trường `embedding` — vector 1024 chiều vô nghĩa với người xem và tốn vài chục KB
+        mỗi đoạn.
+      required: [id, ordinal, content]
+      properties:
+        id: { type: string, format: uuid }
+        ordinal: { type: integer }
+        content: { type: string }
+        sectionPath: { type: [string, 'null'] }
+        tokenCount: { type: [integer, 'null'] }
+        embeddingModel: { type: string }
+        embeddingVersion:
+          type: string
+          description: |
+            Lưu trên **từng đoạn**, không phải cấp tài liệu — đổi mô hình nhúng thì xây lại chỉ mục
+            từng phần thay vì nạp lại toàn bộ kho.
+
+    KetQuaTruyHoi:
+      type: object
+      required: [chunk, documentId, documentTitle, score]
+      properties:
+        chunk: { $ref: '#/components/schemas/DoanTaiLieu' }
+        documentId: { type: string, format: uuid }
+        documentTitle: { type: string }
+        score:
+          type: number
+          description: Điểm sau khi hợp nhất RRF và xếp hạng lại
+        vectorRank: { type: [integer, 'null'] }
+        keywordRank: { type: [integer, 'null'] }
+
+    KhoangTrongTriThuc:
+      type: object
+      required: [id, questionText, gapType, occurrenceCount, distinctContactCount, status]
+      properties:
+        id: { type: string, format: uuid }
+        questionText: { type: string }
+        gapType: { $ref: '#/components/schemas/LoaiKhoangTrong' }
+        occurrenceCount: { type: integer }
+        distinctContactCount:
+          type: integer
+          description: |
+            Tín hiệu mạnh hơn `occurrenceCount`: cùng câu hỏi bị từ chối bởi nhiều khách khác nhau
+            khác hẳn một khách hỏi đi hỏi lại.
+        priority: { type: integer }
+        status:
+          type: string
+          enum: [OPEN, RESOLVED, IGNORED]
+        resolvedDocumentId: { type: [string, 'null'], format: uuid }
+        firstSeenAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+
+    # ── H. Tác tử AI, MCP, giám sát ────────────────────────────────────────────
+
+    MayChuMcp:
+      type: object
+      description: Không chứa bí mật — thông tin xác thực nằm ở bảng riêng, chỉ lộ ra cờ `hasCredential`.
+      required: [id, name, endpointUrl, transport, specVersion, status]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        endpointUrl: { type: string }
+        transport:
+          type: string
+          enum: [HTTP_SSE, STREAMABLE_HTTP]
+        specVersion:
+          type: string
+          description: Phiên bản đặc tả MCP đã **ghim**. Không tương thích thì từ chối kết nối.
+        authType:
+          type: string
+          enum: [NONE, BEARER, API_KEY, OAUTH2]
+        hasCredential: { type: boolean }
+        status:
+          type: string
+          enum: [PENDING, ACTIVE, ERROR, DISCONNECTED]
+        timeoutMs: { type: integer }
+        circuitState:
+          type: string
+          enum: [CLOSED, OPEN, HALF_OPEN]
+          description: Bộ ngắt mạch — `OPEN` là đang tạm ngừng gọi sau chuỗi lỗi liên tiếp
+        maxCallsPerConversation:
+          type: integer
+          description: Chặn vòng lặp gọi công cụ không kiểm soát
+        toolCount: { type: integer }
+        enabledToolCount: { type: integer }
+        lastHandshakeAt: { type: [string, 'null'], format: date-time }
+        lastError: { type: [string, 'null'] }
+
+    LuuMayChuMcpRequest:
+      type: object
+      required: [name, endpointUrl, transport, specVersion, authType]
+      properties:
+        name: { type: string, maxLength: 100 }
+        endpointUrl: { type: string }
+        transport:
+          type: string
+          enum: [HTTP_SSE, STREAMABLE_HTTP]
+        specVersion: { type: string, maxLength: 20 }
+        authType:
+          type: string
+          enum: [NONE, BEARER, API_KEY, OAUTH2]
+        secret:
+          type: [string, 'null']
+          description: Bí mật xác thực. Mã hóa trước khi ghi, không bao giờ trả lại.
+        scopes:
+          type: array
+          items: { type: string }
+        timeoutMs: { type: integer, default: 5000 }
+        maxCallsPerConversation: { type: integer, default: 10 }
+
+    CongCu:
+      type: object
+      required: [id, mcpServerId, toolName, riskLevel, enabled, requiresConfirmation, schemaHash]
+      properties:
+        id: { type: string, format: uuid }
+        mcpServerId: { type: string, format: uuid }
+        mcpServerName: { type: string }
+        toolName: { type: string }
+        description:
+          type: [string, 'null']
+          description: |
+            Do máy chủ MCP cung cấp — **dữ liệu không đáng tin**. Nó đi vào lời nhắc gửi mô hình
+            nên là một bề mặt tiêm chỉ thị; giao diện hiển thị như văn bản thuần.
+        inputSchema: { type: object, additionalProperties: true }
+        schemaHash: { type: string }
+        approvedSchemaHash:
+          type: [string, 'null']
+          description: Giá trị quản trị viên đã duyệt. Khác `schemaHash` nghĩa là lược đồ vừa đổi.
+        riskLevel: { $ref: '#/components/schemas/MucRuiRo' }
+        enabled:
+          type: boolean
+          description: Mặc định **tắt** — chỉ công cụ được bật tường minh mới khả dụng
+        requiresConfirmation:
+          type: boolean
+          description: |
+            Bắt buộc `true` với mọi `riskLevel` khác `READ`. Ràng buộc ở tầng cơ sở dữ liệu, không
+            phải chỉ ở tầng ứng dụng.
+        autoDisabledReason:
+          type: [string, 'null']
+          enum: [SCHEMA_HASH_CHANGED, SERVER_DISCONNECTED, ADMIN_DISABLED, null]
+        approvedByName: { type: [string, 'null'] }
+        approvedAt: { type: [string, 'null'], format: date-time }
+        lastSeenAt: { type: [string, 'null'], format: date-time }
+
+    NhatKyGoiCongCu:
+      type: object
+      required: [id, toolName, guardResult, calledAt]
+      properties:
+        id: { type: integer, format: int64 }
+        conversationId: { type: [string, 'null'], format: uuid }
+        contactName: { type: [string, 'null'] }
+        aiInteractionId: { type: [string, 'null'], format: uuid }
+        toolName:
+          type: string
+          description: Chép lại tại thời điểm gọi — nhật ký vẫn đọc được sau khi công cụ bị gỡ
+        arguments:
+          type: object
+          additionalProperties: true
+          description: Đã che dữ liệu nhạy cảm trước khi ghi
+        guardResult: { $ref: '#/components/schemas/KetQuaKiemDuyet' }
+        blockedReason:
+          oneOf:
+            - { $ref: '#/components/schemas/LyDoChan' }
+            - { type: 'null' }
+        guardLatencyMs:
+          type: [integer, 'null']
+          description: Độ trễ của **bước kiểm duyệt**, tách khỏi độ trễ gọi công cụ
+        approvalStatus:
+          oneOf:
+            - { $ref: '#/components/schemas/TrangThaiPheDuyet' }
+            - { type: 'null' }
+        approvedByName: { type: [string, 'null'] }
+        approvedAt: { type: [string, 'null'], format: date-time }
+        resultStatus:
+          oneOf:
+            - { $ref: '#/components/schemas/KetQuaGoiCongCu' }
+            - { type: 'null' }
+        resultSummary:
+          type: [string, 'null']
+          description: Hiển thị như **dữ liệu**, không phải chỉ thị
+        latencyMs: { type: [integer, 'null'] }
+        calledAt: { type: string, format: date-time }
+
+    LuotXuLyAi:
+      type: object
+      # `promptTokens`, `completionTokens`, `costVnd` là NOT NULL DEFAULT 0 trong ERD — bắt buộc ở
+      # đây luôn, nếu không mọi màn hình phải viết `?? 0` cho ba trường không bao giờ vắng.
+      required:
+        [id, conversationId, route, refused, cached, promptTokens, completionTokens, costVnd,
+         createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        conversationId: { type: string, format: uuid }
+        messageId: { type: [string, 'null'], format: uuid }
+        route: { $ref: '#/components/schemas/NhanhXuLyAi' }
+        intentLabel: { type: [string, 'null'] }
+        intentConfidence: { type: [number, 'null'] }
+        modelName: { type: [string, 'null'] }
+        modelVersion: { type: [string, 'null'] }
+        promptTokens: { type: integer }
+        completionTokens: { type: integer }
+        costVnd: { type: number }
+        latencyMs: { type: [integer, 'null'] }
+        latencyBreakdown:
+          type: object
+          additionalProperties: { type: integer }
+          description: 'Độ trễ từng chặng: `retrieve`, `rerank`, `generate`, `tool` — chỉ ra chặng gây chậm'
+        groundednessScore:
+          type: [number, 'null']
+          description: Độ bám nguồn. Dưới ngưỡng thì câu trả lời bị hủy, không gửi cho khách.
+        citations:
+          type: array
+          items: { $ref: '#/components/schemas/TrichDan' }
+        refused: { type: boolean }
+        refusalReason:
+          oneOf:
+            - { $ref: '#/components/schemas/LyDoTuChoi' }
+            - { type: 'null' }
+        cached:
+          type: boolean
+          description: Lượt dùng đệm ngữ nghĩa — không tính chi phí gọi mô hình
+        discardedAnswer:
+          type: [string, 'null']
+          description: |
+            Câu trả lời **không đạt ngưỡng bám nguồn nên bị hủy, chưa từng gửi cho khách**. Giao
+            diện phải nói rõ điều đó, nếu không người xem tưởng khách đã nhận được nó.
+        errorCode: { type: [string, 'null'] }
+        toolCalls:
+          type: array
+          description: |
+            Các lời gọi công cụ phát sinh trong chính lượt xử lý này (`tool_call_logs` có
+            `ai_interaction_id` trỏ về đây). Một lượt `TOOL_CALL` có thể gọi nhiều công cụ, và một
+            lời gọi bị chặn cũng có mặt — cột ngữ cảnh của hộp thư hiển thị chúng để nhân viên
+            hiểu vì sao tác tử AI trả lời như vậy.
+          items: { $ref: '#/components/schemas/NhatKyGoiCongCu' }
+        feedback:
+          oneOf:
+            - { $ref: '#/components/schemas/DanhGiaAi' }
+            - { type: 'null' }
+        createdAt: { type: string, format: date-time }
+
+    DanhGiaAi:
+      type: object
+      required: [id, rating, ratedByType, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        rating:
+          type: string
+          enum: [POSITIVE, NEGATIVE]
+        reasonCode:
+          oneOf:
+            - { $ref: '#/components/schemas/LyDoDanhGia' }
+            - { type: 'null' }
+        comment: { type: [string, 'null'] }
+        ratedByType:
+          type: string
+          enum: [AGENT, CUSTOMER]
+          description: Tách riêng khi tổng hợp — nhân viên và khách hàng đánh giá theo tiêu chí khác nhau
+        ratedByName: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+
+    SuKienAnToan:
+      type: object
+      required: [id, eventType, severity, actionTaken, occurredAt]
+      properties:
+        id: { type: integer, format: int64 }
+        eventType: { $ref: '#/components/schemas/LoaiSuKienAnToan' }
+        severity: { $ref: '#/components/schemas/MucNghiemTrong' }
+        threatSurface:
+          oneOf:
+            - { $ref: '#/components/schemas/BeMatDeDoa' }
+            - { type: 'null' }
+        conversationId: { type: [string, 'null'], format: uuid }
+        detector:
+          type: [string, 'null']
+          description: Lớp phòng thủ nào phát hiện
+        evidence:
+          type: object
+          additionalProperties: true
+          description: Trích đoạn **đã che**, không lưu nguyên văn nội dung tấn công
+        actionTaken:
+          type: string
+          enum: [TREATED_AS_DATA, BLOCKED, REFUSED, ESCALATED]
+        occurredAt: { type: string, format: date-time }
+
+    # ── I. Bán hàng ────────────────────────────────────────────────────────────
+
+    Lead:
+      type: object
+      required: [id, contactId, contactName, source, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        contactId: { type: string, format: uuid }
+        contactName: { type: string }
+        contactPhone: { type: [string, 'null'] }
+        sourceConversationId:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            Hội thoại đã sinh ra cơ hội này. Thành `null` khi hội thoại bị xóa theo yêu cầu xóa dữ
+            liệu cá nhân — cơ hội tiềm năng vẫn còn, chỉ mất liên kết.
+        source: { $ref: '#/components/schemas/NguonLead' }
+        status: { $ref: '#/components/schemas/TrangThaiLead' }
+        interestedProduct: { type: [string, 'null'] }
+        budgetMin: { type: [number, 'null'] }
+        budgetMax: { type: [number, 'null'] }
+        budgetConfidence:
+          oneOf:
+            - { $ref: '#/components/schemas/MucDo' }
+            - { type: 'null' }
+          description: |
+            Ngân sách lưu dưới dạng **khoảng** kèm mức chắc chắn, không quy về một con số — khách
+            hàng hiếm khi nói một số chính xác.
+        urgency:
+          oneOf:
+            - { $ref: '#/components/schemas/MucDo' }
+            - { type: 'null' }
+        currentScore: { type: [integer, 'null'], minimum: 0, maximum: 100 }
+        scoreUpdatedAt: { type: [string, 'null'], format: date-time }
+        ownerUserId: { type: [string, 'null'], format: uuid }
+        ownerName: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+
+    LeadChiTiet:
+      allOf:
+        - $ref: '#/components/schemas/Lead'
+        - type: object
+          properties:
+            latestScore:
+              oneOf:
+                - { $ref: '#/components/schemas/DiemLead' }
+                - { type: 'null' }
+            disqualifyReason: { type: [string, 'null'] }
+            convertedDealId: { type: [string, 'null'], format: uuid }
+            convertedAt: { type: [string, 'null'], format: date-time }
+            activityCount: { type: integer }
+            closedAt: { type: [string, 'null'], format: date-time }
+
+    DiemLead:
+      type: object
+      required: [score, modelVersion, scoringMode, topFactors, computedAt]
+      properties:
+        score: { type: integer, minimum: 0, maximum: 100 }
+        modelVersion: { type: string }
+        scoringMode:
+          type: string
+          enum: [ML, RULE]
+          description: |
+            `RULE` là bảng điểm theo luật, phương án dự phòng khi mô hình không chạy được. Phải
+            phân biệt được khi phân tích, nếu không hai loại điểm bị trộn vào nhau.
+        topFactors:
+          type: array
+          description: |
+            Ba yếu tố đóng góp nhiều nhất — thứ trả lời câu hỏi "vì sao khách này được 92 điểm?".
+            Không có nó thì điểm số chỉ là một con số không ai tin.
+          items: { $ref: '#/components/schemas/YeuToDiem' }
+        confidence:
+          type: [string, 'null']
+          enum: [LOW, NORMAL, null]
+          description: '`LOW` khi thiếu đặc trưng bắt buộc'
+        computedAt: { type: string, format: date-time }
+
+    YeuToDiem:
+      type: object
+      required: [name, contribution]
+      properties:
+        name: { type: string }
+        contribution:
+          type: number
+          description: Đóng góp vào điểm cuối, có thể âm
+        value: { type: [string, 'null'] }
+
+    TaoLeadRequest:
+      type: object
+      description: |
+        Không có `tenantId` — khớp `CreateLeadRequest` đã có trong mã java-core, nơi trường này
+        được cố ý bỏ đi. `source` luôn là `MANUAL`; cơ hội do tác tử AI tạo đi qua `/internal/leads`.
+      required: [contactId]
+      properties:
+        contactId: { type: string, format: uuid }
+        interestedProduct: { type: [string, 'null'], maxLength: 200 }
+        budgetMin: { type: [number, 'null'] }
+        budgetMax: { type: [number, 'null'] }
+        urgency: { $ref: '#/components/schemas/MucDo' }
+        ownerUserId: { type: [string, 'null'], format: uuid }
+
+    CapNhatLeadRequest:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/TrangThaiLead' }
+        interestedProduct: { type: [string, 'null'], maxLength: 200 }
+        budgetMin: { type: [number, 'null'] }
+        budgetMax: { type: [number, 'null'] }
+        urgency: { $ref: '#/components/schemas/MucDo' }
+        ownerUserId: { type: [string, 'null'], format: uuid }
+        disqualifyReason:
+          type: [string, 'null']
+          maxLength: 60
+          description: '**Bắt buộc** khi `status = DISQUALIFIED` — nhãn này là dữ liệu học của mô hình chấm điểm.'
+
+    ChuyenDoiLeadResult:
+      type: object
+      required: [deal, lead, warnings]
+      properties:
+        deal: { $ref: '#/components/schemas/Deal' }
+        lead: { $ref: '#/components/schemas/Lead' }
+        warnings:
+          type: array
+          description: 'Ví dụ: khách hàng đã có cơ hội bán hàng đang mở. Cảnh báo, không chặn.'
+          items: { type: string }
+
+    Pheu:
+      type: object
+      required: [id, name, isDefault, isActive, stages]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        isDefault: { type: boolean }
+        isActive: { type: boolean }
+        stages:
+          type: array
+          items: { $ref: '#/components/schemas/GiaiDoanPheu' }
+
+    GiaiDoanPheu:
+      type: object
+      required: [id, name, position, isWon, isLost]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        position: { type: integer }
+        probability: { type: [integer, 'null'], minimum: 0, maximum: 100 }
+        isWon: { type: boolean }
+        isLost: { type: boolean }
+        requiredFields:
+          type: array
+          description: Trường bắt buộc phải có trước khi kéo cơ hội vào giai đoạn này
+          items: { type: string }
+        dealCount: { type: integer }
+        dealValueTotal: { type: number }
+
+    Deal:
+      type: object
+      required: [id, contactId, contactName, pipelineId, stageId, title, status, source, currency]
+      properties:
+        id: { type: string, format: uuid }
+        contactId: { type: string, format: uuid }
+        contactName: { type: string }
+        leadId: { type: [string, 'null'], format: uuid }
+        pipelineId: { type: string, format: uuid }
+        stageId: { type: string, format: uuid }
+        stageName: { type: string }
+        title: { type: string }
+        amount: { type: [number, 'null'] }
+        currency: { type: string, default: VND }
+        expectedCloseDate: { type: [string, 'null'], format: date }
+        isOverdue:
+          type: boolean
+          description: |
+            Quá `expectedCloseDate` mà vẫn `OPEN`. Tính sẵn ở máy chủ để mọi màn hình dùng chung
+            một định nghĩa thay vì mỗi nơi tự so ngày một kiểu.
+        status: { $ref: '#/components/schemas/TrangThaiDeal' }
+        source: { $ref: '#/components/schemas/NguonDeal' }
+        ownerUserId: { type: [string, 'null'], format: uuid }
+        ownerName: { type: [string, 'null'] }
+        stageChangedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    DealChiTiet:
+      allOf:
+        - $ref: '#/components/schemas/Deal'
+        - type: object
+          properties:
+            closeReason: { type: [string, 'null'] }
+            closedAt: { type: [string, 'null'], format: date-time }
+            stageHistory:
+              type: array
+              items: { $ref: '#/components/schemas/LichSuGiaiDoan' }
+            activities:
+              type: array
+              items: { $ref: '#/components/schemas/HoatDong' }
+
+    LichSuGiaiDoan:
+      type: object
+      required: [toStageId, toStageName, changedAt]
+      properties:
+        fromStageId: { type: [string, 'null'], format: uuid }
+        fromStageName: { type: [string, 'null'] }
+        toStageId: { type: string, format: uuid }
+        toStageName: { type: string }
+        durationSeconds:
+          type: [integer, 'null']
+          format: int64
+          description: Thời gian đã ở giai đoạn trước — tính sẵn để báo cáo không phải chạy cửa sổ trượt
+        changedByName: { type: [string, 'null'] }
+        changedAt: { type: string, format: date-time }
+
+    LuuDealRequest:
+      type: object
+      required: [contactId, pipelineId, stageId, title]
+      properties:
+        contactId: { type: string, format: uuid }
+        leadId: { type: [string, 'null'], format: uuid }
+        pipelineId: { type: string, format: uuid }
+        stageId: { type: string, format: uuid }
+        title: { type: string, maxLength: 200 }
+        amount: { type: [number, 'null'] }
+        currency: { type: string, default: VND }
+        expectedCloseDate: { type: [string, 'null'], format: date }
+        ownerUserId: { type: [string, 'null'], format: uuid }
+
+    HoatDong:
+      type: object
+      required: [id, contactId, type, source, performedBy, performedByName, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        contactId: { type: string, format: uuid }
+        contactName: { type: string }
+        leadId: { type: [string, 'null'], format: uuid }
+        dealId: { type: [string, 'null'], format: uuid }
+        type: { $ref: '#/components/schemas/LoaiHoatDong' }
+        subject: { type: [string, 'null'] }
+        content: { type: [string, 'null'] }
+        outcome:
+          oneOf:
+            - { $ref: '#/components/schemas/KetQuaHoatDong' }
+            - { type: 'null' }
+        source:
+          $ref: '#/components/schemas/NguonHoatDong'
+        performedBy: { type: string, format: uuid }
+        performedByName: { type: string }
+        performedAt: { type: [string, 'null'], format: date-time }
+        remindAt: { type: [string, 'null'], format: date-time }
+        remindUserId: { type: [string, 'null'], format: uuid }
+        remindStatus: { $ref: '#/components/schemas/TrangThaiNhacViec' }
+        createdAt: { type: string, format: date-time }
+
+    NguonHoatDong:
+      type: string
+      enum: [MANUAL, AUTO]
+      description: |
+        `AUTO` là hoạt động hệ thống sinh khi chuyển giao hội thoại. Tách khỏi `MANUAL` vì gộp
+        chung sẽ làm sai chỉ số năng suất nhân viên.
+
+    LuuHoatDongRequest:
+      type: object
+      description: |
+        Gắn với **đúng một** trong hai: `leadId` hoặc `dealId`. Ràng buộc này ở tầng cơ sở dữ liệu
+        (`num_nonnulls(lead_id, deal_id) = 1`), gửi cả hai hoặc không gửi cái nào đều bị từ chối.
+      required: [contactId, type]
+      properties:
+        contactId: { type: string, format: uuid }
+        leadId: { type: [string, 'null'], format: uuid }
+        dealId: { type: [string, 'null'], format: uuid }
+        type: { $ref: '#/components/schemas/LoaiHoatDong' }
+        subject: { type: [string, 'null'], maxLength: 200 }
+        content: { type: [string, 'null'] }
+        outcome: { $ref: '#/components/schemas/KetQuaHoatDong' }
+        performedAt: { type: [string, 'null'], format: date-time }
+        remindAt:
+          type: [string, 'null']
+          format: date-time
+          description: Phải ở tương lai — mốc trong quá khứ bị từ chối 422
+        remindUserId: { type: [string, 'null'], format: uuid }
+
+    # ── J. Phân tích ───────────────────────────────────────────────────────────
+
+    TongQuan:
+      type: object
+      description: |
+        Đọc từ mô hình đọc `analytics.*`. `updatedAt` là thời điểm tổng hợp gần nhất — số liệu có
+        độ trễ, và giấu điều đó là nói dối người xem.
+      required: [updatedAt, conversationsStarted, conversationsResolved, botResolvedRate]
+      properties:
+        updatedAt: { type: string, format: date-time }
+        conversationsStarted: { type: integer }
+        conversationsResolved: { type: integer }
+        botResolvedRate:
+          type: number
+          description: Tỉ lệ hội thoại tác tử AI xử lý trọn vẹn, không cần đến người
+        handoffs: { type: integer }
+        avgFirstResponseSeconds: { type: [integer, 'null'] }
+        avgResolutionSeconds: { type: [integer, 'null'] }
+        messagesIn: { type: integer }
+        messagesOut: { type: integer }
+        leadsCreated: { type: integer }
+        dealsWon: { type: integer }
+        dealValueTotal: { type: number }
+        costVnd: { type: number }
+        pendingConversations:
+          type: integer
+          description: Đang chờ nhân viên tiếp nhận — con số cần hành động ngay, không phải số thống kê
+
+    DiemHoiThoaiNgay:
+      type: object
+      required: [statDate, conversationsStarted, conversationsResolved, botResolved, handoffs]
+      properties:
+        statDate: { type: string, format: date }
+        channelType: { type: [string, 'null'] }
+        assignedUserId: { type: [string, 'null'], format: uuid }
+        assignedUserName: { type: [string, 'null'] }
+        conversationsStarted: { type: integer }
+        conversationsResolved: { type: integer }
+        botResolved: { type: integer }
+        handoffs: { type: integer }
+        messagesIn: { type: integer }
+        messagesOut: { type: integer }
+        avgFirstResponseSeconds: { type: [integer, 'null'] }
+
+    BacPheu:
+      type: object
+      required:
+        [statDate, leadSource, conversationsTotal, conversationsWithSignal, leadsCreated,
+         dealsCreated, dealsWon, scoringEnabled]
+      properties:
+        statDate: { type: string, format: date }
+        leadSource: { $ref: '#/components/schemas/NguonLead' }
+        channelType: { type: string }
+        conversationsTotal: { type: integer, description: Bậc 1 }
+        conversationsWithSignal: { type: integer, description: Bậc 2 — có tín hiệu quan tâm }
+        leadsCreated: { type: integer, description: Bậc 3 }
+        dealsCreated: { type: integer, description: Bậc 4 }
+        dealsWon: { type: integer, description: Bậc 5 }
+        dealValueTotal: { type: number }
+        scoringEnabled:
+          type: boolean
+          description: |
+            `false` đánh dấu khoảng dữ liệu phát sinh **trước khi** bật chấm điểm tự động. Giao
+            diện phải chú thích khoảng đó, nếu không nó bị đọc là tác tử AI hoạt động kém.
+
+    ThongKeChuDe:
+      type: object
+      required: [statDate, clusterId, topicLabel, conversationCount]
+      properties:
+        statDate: { type: string, format: date }
+        clusterId: { type: string, format: uuid }
+        topicLabel:
+          type: string
+          description: |
+            Nhãn **chụp lại tại thời điểm tổng hợp** — đổi tên chủ đề về sau không làm số liệu cũ
+            đổi theo.
+        conversationCount: { type: integer }
+        botResolvedCount: { type: integer }
+        refusalCount:
+          type: integer
+          description: Cao ở một chủ đề là gợi ý trực tiếp — bổ sung tài liệu cho chủ đề đó
+
+    HieuQuaAi:
+      type: object
+      required: [updatedAt, routeDistribution, handoffReasons, latencyBreakdown]
+      properties:
+        updatedAt: { type: string, format: date-time }
+        totalInteractions: { type: integer }
+        refusalRate: { type: number }
+        positiveFeedbackRate:
+          type: number
+          description: |
+            Con số cho phép viết "trên N hội thoại thực tế, tỉ lệ phản hồi tích cực là X%" — câu mà
+            phần lớn đồ án không viết được vì không lưu dữ liệu đánh giá.
+        feedbackCount: { type: integer }
+        cachedRate: { type: number }
+        avgGroundedness: { type: [number, 'null'] }
+        avgLatencyMs: { type: [integer, 'null'] }
+        costVnd: { type: number }
+        routeDistribution:
+          type: array
+          items:
+            type: object
+            required: [route, count]
+            properties:
+              route: { $ref: '#/components/schemas/NhanhXuLyAi' }
+              count: { type: integer }
+              costVnd: { type: number }
+        handoffReasons:
+          type: array
+          items:
+            type: object
+            required: [reason, count, countsAgainstAiQuality]
+            properties:
+              reason: { $ref: '#/components/schemas/LyDoChuyenGiao' }
+              count: { type: integer }
+              countsAgainstAiQuality: { type: boolean }
+        latencyBreakdown:
+          type: object
+          additionalProperties: { type: integer }
+          description: Trung bình từng chặng — chỉ ra chặng nào gây chậm
+        modelVersions:
+          type: array
+          items: { type: string }
+
+    TepBaoCao:
+      type: object
+      required: [id, reportType, format, status, requestedAt]
+      properties:
+        id: { type: string, format: uuid }
+        reportType: { $ref: '#/components/schemas/LoaiBaoCao' }
+        format:
+          type: string
+          enum: [CSV, XLSX, PDF]
+        status: { $ref: '#/components/schemas/TrangThaiTepBaoCao' }
+        rowCount: { type: [integer, 'null'] }
+        partIndex: { type: [integer, 'null'] }
+        partTotal:
+          type: [integer, 'null']
+          description: Báo cáo lớn tự chia thành nhiều tệp
+        fileUri: { type: [string, 'null'] }
+        fileSizeBytes: { type: [integer, 'null'], format: int64 }
+        containsPersonalData: { type: boolean }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        requestedByName: { type: string }
+        requestedAt: { type: string, format: date-time }
+        completedAt: { type: [string, 'null'], format: date-time }
+        errorMessage: { type: [string, 'null'] }
+
+    # ── K. Kiểm toán và tuân thủ ───────────────────────────────────────────────
+
+    BanGhiKiemToan:
+      type: object
+      required: [id, actorType, action, severity, containsPersonalData, occurredAt]
+      properties:
+        id: { type: integer, format: int64 }
+        actorType: { $ref: '#/components/schemas/LoaiChuThe' }
+        actorId: { type: [string, 'null'], format: uuid }
+        actorEmail:
+          type: [string, 'null']
+          description: Chụp lại tại thời điểm ghi — bản ghi vẫn đọc được sau khi người dùng bị xóa
+        action:
+          type: string
+          description: '`LOGIN_SUCCESS`, `ROLE_CHANGED`, `CONTACT_MERGED`, `ERASURE_EXECUTED`…'
+        entityType: { type: [string, 'null'] }
+        entityId: { type: [string, 'null'], format: uuid }
+        before: { type: [object, 'null'], additionalProperties: true }
+        after: { type: [object, 'null'], additionalProperties: true }
+        reason: { type: [string, 'null'] }
+        severity: { $ref: '#/components/schemas/MucNghiemTrongKiemToan' }
+        containsPersonalData: { type: boolean }
+        masked:
+          type: boolean
+          description: |
+            `true` nghĩa là `before`/`after` đang bị che một phần. Xem đầy đủ phải gọi `/reveal`
+            kèm lý do — và chính lần xem đó cũng được ghi vào nhật ký.
+        ipAddress: { type: [string, 'null'] }
+        traceId: { type: [string, 'null'] }
+        occurredAt: { type: string, format: date-time }
+
+    YeuCauXoa:
+      type: object
+      required: [id, contactId, status, requestedAt]
+      properties:
+        id: { type: string, format: uuid }
+        contactId: { type: string, format: uuid }
+        contactName: { type: [string, 'null'] }
+        legalBasis: { type: string }
+        status: { $ref: '#/components/schemas/TrangThaiYeuCauXoa' }
+        identityVerifiedByName: { type: string }
+        identityVerifiedAt: { type: string, format: date-time }
+        requestedAt: { type: string, format: date-time }
+        completedAt: { type: [string, 'null'], format: date-time }
+
+    YeuCauXoaChiTiet:
+      allOf:
+        - $ref: '#/components/schemas/YeuCauXoa'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              description: |
+                Tiến độ theo từng bảng. Khi lỗi giữa chừng, đây là thứ cho biết chính xác chỗ nào
+                đã xong để chạy lại đúng phần dở dang, thay vì để dữ liệu ở trạng thái nửa vời.
+              items: { $ref: '#/components/schemas/MucXoa' }
+            externalSystemsNote:
+              type: [string, 'null']
+              description: |
+                Phạm vi xóa **không vươn tới hệ thống bên ngoài** đã nhận dữ liệu qua MCP. Giới hạn
+                này phải hiển thị cho người duyệt, không được im lặng bỏ qua.
+            certificateUri:
+              type: [string, 'null']
+              description: Biên bản xác nhận đã xóa
+            startedAt: { type: [string, 'null'], format: date-time }
+
+    MucXoa:
+      type: object
+      required: [targetSchema, targetTable, action, status]
+      properties:
+        targetSchema: { type: string }
+        targetTable: { type: string }
+        action: { $ref: '#/components/schemas/ThaoTacXoa' }
+        status:
+          type: string
+          enum: [PENDING, DONE, FAILED]
+        affectedRows: { type: [integer, 'null'] }
+        errorMessage: { type: [string, 'null'] }
+        executedAt: { type: [string, 'null'], format: date-time }
