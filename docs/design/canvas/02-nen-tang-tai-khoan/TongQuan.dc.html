@@ -1,0 +1,240 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #3259d1; text-decoration: none; }
+    a:hover { color: #24409a; }
+    .goc {
+      --background:#ffffff; --foreground:#0a0a0a; --card:#ffffff;
+      --primary:#3259d1; --primary-foreground:#fafafa;
+      --secondary:#f5f5f5; --secondary-foreground:#171717;
+      --muted:#f5f5f5; --muted-foreground:#737373;
+      --destructive:#e7000b; --success:#007e46; --warning:#be7200; --info:#3259d1;
+      --border:#e5e5e5; --input:#e5e5e5; --vien-the:rgba(10,10,10,0.10);
+      --chart-1:#2a78d6; --chart-2:#eb6834; --chart-3:#1baf7a; --chart-4:#eda100; --chart-5:#e87ba4;
+      font-family:'Geist','Geist Variable',system-ui,-apple-system,'Segoe UI',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    .goc.toi {
+      --background:#0a0a0a; --foreground:#fafafa; --card:#171717;
+      --primary:#7ba1fc; --primary-foreground:#0b152d;
+      --secondary:#262626; --secondary-foreground:#fafafa;
+      --muted:#262626; --muted-foreground:#a1a1a1;
+      --destructive:#ff6467; --success:#3bb974; --warning:#efa831; --info:#7ba1fc;
+      --border:rgba(255,255,255,0.10); --input:rgba(255,255,255,0.15); --vien-the:rgba(250,250,250,0.10);
+      --chart-1:#3987e5; --chart-2:#d95926; --chart-3:#199e70; --chart-4:#c98500; --chart-5:#d55181;
+    }
+    .the { border-radius:14px; background:var(--card); box-shadow: inset 0 0 0 1px var(--vien-the); display:flex; flex-direction:column; }
+    .nut { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 10px;
+           border-radius:10px; border:1px solid transparent; font-size:14px; font-weight:500; white-space:nowrap; }
+    .so { font-variant-numeric:tabular-nums; }
+    .nhan-truc { font-size:11px; fill:currentColor; font-variant-numeric:tabular-nums; }
+  </style>
+</helmet>
+
+<!-- Chỉ vẽ VÙNG NỘI DUNG. Khung ứng dụng (sidebar 256px + thanh trên 56px) đã đặc tả ở canvas Hệ thống thiết kế. -->
+<div class="goc {{lopCheDo}}" style="width: 1184px; padding: 24px; display: flex; flex-direction: column; gap: 24px; background: var(--background); color: var(--foreground); box-sizing: border-box;">
+
+  <!-- Đầu trang -->
+  <div style="display: flex; align-items: flex-start; gap: 16px;">
+    <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1;">
+      <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em;">Tổng quan</h1>
+      <p style="margin: 0; font-size: 14px; color: var(--muted-foreground);">Công ty TNHH Cát Tường · 14 ngày gần nhất</p>
+    </div>
+    <!-- Bộ lọc thời gian đứng thành một hàng phía trên các biểu đồ, áp cho cả trang -->
+    <div style="display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--muted);">
+      <span style="display: flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 8px; color: var(--muted-foreground); font-size: 13px; font-weight: 500;">7 ngày</span>
+      <span style="display: flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 8px; background: var(--background); font-size: 13px; font-weight: 500; box-shadow: inset 0 0 0 1px var(--vien-the);">14 ngày</span>
+      <span style="display: flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 8px; color: var(--muted-foreground); font-size: 13px; font-weight: 500;">30 ngày</span>
+      <span style="display: flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 8px; color: var(--muted-foreground); font-size: 13px; font-weight: 500;">Chu kỳ này</span>
+    </div>
+  </div>
+
+  <!-- Bốn chỉ số đầu — số liệu là chính, không kèm biểu đồ tí hon nào -->
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;">
+    <div class="the" style="padding: 16px; gap: 4px;">
+      <span style="font-size: 13px; color: var(--muted-foreground);">Khách hàng</span>
+      <span class="so" style="font-size: 30px; font-weight: 600; line-height: 1.1;">1.284</span>
+      <span style="font-size: 12px; color: var(--muted-foreground);">+38 trong 14 ngày</span>
+    </div>
+    <div class="the" style="padding: 16px; gap: 4px;">
+      <span style="font-size: 13px; color: var(--muted-foreground);">Hội thoại</span>
+      <span class="so" style="font-size: 30px; font-weight: 600; line-height: 1.1;">3.227</span>
+      <span style="font-size: 12px; color: var(--muted-foreground);">71% bot tự giải quyết</span>
+    </div>
+    <div class="the" style="padding: 16px; gap: 4px;">
+      <span style="font-size: 13px; color: var(--muted-foreground);">Cơ hội tiềm năng</span>
+      <span class="so" style="font-size: 30px; font-weight: 600; line-height: 1.1;">146</span>
+      <span style="font-size: 12px; color: var(--muted-foreground);">92 do AI tự tạo</span>
+    </div>
+    <div class="the" style="padding: 16px; gap: 4px;">
+      <span style="font-size: 13px; color: var(--muted-foreground);">Cơ hội bán hàng</span>
+      <span class="so" style="font-size: 30px; font-weight: 600; line-height: 1.1;">412<span style="font-size: 16px; font-weight: 500; color: var(--muted-foreground);">&nbsp;triệu ₫</span></span>
+      <span style="font-size: 12px; color: var(--muted-foreground);">31 cơ hội đang mở</span>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px;">
+
+    <!-- Biểu đồ đường — hai chuỗi, có chú giải và nhãn cuối đường -->
+    <div class="the" style="padding: 16px; gap: 16px;">
+      <div style="display: flex; align-items: flex-start; gap: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1;">
+          <span style="font-size: 16px; font-weight: 500; line-height: 1.375;">Hội thoại theo ngày</span>
+          <span style="font-size: 13px; color: var(--muted-foreground);">Tổng số so với phần tác tử AI tự khép lại</span>
+        </div>
+        <!-- Chú giải: bắt buộc từ 2 chuỗi trở lên -->
+        <div style="display: flex; gap: 12px; flex-shrink: 0;">
+          <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground);">
+            <span style="width: 10px; height: 10px; border-radius: 26px; background: var(--chart-1);"></span>Tổng</span>
+          <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground);">
+            <span style="width: 10px; height: 10px; border-radius: 26px; background: var(--chart-2);"></span>Bot tự giải quyết</span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px;">
+        <!-- Trục y -->
+        <div style="display: flex; flex-direction: column; justify-content: space-between; height: 180px; text-align: right;">
+          <span class="so" style="font-size: 11px; color: var(--muted-foreground); line-height: 1;">280</span>
+          <span class="so" style="font-size: 11px; color: var(--muted-foreground); line-height: 1;">210</span>
+          <span class="so" style="font-size: 11px; color: var(--muted-foreground); line-height: 1;">140</span>
+          <span class="so" style="font-size: 11px; color: var(--muted-foreground); line-height: 1;">70</span>
+          <span class="so" style="font-size: 11px; color: var(--muted-foreground); line-height: 1;">0</span>
+        </div>
+
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 8px;">
+          <svg viewBox="0 0 620 180" width="100%" height="180" preserveAspectRatio="none" style="overflow: visible; display: block;">
+            <!-- Lưới lùi về sau -->
+            <g stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke">
+              <line x1="0" y1="0" x2="620" y2="0"/>
+              <line x1="0" y1="45" x2="620" y2="45"/>
+              <line x1="0" y1="90" x2="620" y2="90"/>
+              <line x1="0" y1="135" x2="620" y2="135"/>
+              <line x1="0" y1="180" x2="620" y2="180"/>
+            </g>
+            <!-- Nét 2px, không co theo tỉ lệ khung -->
+            <path d="M 0.0 64.3 L 47.7 54.0 L 95.4 45.0 L 143.1 59.1 L 190.8 30.9 L 238.5 20.6 L 286.2 25.7 L 333.8 48.2 L 381.5 37.3 L 429.2 14.1 L 476.9 9.0 L 524.6 23.1 L 572.3 6.4 L 620.0 20.6"
+                  fill="none" stroke="var(--chart-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+            <path d="M 0.0 104.1 L 47.7 95.1 L 95.4 86.8 L 143.1 99.0 L 190.8 77.1 L 238.5 66.9 L 286.2 70.7 L 333.8 90.0 L 381.5 82.3 L 429.2 63.6 L 476.9 57.9 L 524.6 72.0 L 572.3 54.0 L 620.0 66.9"
+                  fill="none" stroke="var(--chart-2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+            <!-- Điểm cuối: vòng nền 2px tách khỏi đường -->
+            <circle cx="620" cy="20.6" r="4.5" fill="var(--chart-1)" stroke="var(--card)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+            <circle cx="620" cy="66.9" r="4.5" fill="var(--chart-2)" stroke="var(--card)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+            <!-- Đường dóng của con trỏ + điểm được trỏ -->
+            <line x1="429.2" y1="0" x2="429.2" y2="180" stroke="var(--muted-foreground)" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>
+            <circle cx="429.2" cy="14.1" r="4.5" fill="var(--chart-1)" stroke="var(--card)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+            <circle cx="429.2" cy="63.6" r="4.5" fill="var(--chart-2)" stroke="var(--card)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+          </svg>
+
+          <!-- Trục x -->
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--muted-foreground);">
+            <span class="so">07/08</span><span class="so">10/08</span><span class="so">13/08</span><span class="so">16/08</span><span class="so">20/08</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chú giải nổi khi rê chuột — đặc tả sẵn để bước viết code không phải nghĩ lại -->
+      <div style="align-self: flex-start; margin-left: 260px; margin-top: -150px; padding: 8px 10px; border-radius: 10px; background: var(--card); box-shadow: 0 4px 12px rgba(0,0,0,0.10), inset 0 0 0 1px var(--vien-the); display: flex; flex-direction: column; gap: 6px; width: 168px;">
+        <span class="so" style="font-size: 12px; font-weight: 500;">Thứ hai, 17/08/2026</span>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 12px;">
+          <span style="width: 8px; height: 8px; border-radius: 26px; background: var(--chart-1); flex-shrink: 0;"></span>
+          <span style="color: var(--muted-foreground); flex-grow: 1;">Tổng</span>
+          <span class="so" style="font-weight: 500;">258</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 12px;">
+          <span style="width: 8px; height: 8px; border-radius: 26px; background: var(--chart-2); flex-shrink: 0;"></span>
+          <span style="color: var(--muted-foreground); flex-grow: 1;">Bot tự giải quyết</span>
+          <span class="so" style="font-weight: 500;">181</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Biểu đồ cột ngang — nhãn trực tiếp trên từng cột, bắt buộc vì vài slot dưới 3:1 trên nền trắng -->
+    <div class="the" style="padding: 16px; gap: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <span style="font-size: 16px; font-weight: 500; line-height: 1.375;">Hội thoại theo kênh</span>
+        <span style="font-size: 13px; color: var(--muted-foreground);">14 ngày gần nhất</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; font-size: 13px;">
+            <span>Web Widget</span><span class="so" style="font-weight: 500;">1.842</span>
+          </div>
+          <div style="height: 8px; border-radius: 4px; background: var(--muted); overflow: hidden;">
+            <div style="width: 100%; height: 100%; border-radius: 4px; background: var(--chart-1);"></div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; font-size: 13px;">
+            <span>Zalo OA</span><span class="so" style="font-weight: 500;">981</span>
+          </div>
+          <div style="height: 8px; border-radius: 4px; background: var(--muted); overflow: hidden;">
+            <div style="width: 53%; height: 100%; border-radius: 4px; background: var(--chart-2);"></div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; font-size: 13px;">
+            <span>Messenger</span><span class="so" style="font-weight: 500;">404</span>
+          </div>
+          <div style="height: 8px; border-radius: 4px; background: var(--muted); overflow: hidden;">
+            <div style="width: 22%; height: 100%; border-radius: 4px; background: var(--chart-3);"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: var(--border);"></div>
+
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <span style="font-size: 16px; font-weight: 500; line-height: 1.375;">Cần chú ý</span>
+        <span style="font-size: 13px; color: var(--muted-foreground);">Hội thoại chờ nhân viên lâu nhất</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="width: 24px; height: 24px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; flex-shrink: 0;">NH</span>
+          <div style="display: flex; flex-direction: column; min-width: 0; flex-grow: 1;">
+            <span style="font-size: 13px; font-weight: 500;">Nguyễn Thị Bích Hường</span>
+            <span style="font-size: 12px; color: var(--muted-foreground);">Hỏi về bảo hành ngoài giờ</span>
+          </div>
+          <span class="so" style="font-size: 12px; color: var(--warning); font-weight: 500; flex-shrink: 0;">38 phút</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="width: 24px; height: 24px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; flex-shrink: 0;">VT</span>
+          <div style="display: flex; flex-direction: column; min-width: 0; flex-grow: 1;">
+            <span style="font-size: 13px; font-weight: 500;">Võ Thành Trung</span>
+            <span style="font-size: 12px; color: var(--muted-foreground);">Xin báo giá số lượng lớn</span>
+          </div>
+          <span class="so" style="font-size: 12px; color: var(--warning); font-weight: 500; flex-shrink: 0;">21 phút</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="width: 24px; height: 24px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; flex-shrink: 0;">LT</span>
+          <div style="display: flex; flex-direction: column; min-width: 0; flex-grow: 1;">
+            <span style="font-size: 13px; font-weight: 500;">Lý Thanh Hà</span>
+            <span style="font-size: 12px; color: var(--muted-foreground);">Đổi địa chỉ giao hàng</span>
+          </div>
+          <span class="so" style="font-size: 12px; color: var(--muted-foreground); font-weight: 500; flex-shrink: 0;">9 phút</span>
+        </div>
+      </div>
+      <span class="nut" style="border-color: var(--border); background: var(--background); width: 100%;">Mở hộp thư</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"cheDo":{"editor":"enum","options":["sáng","tối"],"default":"sáng","section":"Hiển thị"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { lopCheDo: (this.props.cheDo ?? 'sáng') === 'tối' ? 'toi' : '' };
+  }
+}
+</script>
+</body>
+</html>

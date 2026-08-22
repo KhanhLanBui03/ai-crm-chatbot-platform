@@ -1,0 +1,213 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #3259d1; text-decoration: none; }
+    a:hover { color: #24409a; }
+    .goc {
+      --background:#ffffff; --foreground:#0a0a0a;
+      --card:#ffffff; --card-foreground:#0a0a0a;
+      --primary:#3259d1; --primary-foreground:#fafafa;
+      --secondary:#f5f5f5; --secondary-foreground:#171717;
+      --muted:#f5f5f5; --muted-foreground:#737373;
+      --destructive:#e7000b; --success:#007e46; --warning:#be7200;
+      --border:#e5e5e5; --ring:#5b81e0;
+      --sidebar:#fafafa; --sidebar-border:#e5e5e5;
+      --vien-the:rgba(10,10,10,0.10);
+      --radius:10px;
+      font-family:'Geist','Geist Variable',system-ui,-apple-system,'Segoe UI',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    .goc.toi {
+      --background:#0a0a0a; --foreground:#fafafa;
+      --card:#171717; --card-foreground:#fafafa;
+      --primary:#7ba1fc; --primary-foreground:#0b152d;
+      --secondary:#262626; --secondary-foreground:#fafafa;
+      --muted:#262626; --muted-foreground:#a1a1a1;
+      --destructive:#ff6467; --success:#3bb974; --warning:#efa831;
+      --border:rgba(255,255,255,0.10); --ring:#5b81e0;
+      --sidebar:#171717; --sidebar-border:rgba(255,255,255,0.10);
+      --vien-the:rgba(250,250,250,0.10);
+    }
+    .muc-nav { display:flex; align-items:center; gap:8px; height:32px; padding:0 8px; border-radius:8px; font-size:14px; font-weight:500; cursor:default; }
+    .muc-con { display:flex; align-items:center; height:28px; padding:0 8px 0 32px; border-radius:8px; font-size:13px; }
+  </style>
+</helmet>
+
+<div class="goc {{lopCheDo}}" style="width: 1440px; height: 900px; display: flex; background: var(--background); color: var(--foreground); overflow: hidden;">
+
+  <!-- Sidebar — 256px, khớp SIDEBAR_WIDTH = 16rem của components/ui/sidebar.tsx -->
+  <aside style="width: 256px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--sidebar); border-right: 1px solid var(--sidebar-border);">
+
+    <!-- Nhận diện doanh nghiệp -->
+    <div style="display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 12px; border-bottom: 1px solid var(--sidebar-border);">
+      <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--primary); color: var(--primary-foreground); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; flex-shrink: 0;">CT</div>
+      <div style="display: flex; flex-direction: column; min-width: 0;">
+        <span style="font-size: 14px; font-weight: 600; line-height: 1.2;">Công ty Cát Tường</span>
+        <span style="font-size: 12px; color: var(--muted-foreground); line-height: 1.3;">Gói Growth</span>
+      </div>
+    </div>
+
+    <!-- Điều hướng chính -->
+    <nav style="flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 12px 8px; overflow-y: auto;">
+
+      <div class="muc-nav" style="color: var(--muted-foreground);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+        <span>Tổng quan</span>
+      </div>
+
+      <!-- Mục đang chọn: nền primary, chữ primary-foreground -->
+      <div class="muc-nav" style="background: var(--primary); color: var(--primary-foreground);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        <span style="flex-grow: 1;">Hộp thư</span>
+        <span style="height: 20px; min-width: 20px; padding: 0 6px; border-radius: 26px; background: var(--primary-foreground); color: var(--primary); font-size: 12px; font-weight: 500; display: flex; align-items: center; justify-content: center;">12</span>
+      </div>
+
+      <div class="muc-nav" style="color: var(--muted-foreground);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Khách hàng</span>
+      </div>
+
+      <!-- Nhóm mở rộng: Bán hàng -->
+      <div class="muc-nav" style="color: var(--foreground);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+        <span style="flex-grow: 1;">Bán hàng</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted-foreground);"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px; margin-left: 15px; padding-left: 1px; border-left: 1px solid var(--sidebar-border);">
+        <div class="muc-con" style="color: var(--muted-foreground);">Cơ hội tiềm năng</div>
+        <div class="muc-con" style="color: var(--muted-foreground);">Phễu bán hàng</div>
+        <div class="muc-con" style="color: var(--muted-foreground);">Hoạt động</div>
+      </div>
+
+      <div class="muc-nav" style="color: var(--muted-foreground);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+        <span>Tri thức</span>
+      </div>
+
+      <div class="muc-nav" style="color: var(--muted-foreground);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 9.9 9.9 3 12l6.9 2.1L12 21l2.1-6.9L21 12l-6.9-2.1z"/></svg>
+        <span style="flex-grow: 1;">Tác tử AI</span>
+        <!-- Dấu cảnh báo: có tool call chờ duyệt. Kèm số, không chỉ dựa vào màu. -->
+        <span style="height: 20px; min-width: 20px; padding: 0 6px; border-radius: 26px; background: color-mix(in oklch, var(--warning), transparent 88%); color: var(--warning); font-size: 12px; font-weight: 500; display: flex; align-items: center; justify-content: center;">3</span>
+      </div>
+
+      <div class="muc-nav" style="color: var(--muted-foreground);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+        <span>Phân tích</span>
+      </div>
+
+      <div style="height: 1px; background: var(--sidebar-border); margin: 8px 8px;"></div>
+
+      <div class="muc-nav" style="color: var(--muted-foreground);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span>Cài đặt</span>
+      </div>
+    </nav>
+
+    <!-- Hạn mức — nhắc thường trực, UC006 -->
+    <div style="margin: 8px; padding: 12px; border-radius: 10px; background: var(--card); box-shadow: inset 0 0 0 1px var(--vien-the); display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <span style="font-size: 12px; font-weight: 500;">Hạn mức hội thoại</span>
+        <span style="font-size: 12px; color: var(--muted-foreground); font-variant-numeric: tabular-nums;">1.842/2.000</span>
+      </div>
+      <div style="height: 6px; border-radius: 26px; background: var(--muted); overflow: hidden;">
+        <div style="width: 92%; height: 100%; border-radius: 26px; background: var(--warning);"></div>
+      </div>
+      <span style="font-size: 12px; color: var(--warning);">Còn 158 lượt trong chu kỳ này</span>
+    </div>
+
+    <!-- Người dùng đang đăng nhập -->
+    <div style="display: flex; align-items: center; gap: 8px; padding: 8px; margin: 0 8px 8px; border-radius: 10px;">
+      <div style="width: 28px; height: 28px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; flex-shrink: 0;">PH</div>
+      <div style="display: flex; flex-direction: column; min-width: 0; flex-grow: 1;">
+        <span style="font-size: 13px; font-weight: 500; line-height: 1.2;">Phạm Hoài An</span>
+        <span style="font-size: 12px; color: var(--muted-foreground); line-height: 1.3;">Quản trị viên</span>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted-foreground);"><path d="m6 9 6 6 6-6"/></svg>
+    </div>
+  </aside>
+
+  <!-- Vùng nội dung -->
+  <div style="flex-grow: 1; display: flex; flex-direction: column; min-width: 0;">
+
+    <!-- Thanh trên -->
+    <header style="height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 24px; border-bottom: 1px solid var(--border);">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted-foreground);"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
+      <div style="width: 1px; height: 16px; background: var(--border);"></div>
+
+      <!-- Đường dẫn phân cấp -->
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 14px;">
+        <span style="color: var(--muted-foreground);">Hộp thư</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted-foreground);"><path d="m9 18 6-6-6-6"/></svg>
+        <span style="font-weight: 500;">Chưa phân công</span>
+      </div>
+
+      <div style="flex-grow: 1;"></div>
+
+      <!-- Ô tìm kiếm toàn cục -->
+      <div style="display: flex; align-items: center; gap: 8px; height: 32px; width: 280px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--background);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted-foreground); flex-shrink: 0;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <span style="font-size: 14px; color: var(--muted-foreground); flex-grow: 1;">Tìm khách hàng, hội thoại…</span>
+        <kbd style="font-size: 11px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 6px; padding: 1px 5px; font-family: inherit;">⌘K</kbd>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <div style="width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--muted-foreground);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        </div>
+        <div style="width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--muted-foreground); position: relative;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></svg>
+          <span style="position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 26px; background: var(--destructive); box-shadow: 0 0 0 2px var(--background);"></span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Khung trang: tiêu đề + mô tả + thao tác chính -->
+    <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 24px; padding: 24px; min-height: 0;">
+
+      <div style="display: flex; align-items: flex-start; gap: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1;">
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2;">Tiêu đề trang</h1>
+          <p style="margin: 0; font-size: 14px; color: var(--muted-foreground);">Một câu mô tả trang này làm gì. Luôn có, kể cả khi tiêu đề đã rõ.</p>
+        </div>
+        <div style="display: flex; gap: 8px; flex-shrink: 0;">
+          <!-- Nút phụ: h-8, px-10px, bo 10px, chữ 14px/500 -->
+          <div style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--background); font-size: 14px; font-weight: 500;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+            <span>Xuất Excel</span>
+          </div>
+          <!-- Nút chính -->
+          <div style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 10px; background: var(--primary); color: var(--primary-foreground); font-size: 14px; font-weight: 500;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+            <span>Thao tác chính</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vùng nội dung của từng màn hình -->
+      <div style="flex-grow: 1; border-radius: 14px; border: 1px dashed var(--border); display: flex; align-items: center; justify-content: center; min-height: 0;">
+        <span style="font-size: 14px; color: var(--muted-foreground);">Vùng nội dung — mỗi màn hình lấp phần này</span>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"cheDo":{"editor":"enum","options":["sáng","tối"],"default":"sáng","section":"Hiển thị"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { lopCheDo: (this.props.cheDo ?? 'sáng') === 'tối' ? 'toi' : '' };
+  }
+}
+</script>
+</body>
+</html>

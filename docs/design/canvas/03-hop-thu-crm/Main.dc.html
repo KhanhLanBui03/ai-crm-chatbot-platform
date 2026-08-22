@@ -1,0 +1,410 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #3259d1; text-decoration: none; }
+    a:hover { color: #24409a; }
+    .goc {
+      --background:#ffffff; --foreground:#0a0a0a; --card:#ffffff;
+      --primary:#3259d1; --primary-foreground:#fafafa;
+      --secondary:#f5f5f5; --secondary-foreground:#171717;
+      --muted:#f5f5f5; --muted-foreground:#737373;
+      --destructive:#e7000b; --success:#007e46; --warning:#be7200; --info:#3259d1;
+      --border:#e5e5e5; --input:#e5e5e5; --vien-the:rgba(10,10,10,0.10);
+      font-family:'Geist','Geist Variable',system-ui,-apple-system,'Segoe UI',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    .goc.toi {
+      --background:#0a0a0a; --foreground:#fafafa; --card:#171717;
+      --primary:#7ba1fc; --primary-foreground:#0b152d;
+      --secondary:#262626; --secondary-foreground:#fafafa;
+      --muted:#262626; --muted-foreground:#a1a1a1;
+      --destructive:#ff6467; --success:#3bb974; --warning:#efa831; --info:#7ba1fc;
+      --border:rgba(255,255,255,0.10); --input:rgba(255,255,255,0.15); --vien-the:rgba(250,250,250,0.10);
+    }
+    .nut { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 10px;
+           border-radius:10px; border:1px solid transparent; font-size:14px; font-weight:500; white-space:nowrap; cursor:default; }
+    .nut-nho { display:inline-flex; align-items:center; justify-content:center; gap:4px; height:28px; padding:0 10px;
+               border-radius:8px; border:1px solid transparent; font-size:12.8px; font-weight:500; white-space:nowrap; }
+    .chip { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:26px;
+            font-size:12px; font-weight:500; white-space:nowrap; }
+    .avatar { border-radius:26px; background:var(--secondary); color:var(--secondary-foreground);
+              display:flex; align-items:center; justify-content:center; font-weight:500; flex-shrink:0; }
+    .so { font-variant-numeric:tabular-nums; }
+    .muc-hoi-thoai { display:flex; gap:10px; padding:12px; border-bottom:1px solid var(--border); cursor:pointer; }
+    .nhan-phu { font-size:12px; color:var(--muted-foreground); }
+  </style>
+</helmet>
+
+<!-- Chỉ vẽ VÙNG NỘI DUNG rộng 1184px. Bấm vào một hội thoại bên trái để đổi cột giữa và cột phải. -->
+<div class="goc {{lopCheDo}}" style="width: 1184px; height: 760px; display: flex; background: var(--background); color: var(--foreground); overflow: hidden;">
+
+  <!-- CỘT TRÁI — danh sách hội thoại, 320px -->
+  <div style="width: 320px; flex-shrink: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-height: 0;">
+
+    <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; border-bottom: 1px solid var(--border);">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 16px; font-weight: 600; flex-grow: 1;">Hộp thư</span>
+        <span class="nut-nho" style="border-color: var(--border); background: var(--background);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          Lọc
+        </span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--input);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted-foreground); flex-shrink: 0;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <span style="font-size: 14px; color: var(--muted-foreground);">Tìm trong hội thoại…</span>
+      </div>
+      <div style="display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--muted);">
+        <span style="display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 8px; background: var(--background); font-size: 12px; font-weight: 500; box-shadow: inset 0 0 0 1px var(--vien-the);">Tất cả <span class="so" style="color: var(--muted-foreground);">12</span></span>
+        <span style="display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 8px; color: var(--muted-foreground); font-size: 12px; font-weight: 500;">Chờ tôi <span class="so">3</span></span>
+        <span style="display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 8px; color: var(--muted-foreground); font-size: 12px; font-weight: 500;">Của tôi <span class="so">5</span></span>
+      </div>
+    </div>
+
+    <!-- Sắp theo conversations.last_message_at DESC; preview và unread_count đọc sẵn từ bảng, không join -->
+    <div style="flex-grow: 1; overflow-y: auto; min-height: 0;">
+      <sc-for list="{{ hoiThoais }}" as="ht" hint-placeholder-count="4">
+        <div class="muc-hoi-thoai" style="background: {{ ht.nen }}; box-shadow: {{ ht.vien }};" onClick="{{ ht.chon }}">
+          <div class="avatar" style="width: 32px; height: 32px; font-size: 13px;">{{ ht.chuCai }}</div>
+          <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0; flex-grow: 1;">
+            <div style="display: flex; align-items: baseline; gap: 6px;">
+              <span style="font-size: 14px; font-weight: {{ ht.damTen }}; flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ ht.ten }}</span>
+              <span class="so nhan-phu" style="flex-shrink: 0;">{{ ht.thoiGian }}</span>
+            </div>
+            <span style="font-size: 13px; color: {{ ht.mauXemTruoc }}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ ht.xemTruoc }}</span>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span class="chip" style="background: {{ ht.nenTrangThai }}; color: {{ ht.mauTrangThai }};">{{ ht.nhanTrangThai }}</span>
+              <span class="nhan-phu">{{ ht.kenh }}</span>
+              <span style="flex-grow: 1;"></span>
+              <sc-if value="{{ ht.coChuaDoc }}" hint-placeholder-val="{{ true }}">
+                <span class="so" style="height: 18px; min-width: 18px; padding: 0 5px; border-radius: 26px; background: var(--primary); color: var(--primary-foreground); font-size: 11px; font-weight: 500; display: flex; align-items: center; justify-content: center;">{{ ht.chuaDoc }}</span>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- CỘT GIỮA — dòng tin nhắn -->
+  <div style="flex-grow: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;">
+
+    <div style="display: flex; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;">
+      <div class="avatar" style="width: 32px; height: 32px; font-size: 13px;">{{ hienTai.chuCai }}</div>
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0; flex-grow: 1;">
+        <span style="font-size: 14px; font-weight: 500;">{{ hienTai.ten }}</span>
+        <span class="nhan-phu">{{ hienTai.dongPhu }}</span>
+      </div>
+      <span class="nut-nho" style="border-color: var(--border); background: var(--background);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Nhận xử lý
+      </span>
+      <span class="nut-nho" style="border-color: var(--border); background: var(--background);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        Đánh dấu xong
+      </span>
+      <span class="nut-nho" style="width: 28px; padding: 0; border-color: var(--border); background: var(--background); color: var(--muted-foreground);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+      </span>
+    </div>
+
+    <!-- Tin nhắn -->
+    <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 12px; padding: 16px; overflow-y: auto; min-height: 0;">
+      <sc-for list="{{ tinNhans }}" as="tn" hint-placeholder-count="5">
+        <div style="display: flex; justify-content: {{ tn.canLe }};">
+          <div style="max-width: 82%; display: flex; flex-direction: column; gap: 4px; align-items: {{ tn.canNoiDung }};">
+            <sc-if value="{{ tn.coNhan }}" hint-placeholder-val="{{ true }}">
+              <span class="chip" style="background: {{ tn.nenNhan }}; color: {{ tn.mauNhan }}; height: 18px; font-size: 11px;">{{ tn.nhan }}</span>
+            </sc-if>
+            <div style="padding: 8px 12px; border-radius: 14px; background: {{ tn.nenBong }}; color: {{ tn.mauChu }}; box-shadow: {{ tn.vienBong }}; font-size: 14px; line-height: 1.55; white-space: pre-line;">{{ tn.noiDung }}</div>
+            <span class="so nhan-phu">{{ tn.gio }}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- Ô soạn tin -->
+    <div style="flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-top: 1px solid var(--border);">
+      <div style="display: flex; gap: 6px;">
+        <span class="nut-nho" style="border-color: var(--border); background: var(--background); border-style: dashed; color: var(--muted-foreground);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 9.9 9.9 3 12l6.9 2.1L12 21l2.1-6.9L21 12l-6.9-2.1z"/></svg>
+          Dùng gợi ý của AI
+        </span>
+        <span class="nut-nho" style="border-color: var(--border); background: var(--background); border-style: dashed; color: var(--muted-foreground);">/ Mẫu câu trả lời</span>
+      </div>
+      <div style="min-height: 64px; border-radius: 10px; border: 1px solid var(--input); padding: 10px; font-size: 14px; color: var(--muted-foreground); line-height: 1.55;">{{ hienTai.goiYSoan }}</div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          Đính kèm
+        </span>
+        <span style="flex-grow: 1;"></span>
+        <span class="nhan-phu">⌘↵ để gửi</span>
+        <span class="nut" style="background: var(--primary); color: var(--primary-foreground);">Gửi</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CỘT PHẢI — ngữ cảnh, 320px -->
+  <div style="width: 320px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px; border-left: 1px solid var(--border); overflow-y: auto; min-height: 0; box-sizing: border-box;">
+
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div class="avatar" style="width: 40px; height: 40px; font-size: 15px;">{{ hienTai.chuCai }}</div>
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+        <span style="font-size: 14px; font-weight: 500;">{{ hienTai.ten }}</span>
+        <span class="so nhan-phu">{{ hienTai.lienHe }}</span>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 6px;">
+      <span class="nut-nho" style="border-color: var(--border); background: var(--background); flex-grow: 1;">Mở hồ sơ</span>
+      <span class="nut-nho" style="border-color: var(--border); background: var(--background); flex-grow: 1;">Ghi chú</span>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+      <sc-for list="{{ hienTai.the }}" as="t" hint-placeholder-count="3">
+        <span class="chip" style="background: var(--secondary); color: var(--secondary-foreground);">{{ t.ten }}</span>
+      </sc-for>
+    </div>
+
+    <div style="height: 1px; background: var(--border);"></div>
+
+    <!-- Điểm tiềm năng — sales.leads.current_score, kèm yếu tố đóng góp từ lead_scores.top_factors -->
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: baseline; gap: 8px;">
+        <span style="font-size: 13px; font-weight: 500; flex-grow: 1;">Điểm tiềm năng</span>
+        <span class="so" style="font-size: 20px; font-weight: 600; color: {{ hienTai.mauDiem }};">{{ hienTai.diem }}</span>
+      </div>
+      <div style="height: 6px; border-radius: 26px; background: var(--muted); overflow: hidden;">
+        <div style="width: {{ hienTai.rongDiem }}; height: 100%; border-radius: 26px; background: {{ hienTai.mauDiem }};"></div>
+      </div>
+      <sc-for list="{{ hienTai.yeuTo }}" as="y" hint-placeholder-count="3">
+        <div style="display: flex; align-items: baseline; gap: 8px; font-size: 12px;">
+          <span style="color: var(--muted-foreground); flex-grow: 1;">{{ y.ten }}</span>
+          <span class="so" style="font-weight: 500; color: {{ y.mau }};">{{ y.gia }}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="height: 1px; background: var(--border);"></div>
+
+    <!-- Lượt xử lý gần nhất của tác tử AI — ai.ai_interactions -->
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <span style="font-size: 13px; font-weight: 500;">Lượt xử lý gần nhất của AI</span>
+
+      <div style="display: flex; align-items: baseline; gap: 8px; font-size: 12px;">
+        <span style="color: var(--muted-foreground); flex-grow: 1;">Ý định</span>
+        <span style="font-weight: 500;">{{ hienTai.yDinh }}</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 8px; font-size: 12px;">
+        <span style="color: var(--muted-foreground); flex-grow: 1;">Độ tin cậy</span>
+        <span class="so" style="font-weight: 500;">{{ hienTai.tinCay }}</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 8px; font-size: 12px;">
+        <span style="color: var(--muted-foreground); flex-grow: 1;">Định tuyến</span>
+        <span style="font-weight: 500;">{{ hienTai.dinhTuyen }}</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 8px; font-size: 12px;">
+        <span style="color: var(--muted-foreground); flex-grow: 1;">Độ bám nguồn</span>
+        <span class="so" style="font-weight: 500; color: {{ hienTai.mauBamNguon }};">{{ hienTai.bamNguon }}</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 8px; font-size: 12px;">
+        <span style="color: var(--muted-foreground); flex-grow: 1;">Chi phí · độ trễ</span>
+        <span class="so" style="font-weight: 500;">{{ hienTai.chiPhi }}</span>
+      </div>
+
+      <!-- Trích dẫn: nhân viên phải kiểm được câu trả lời dựa vào đâu -->
+      <span style="font-size: 12px; color: var(--muted-foreground); margin-top: 2px;">{{ hienTai.tieuDeTrichDan }}</span>
+      <sc-for list="{{ hienTai.trichDan }}" as="td" hint-placeholder-count="2">
+        <div style="display: flex; gap: 6px; padding: 8px; border-radius: 8px; background: var(--muted);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted-foreground); flex-shrink: 0; margin-top: 1px;"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+          <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+            <span style="font-size: 12px; font-weight: 500;">{{ td.ten }}</span>
+            <span class="nhan-phu">{{ td.doan }}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"cheDo":{"editor":"enum","options":["sáng","tối"],"default":"sáng","section":"Hiển thị"}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { chon: 'ht1' };
+  }
+
+  duLieu() {
+    const V = (t) => `var(--${t})`;
+    const pha = (t) => `color-mix(in oklch, var(--${t}), transparent 88%)`;
+    return [
+      {
+        id: 'ht1', ten: 'Nguyễn Thị Bích Hường', chuCai: 'NH',
+        xemTruoc: 'Bên mình có bảo hành ngoài giờ hành chính không ạ?',
+        kenh: 'Web Widget', thoiGian: '38 phút', chuaDoc: 2,
+        nhanTrangThai: 'Chờ nhân viên', mauTrangThai: V('warning'), nenTrangThai: pha('warning'),
+        dongPhu: 'Web Widget · bắt đầu 38 phút trước · 7 tin nhắn',
+        lienHe: '0903 118 274 · huong.ntb@gmail.com',
+        the: [{ ten: 'Bảo hành' }, { ten: 'Khách quay lại' }],
+        diem: 87, rongDiem: '87%', mauDiem: V('success'),
+        yeuTo: [
+          { ten: 'Hỏi giá và tồn kho', gia: '+24', mau: V('success') },
+          { ten: 'Đã mua 3 lần trước', gia: '+19', mau: V('success') },
+          { ten: 'Chưa để lại email công ty', gia: '−6', mau: V('muted-foreground') },
+        ],
+        yDinh: 'Hỏi chính sách bảo hành', tinCay: '0,91', dinhTuyen: 'RAG',
+        bamNguon: '0,42', mauBamNguon: V('destructive'), chiPhi: '212 ₫ · 1,8 giây',
+        tieuDeTrichDan: 'Đoạn tri thức đã truy hồi (2)',
+        trichDan: [
+          { ten: 'Chính sách bảo hành 2026.pdf', doan: 'Mục 3.1 — Thời hạn bảo hành' },
+          { ten: 'Câu hỏi thường gặp.docx', doan: 'Mục 12 — Giờ làm việc' },
+        ],
+        goiYSoan: 'Gợi ý của AI bị giữ lại vì độ bám nguồn 0,42 dưới ngưỡng. Bấm "Dùng gợi ý của AI" để xem và tự sửa trước khi gửi.',
+        tinNhans: [
+          { ai: 'khach', noiDung: 'Chào shop, mình mua cái máy lọc nước tháng trước.', gio: '09:12' },
+          { ai: 'bot', nhan: 'Tác tử AI', noiDung: 'Chào chị Hường, em kiểm tra thấy đơn hàng ngày 14/07 của mình ạ. Em có thể giúp gì cho chị?', gio: '09:12' },
+          { ai: 'khach', noiDung: 'Bên mình có bảo hành ngoài giờ hành chính không ạ?\nCuối tuần mình mới rảnh.', gio: '09:14' },
+          { ai: 'he-thong', noiDung: 'Tác tử AI từ chối trả lời — độ bám nguồn 0,42 dưới ngưỡng 0,60. Hội thoại chuyển sang chờ nhân viên.', gio: '09:14' },
+          { ai: 'bot', nhan: 'Tác tử AI', noiDung: 'Phần này em chưa chắc chắn nên xin phép chuyển cho đồng nghiệp phụ trách trả lời chị ngay ạ.', gio: '09:14' },
+        ],
+      },
+      {
+        id: 'ht2', ten: 'Trần Quốc Dũng', chuCai: 'TD',
+        xemTruoc: 'Cho mình xin báo giá 200 bộ giao trong tháng 9',
+        kenh: 'Zalo OA', thoiGian: '4 phút', chuaDoc: 1,
+        nhanTrangThai: 'Bot đang xử lý', mauTrangThai: V('info'), nenTrangThai: pha('info'),
+        dongPhu: 'Zalo OA · bắt đầu 6 phút trước · 4 tin nhắn',
+        lienHe: '0912 447 903 · dung.tq@vietphat.vn',
+        the: [{ ten: 'Mua sỉ' }, { ten: 'Doanh nghiệp' }],
+        diem: 94, rongDiem: '94%', mauDiem: V('success'),
+        yeuTo: [
+          { ten: 'Nêu rõ số lượng lớn', gia: '+31', mau: V('success') },
+          { ten: 'Có mốc thời gian cụ thể', gia: '+22', mau: V('success') },
+          { ten: 'Email tên miền công ty', gia: '+15', mau: V('success') },
+        ],
+        yDinh: 'Xin báo giá số lượng lớn', tinCay: '0,96', dinhTuyen: 'TOOL_CALL',
+        bamNguon: '0,88', mauBamNguon: V('success'), chiPhi: '341 ₫ · 3,1 giây',
+        tieuDeTrichDan: 'Công cụ đã gọi (1)',
+        trichDan: [
+          { ten: 'GetPriceList', doan: 'Cho phép · 240 mili giây' },
+        ],
+        goiYSoan: 'Tác tử AI đang soạn báo giá từ bảng giá sỉ. Bạn có thể tiếp quản bất cứ lúc nào.',
+        tinNhans: [
+          { ai: 'khach', noiDung: 'Chào bạn, bên mình cần mua số lượng lớn.', gio: '10:41' },
+          { ai: 'bot', nhan: 'Tác tử AI', noiDung: 'Dạ chào anh Dũng, anh cần khoảng bao nhiêu bộ và thời điểm giao hàng dự kiến ạ?', gio: '10:41' },
+          { ai: 'khach', noiDung: 'Cho mình xin báo giá 200 bộ giao trong tháng 9', gio: '10:43' },
+          { ai: 'he-thong', noiDung: 'Điểm tiềm năng đạt 94, vượt ngưỡng 70 — hệ thống đã tự tạo cơ hội tiềm năng và giao cho Lê Minh Tuấn.', gio: '10:43' },
+        ],
+      },
+      {
+        id: 'ht3', ten: 'Lý Thanh Hà', chuCai: 'LH',
+        xemTruoc: 'Mình muốn đổi địa chỉ giao hàng sang chỗ làm',
+        kenh: 'Messenger', thoiGian: '12 phút', chuaDoc: 0,
+        nhanTrangThai: 'Bạn đang xử lý', mauTrangThai: V('success'), nenTrangThai: pha('success'),
+        dongPhu: 'Messenger · bắt đầu 26 phút trước · 9 tin nhắn',
+        lienHe: '0987 220 145 · ha.ly@gmail.com',
+        the: [{ ten: 'Giao hàng' }],
+        diem: 42, rongDiem: '42%', mauDiem: V('muted-foreground'),
+        yeuTo: [
+          { ten: 'Đơn hàng đang giao', gia: '+18', mau: V('success') },
+          { ten: 'Không hỏi sản phẩm mới', gia: '−12', mau: V('muted-foreground') },
+        ],
+        yDinh: 'Đổi thông tin giao hàng', tinCay: '0,89', dinhTuyen: 'HANDOFF',
+        bamNguon: '—', mauBamNguon: V('muted-foreground'), chiPhi: '96 ₫ · 0,9 giây',
+        tieuDeTrichDan: 'Đoạn tri thức đã truy hồi (0)',
+        trichDan: [],
+        goiYSoan: 'Soạn câu trả lời…',
+        tinNhans: [
+          { ai: 'khach', noiDung: 'Mình muốn đổi địa chỉ giao hàng sang chỗ làm', gio: '10:19' },
+          { ai: 'bot', nhan: 'Tác tử AI', noiDung: 'Việc đổi địa chỉ sau khi đơn đã xuất kho cần nhân viên xác nhận, em chuyển cho đồng nghiệp hỗ trợ chị ngay ạ.', gio: '10:19' },
+          { ai: 'nhan-vien', nhan: 'Bạn', noiDung: 'Chào chị Hà, em là Phạm Hoài An. Chị cho em xin địa chỉ mới và số điện thoại người nhận nhé.', gio: '10:24' },
+          { ai: 'khach', noiDung: 'Số 24 Lý Thường Kiệt, quận Hoàn Kiếm. Số điện thoại vẫn như cũ.', gio: '10:31' },
+        ],
+      },
+      {
+        id: 'ht4', ten: 'Võ Thành Trung', chuCai: 'VT',
+        xemTruoc: 'Cảm ơn bạn nhiều nhé, vậy là ổn rồi',
+        kenh: 'Web Widget', thoiGian: '2 giờ', chuaDoc: 0,
+        nhanTrangThai: 'Đã giải quyết', mauTrangThai: V('success'), nenTrangThai: pha('success'),
+        dongPhu: 'Web Widget · tác tử AI khép lại · 5 tin nhắn',
+        lienHe: '0935 664 812',
+        the: [{ ten: 'Hướng dẫn dùng' }],
+        diem: 28, rongDiem: '28%', mauDiem: V('muted-foreground'),
+        yeuTo: [
+          { ten: 'Chỉ hỏi cách dùng', gia: '+8', mau: V('success') },
+          { ten: 'Không nêu nhu cầu mua', gia: '−15', mau: V('muted-foreground') },
+        ],
+        yDinh: 'Hướng dẫn sử dụng', tinCay: '0,93', dinhTuyen: 'RAG',
+        bamNguon: '0,91', mauBamNguon: V('success'), chiPhi: '154 ₫ · 1,4 giây',
+        tieuDeTrichDan: 'Đoạn tri thức đã truy hồi (1)',
+        trichDan: [
+          { ten: 'Hướng dẫn lắp đặt.pdf', doan: 'Mục 2 — Thay lõi lọc' },
+        ],
+        goiYSoan: 'Hội thoại đã khép lại. Gõ để mở lại.',
+        tinNhans: [
+          { ai: 'khach', noiDung: 'Cho hỏi thay lõi lọc bao lâu một lần?', gio: '08:02' },
+          { ai: 'bot', nhan: 'Tác tử AI', noiDung: 'Dạ lõi số 1 và số 2 thay mỗi 6 tháng, lõi số 3 thay mỗi 12 tháng anh nhé. Máy có đèn báo khi tới hạn ạ.', gio: '08:02' },
+          { ai: 'khach', noiDung: 'Cảm ơn bạn nhiều nhé, vậy là ổn rồi', gio: '08:05' },
+          { ai: 'he-thong', noiDung: 'Tác tử AI khép lại hội thoại — khách hàng xác nhận đã được giải đáp.', gio: '08:07' },
+        ],
+      },
+    ];
+  }
+
+  kieuTin(tn) {
+    const V = (t) => `var(--${t})`;
+    const pha = (t) => `color-mix(in oklch, var(--${t}), transparent 88%)`;
+    if (tn.ai === 'khach') {
+      return { canLe: 'flex-start', canNoiDung: 'flex-start', nenBong: V('muted'), mauChu: V('foreground'),
+               vienBong: 'none', coNhan: false, nhan: '', nenNhan: '', mauNhan: '' };
+    }
+    if (tn.ai === 'bot') {
+      return { canLe: 'flex-end', canNoiDung: 'flex-end', nenBong: 'var(--card)', mauChu: V('foreground'),
+               vienBong: 'inset 0 0 0 1px var(--vien-the)', coNhan: true, nhan: tn.nhan,
+               nenNhan: pha('info'), mauNhan: V('info') };
+    }
+    if (tn.ai === 'nhan-vien') {
+      return { canLe: 'flex-end', canNoiDung: 'flex-end', nenBong: V('primary'), mauChu: V('primary-foreground'),
+               vienBong: 'none', coNhan: true, nhan: tn.nhan, nenNhan: pha('primary'), mauNhan: V('primary') };
+    }
+    // he-thong — ghi chú của hệ thống, canh giữa, không phải bong bóng của ai cả
+    return { canLe: 'center', canNoiDung: 'center', nenBong: 'transparent', mauChu: V('muted-foreground'),
+             vienBong: 'inset 0 0 0 1px var(--border)', coNhan: false, nhan: '', nenNhan: '', mauNhan: '' };
+  }
+
+  renderVals() {
+    const ds = this.duLieu();
+    const chon = this.state.chon;
+    const hienTai = ds.find((c) => c.id === chon) ?? ds[0];
+
+    const hoiThoais = ds.map((c) => {
+      const dangChon = c.id === chon;
+      return {
+        ...c,
+        coChuaDoc: c.chuaDoc > 0,
+        damTen: c.chuaDoc > 0 ? '600' : '500',
+        mauXemTruoc: c.chuaDoc > 0 ? 'var(--foreground)' : 'var(--muted-foreground)',
+        nen: dangChon ? 'var(--muted)' : 'transparent',
+        vien: dangChon ? 'inset 3px 0 0 0 var(--primary)' : 'none',
+        chon: () => this.setState({ chon: c.id }),
+      };
+    });
+
+    const tinNhans = hienTai.tinNhans.map((tn) => ({ ...tn, ...this.kieuTin(tn) }));
+
+    return { lopCheDo: (this.props.cheDo ?? 'sáng') === 'tối' ? 'toi' : '', hoiThoais, hienTai, tinNhans };
+  }
+}
+</script>
+</body>
+</html>

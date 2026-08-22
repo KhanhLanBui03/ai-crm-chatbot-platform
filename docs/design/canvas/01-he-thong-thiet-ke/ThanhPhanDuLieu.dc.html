@@ -1,0 +1,228 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #3259d1; text-decoration: none; }
+    a:hover { color: #24409a; }
+    .goc {
+      --background:#ffffff; --foreground:#0a0a0a; --card:#ffffff;
+      --primary:#3259d1; --primary-foreground:#fafafa;
+      --secondary:#f5f5f5; --secondary-foreground:#171717;
+      --muted:#f5f5f5; --muted-foreground:#737373;
+      --destructive:#e7000b; --success:#007e46; --warning:#be7200; --info:#3259d1;
+      --border:#e5e5e5; --input:#e5e5e5; --vien-the:rgba(10,10,10,0.10);
+      font-family:'Geist','Geist Variable',system-ui,-apple-system,'Segoe UI',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    .goc.toi {
+      --background:#0a0a0a; --foreground:#fafafa; --card:#171717;
+      --primary:#7ba1fc; --primary-foreground:#0b152d;
+      --secondary:#262626; --secondary-foreground:#fafafa;
+      --muted:#262626; --muted-foreground:#a1a1a1;
+      --destructive:#ff6467; --success:#3bb974; --warning:#efa831; --info:#7ba1fc;
+      --border:rgba(255,255,255,0.10); --input:rgba(255,255,255,0.15); --vien-the:rgba(250,250,250,0.10);
+    }
+    .the { border-radius:14px; background:var(--card); box-shadow: inset 0 0 0 1px var(--vien-the); display:flex; flex-direction:column; }
+    .tieu-de-the { font-size:16px; font-weight:500; line-height:1.375; margin:0; }
+    .phu { font-size:13px; color:var(--muted-foreground); margin:0; }
+    .nhan-ky-thuat { font-size:11px; color:var(--muted-foreground); font-variant-numeric:tabular-nums; }
+    .nut { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 10px;
+           border-radius:10px; border:1px solid transparent; font-size:14px; font-weight:500; white-space:nowrap; }
+    /* Bảng — chữ 14px, ô đệm 8px, dòng tiêu đề cao 40px */
+    .o-tieu-de { height:40px; padding:0 8px; text-align:left; vertical-align:middle; font-size:14px; font-weight:500; white-space:nowrap; }
+    .o { padding:8px; vertical-align:middle; font-size:14px; }
+    .so { font-variant-numeric:tabular-nums; text-align:right; }
+    .hop-kiem { width:16px; height:16px; border-radius:5px; border:1px solid var(--input); display:inline-block; vertical-align:middle; }
+  </style>
+</helmet>
+
+<div class="goc {{lopCheDo}}" style="width: 880px; padding: 24px; display: flex; flex-direction: column; gap: 16px; background: var(--background); color: var(--foreground); box-sizing: border-box;">
+
+  <div style="display: flex; flex-direction: column; gap: 4px;">
+    <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em;">Thành phần dữ liệu</h1>
+    <p class="phu">Giải phẫu của mẫu danh sách — 19 trong 58 màn hình dùng lại nguyên khối này.</p>
+  </div>
+
+  <!-- Thẻ chỉ số -->
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;">
+    <div class="the" style="padding: 16px; gap: 4px;">
+      <span style="font-size: 13px; color: var(--muted-foreground);">Hội thoại hôm nay</span>
+      <span style="font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1;">248</span>
+      <span style="font-size: 12px; color: var(--success); display: inline-flex; align-items: center; gap: 3px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+        12% so với tuần trước</span>
+    </div>
+    <div class="the" style="padding: 16px; gap: 4px;">
+      <span style="font-size: 13px; color: var(--muted-foreground);">Bot tự giải quyết</span>
+      <span style="font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1;">71%</span>
+      <span style="font-size: 12px; color: var(--muted-foreground);">176 trong 248 hội thoại</span>
+    </div>
+    <div class="the" style="padding: 16px; gap: 4px;">
+      <span style="font-size: 13px; color: var(--muted-foreground);">Phản hồi đầu tiên</span>
+      <span style="font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1;">42<span style="font-size: 16px; font-weight: 500; color: var(--muted-foreground);">&nbsp;giây</span></span>
+      <span style="font-size: 12px; color: var(--muted-foreground);">Trung bình trong giờ làm việc</span>
+    </div>
+    <div class="the" style="padding: 16px; gap: 4px;">
+      <span style="font-size: 13px; color: var(--muted-foreground);">Chi phí mô hình</span>
+      <span style="font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1;">184<span style="font-size: 16px; font-weight: 500; color: var(--muted-foreground);">&nbsp;₫/lượt</span></span>
+      <span style="font-size: 12px; color: var(--warning); display: inline-flex; align-items: center; gap: 3px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>
+        8% so với tuần trước</span>
+    </div>
+  </div>
+
+  <!-- Mẫu danh sách -->
+  <div class="the">
+    <!-- Thanh công cụ -->
+    <div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border);">
+      <div style="display: flex; align-items: center; gap: 8px; height: 32px; width: 260px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--input); background: var(--background);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted-foreground); flex-shrink: 0;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <span style="font-size: 14px; color: var(--muted-foreground);">Tìm theo tên hoặc số điện thoại…</span>
+      </div>
+      <span class="nut" style="border-color: var(--border); background: var(--background); border-style: dashed;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+        Trạng thái
+      </span>
+      <!-- Bộ lọc đang bật: hiện giá trị ngay trên chip, không giấu trong menu -->
+      <span class="nut" style="border-color: var(--border); background: var(--background); gap: 8px;">
+        <span style="color: var(--muted-foreground);">Người phụ trách</span>
+        <span style="width: 1px; height: 14px; background: var(--border);"></span>
+        <span style="display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); font-size: 12px;">2 người</span>
+      </span>
+      <div style="flex-grow: 1;"></div>
+      <span class="nut" style="border-color: var(--border); background: var(--background);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        Xuất
+      </span>
+      <span class="nut" style="background: var(--primary); color: var(--primary-foreground);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+        Thêm khách hàng
+      </span>
+    </div>
+
+    <!-- Bảng -->
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--border);">
+          <th class="o-tieu-de" style="width: 40px; padding-left: 16px;"><span class="hop-kiem"></span></th>
+          <th class="o-tieu-de">
+            <span style="display: inline-flex; align-items: center; gap: 4px;">Khách hàng
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted-foreground);"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg>
+            </span>
+          </th>
+          <th class="o-tieu-de">Kênh</th>
+          <th class="o-tieu-de">Trạng thái</th>
+          <th class="o-tieu-de">Phụ trách</th>
+          <!-- Cột số: tiêu đề canh phải như dữ liệu, cùng cột sắp xếp giảm dần mặc định -->
+          <th class="o-tieu-de so">
+            <span style="display: inline-flex; align-items: center; gap: 4px;">Điểm
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+          </th>
+          <th class="o-tieu-de so">Tương tác cuối</th>
+          <th class="o-tieu-de" style="width: 40px; padding-right: 16px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Dòng đang chọn: nền muted -->
+        <tr style="border-bottom: 1px solid var(--border); background: var(--muted);">
+          <td class="o" style="padding-left: 16px;"><span class="hop-kiem" style="background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); display: inline-flex; align-items: center; justify-content: center;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></td>
+          <td class="o">
+            <span style="display: flex; align-items: center; gap: 8px;">
+              <span style="width: 24px; height: 24px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; flex-shrink: 0;">NH</span>
+              <span style="display: flex; flex-direction: column;">
+                <span style="font-weight: 500;">Nguyễn Thị Bích Hường</span>
+                <span style="font-size: 12px; color: var(--muted-foreground);">0903 118 274</span>
+              </span>
+            </span>
+          </td>
+          <td class="o"><span style="display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); font-size: 12px; font-weight: 500;">Web Widget</span></td>
+          <td class="o"><span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 26px; background: color-mix(in oklch, var(--warning), transparent 88%); color: var(--warning); font-size: 12px; font-weight: 500;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Chờ nhân viên</span></td>
+          <td class="o"><span style="color: var(--muted-foreground);">Chưa phân công</span></td>
+          <td class="o so" style="font-weight: 500;">87</td>
+          <td class="o so" style="color: var(--muted-foreground);">14 phút trước</td>
+          <td class="o" style="padding-right: 16px; color: var(--muted-foreground);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></td>
+        </tr>
+        <tr style="border-bottom: 1px solid var(--border);">
+          <td class="o" style="padding-left: 16px;"><span class="hop-kiem"></span></td>
+          <td class="o">
+            <span style="display: flex; align-items: center; gap: 8px;">
+              <span style="width: 24px; height: 24px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; flex-shrink: 0;">TD</span>
+              <span style="display: flex; flex-direction: column;">
+                <span style="font-weight: 500;">Trần Quốc Dũng</span>
+                <span style="font-size: 12px; color: var(--muted-foreground);">dung.tq@vietphat.vn</span>
+              </span>
+            </span>
+          </td>
+          <td class="o"><span style="display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); font-size: 12px; font-weight: 500;">Zalo OA</span></td>
+          <td class="o"><span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 26px; background: color-mix(in oklch, var(--success), transparent 88%); color: var(--success); font-size: 12px; font-weight: 500;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Đã giải quyết</span></td>
+          <td class="o">Lê Minh Tuấn</td>
+          <td class="o so" style="font-weight: 500;">64</td>
+          <td class="o so" style="color: var(--muted-foreground);">2 giờ trước</td>
+          <td class="o" style="padding-right: 16px; color: var(--muted-foreground);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></td>
+        </tr>
+        <tr style="border-bottom: 1px solid var(--border);">
+          <td class="o" style="padding-left: 16px;"><span class="hop-kiem"></span></td>
+          <td class="o">
+            <span style="display: flex; align-items: center; gap: 8px;">
+              <span style="width: 24px; height: 24px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; flex-shrink: 0;">PT</span>
+              <span style="display: flex; flex-direction: column;">
+                <span style="font-weight: 500;">Phan Thanh Tùng</span>
+                <span style="font-size: 12px; color: var(--muted-foreground);">0912 447 903</span>
+              </span>
+            </span>
+          </td>
+          <td class="o"><span style="display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); font-size: 12px; font-weight: 500;">Messenger</span></td>
+          <td class="o"><span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 26px; background: color-mix(in oklch, var(--info), transparent 88%); color: var(--info); font-size: 12px; font-weight: 500;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 9.9 9.9 3 12l6.9 2.1L12 21l2.1-6.9L21 12l-6.9-2.1z"/></svg>Bot đang xử lý</span></td>
+          <td class="o"><span style="color: var(--muted-foreground);">—</span></td>
+          <td class="o so" style="font-weight: 500;">31</td>
+          <td class="o so" style="color: var(--muted-foreground);">Hôm qua</td>
+          <td class="o" style="padding-right: 16px; color: var(--muted-foreground);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Chân bảng: phân trang -->
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px;">
+      <span style="font-size: 13px; color: var(--muted-foreground);">Đã chọn 1 trong 248 dòng</span>
+      <div style="flex-grow: 1;"></div>
+      <span style="font-size: 13px; color: var(--muted-foreground);">Mỗi trang</span>
+      <span class="nut" style="height: 28px; border-radius: 8px; border-color: var(--border); background: var(--background); font-size: 13px; gap: 6px;">25
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted-foreground);"><path d="m6 9 6 6 6-6"/></svg>
+      </span>
+      <span style="font-size: 13px; color: var(--muted-foreground); font-variant-numeric: tabular-nums;">Trang 1 / 10</span>
+      <div style="display: flex; gap: 4px;">
+        <span class="nut" style="width: 28px; height: 28px; padding: 0; border-radius: 8px; border-color: var(--border); background: var(--background); opacity: 0.5;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        </span>
+        <span class="nut" style="width: 28px; height: 28px; padding: 0; border-radius: 8px; border-color: var(--border); background: var(--background);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 8px; padding: 12px; border-radius: 10px; background: var(--muted);">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px; color: var(--muted-foreground);"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+    <span style="font-size: 13px; line-height: 1.5;">Cột số canh phải và đặt <code style="font-size: 12px;">tabular-nums</code>, kể cả ô tiêu đề. Bộ lọc đang bật hiện giá trị ngay trên chip chứ không giấu trong menu — nếu không người dùng sẽ không hiểu vì sao danh sách trống.</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"cheDo":{"editor":"enum","options":["sáng","tối"],"default":"sáng","section":"Hiển thị"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { lopCheDo: (this.props.cheDo ?? 'sáng') === 'tối' ? 'toi' : '' };
+  }
+}
+</script>
+</body>
+</html>

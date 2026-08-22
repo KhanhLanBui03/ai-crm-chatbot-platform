@@ -1,0 +1,177 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #3259d1; text-decoration: none; }
+    a:hover { color: #24409a; }
+    .goc {
+      --background:#ffffff; --foreground:#0a0a0a; --card:#ffffff;
+      --muted:#f5f5f5; --muted-foreground:#737373;
+      --success:#007e46; --warning:#be7200; --destructive:#e7000b; --info:#3259d1;
+      --border:#e5e5e5; --vien-the:rgba(10,10,10,0.10);
+      font-family:'Geist','Geist Variable',system-ui,-apple-system,'Segoe UI',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    .goc.toi {
+      --background:#0a0a0a; --foreground:#fafafa; --card:#171717;
+      --muted:#262626; --muted-foreground:#a1a1a1;
+      --success:#3bb974; --warning:#efa831; --destructive:#ff6467; --info:#7ba1fc;
+      --border:rgba(255,255,255,0.10); --vien-the:rgba(250,250,250,0.10);
+    }
+    .o-mau { display:flex; flex-direction:column; gap:6px; }
+    .khoi-mau { height:56px; border-radius:10px; box-shadow: inset 0 0 0 1px var(--vien-the); }
+    .ten-mau { font-size:12px; font-weight:500; }
+    .ma-mau { font-size:11px; color:var(--muted-foreground); font-variant-numeric:tabular-nums; }
+    .the { border-radius:14px; background:var(--card); box-shadow: inset 0 0 0 1px var(--vien-the); padding:16px; display:flex; flex-direction:column; gap:16px; }
+    .tieu-de-the { font-size:16px; font-weight:500; line-height:1.375; margin:0; }
+    .phu { font-size:13px; color:var(--muted-foreground); margin:0; }
+  </style>
+</helmet>
+
+<div class="goc {{lopCheDo}}" style="width: 880px; padding: 24px; display: flex; flex-direction: column; gap: 16px; background: var(--background); color: var(--foreground); box-sizing: border-box;">
+
+  <div style="display: flex; flex-direction: column; gap: 4px;">
+    <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em;">Bảng màu và token</h1>
+    <p class="phu">Nguồn thật là <code style="font-size: 12px;">web-dashboard/src/styles/index.css</code>. Artboard này là bản chép để tra cứu.</p>
+  </div>
+
+  <!-- Màu thương hiệu -->
+  <div class="the">
+    <div>
+      <h2 class="tieu-de-the">Màu thương hiệu</h2>
+      <p class="phu">Chàm. Chữ trắng đè lên nền chàm sáng đạt 6,03:1 — trên ngưỡng WCAG AA (4,5:1).</p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;">
+      <div class="o-mau">
+        <div class="khoi-mau" style="background: #3259d1;"></div>
+        <span class="ten-mau">--primary</span>
+        <span class="ma-mau">oklch(0.51 0.19 266) · #3259d1</span>
+      </div>
+      <div class="o-mau">
+        <div class="khoi-mau" style="background: #fafafa;"></div>
+        <span class="ten-mau">--primary-foreground</span>
+        <span class="ma-mau">oklch(0.985 0 0) · #fafafa</span>
+      </div>
+      <div class="o-mau">
+        <div class="khoi-mau" style="background: #7ba1fc;"></div>
+        <span class="ten-mau">--primary (tối)</span>
+        <span class="ma-mau">oklch(0.72 0.14 266) · #7ba1fc</span>
+      </div>
+      <div class="o-mau">
+        <div class="khoi-mau" style="background: #0b152d;"></div>
+        <span class="ten-mau">--primary-foreground (tối)</span>
+        <span class="ma-mau">oklch(0.2 0.05 266) · #0b152d</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Màu trạng thái -->
+  <div class="the">
+    <div>
+      <h2 class="tieu-de-the">Màu trạng thái — dành riêng</h2>
+      <p class="phu">Không bao giờ dùng lại làm màu chuỗi dữ liệu. Luôn kèm biểu tượng và nhãn chữ, không bao giờ chỉ dựa vào màu.</p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;">
+      <div class="o-mau">
+        <div class="khoi-mau" style="background: #007e46;"></div>
+        <span class="ten-mau">--success</span>
+        <span class="ma-mau">#007e46 · tối #3bb974</span>
+        <span class="ma-mau">ACTIVE · READY · ALLOWED · WON</span>
+      </div>
+      <div class="o-mau">
+        <div class="khoi-mau" style="background: #be7200;"></div>
+        <span class="ten-mau">--warning</span>
+        <span class="ma-mau">#be7200 · tối #efa831</span>
+        <span class="ma-mau">PENDING_AGENT · NEEDS_APPROVAL</span>
+      </div>
+      <div class="o-mau">
+        <div class="khoi-mau" style="background: #e7000b;"></div>
+        <span class="ten-mau">--destructive</span>
+        <span class="ma-mau">#e7000b · tối #ff6467</span>
+        <span class="ma-mau">FAILED · BLOCKED · LOST</span>
+      </div>
+      <div class="o-mau">
+        <div class="khoi-mau" style="background: #3259d1;"></div>
+        <span class="ten-mau">--info</span>
+        <span class="ma-mau">#3259d1 · tối #7ba1fc</span>
+        <span class="ma-mau">BOT_HANDLING · PROCESSING</span>
+      </div>
+    </div>
+    <!-- Cách hiển thị thật: nền pha loãng + chữ đậm màu, theo đúng ngôn ngữ của preset radix-nova -->
+    <div style="display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px;">
+      <span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 26px; background: color-mix(in oklch, var(--success), transparent 88%); color: var(--success); font-size: 12px; font-weight: 500;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Đã giải quyết</span>
+      <span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 26px; background: color-mix(in oklch, var(--warning), transparent 88%); color: var(--warning); font-size: 12px; font-weight: 500;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Chờ nhân viên</span>
+      <span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 26px; background: color-mix(in oklch, var(--destructive), transparent 88%); color: var(--destructive); font-size: 12px; font-weight: 500;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg>Bị chặn</span>
+      <span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 26px; background: color-mix(in oklch, var(--info), transparent 88%); color: var(--info); font-size: 12px; font-weight: 500;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 9.9 9.9 3 12l6.9 2.1L12 21l2.1-6.9L21 12l-6.9-2.1z"/></svg>Bot đang xử lý</span>
+    </div>
+  </div>
+
+  <!-- Màu biểu đồ -->
+  <div class="the">
+    <div>
+      <h2 class="tieu-de-the">Màu chuỗi dữ liệu — đã qua kiểm định</h2>
+      <p class="phu">Thứ tự slot chính là cơ chế an toàn cho người mù màu. Gán theo thứ tự cố định, không bao giờ xoay vòng.</p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px;">
+      <div class="o-mau"><div class="khoi-mau" style="background: #2a78d6;"></div><span class="ten-mau">1 · xanh dương</span><span class="ma-mau">#2a78d6 · tối #3987e5</span></div>
+      <div class="o-mau"><div class="khoi-mau" style="background: #eb6834;"></div><span class="ten-mau">2 · cam</span><span class="ma-mau">#eb6834 · tối #d95926</span></div>
+      <div class="o-mau"><div class="khoi-mau" style="background: #1baf7a;"></div><span class="ten-mau">3 · xanh ngọc</span><span class="ma-mau">#1baf7a · tối #199e70</span></div>
+      <div class="o-mau"><div class="khoi-mau" style="background: #eda100;"></div><span class="ten-mau">4 · vàng</span><span class="ma-mau">#eda100 · tối #c98500</span></div>
+      <div class="o-mau"><div class="khoi-mau" style="background: #e87ba4;"></div><span class="ten-mau">5 · hồng sen</span><span class="ma-mau">#e87ba4 · tối #d55181</span></div>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 0 16px; font-size: 12px; align-items: center;">
+      <span style="color: var(--muted-foreground); padding: 4px 0;">Kiểm tra</span>
+      <span style="color: var(--muted-foreground); padding: 4px 0; text-align: right;">Sáng</span>
+      <span style="color: var(--muted-foreground); padding: 4px 0; text-align: right;">Tối</span>
+      <span style="padding: 4px 0; border-top: 1px solid var(--border);">Phân tách mù màu (ΔE ≥ 8)</span>
+      <span style="padding: 4px 0; border-top: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums;">9,1</span>
+      <span style="padding: 4px 0; border-top: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums;">8,4</span>
+      <span style="padding: 4px 0; border-top: 1px solid var(--border);">Sàn thị lực thường (ΔE ≥ 15)</span>
+      <span style="padding: 4px 0; border-top: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums;">19,6</span>
+      <span style="padding: 4px 0; border-top: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums;">19,3</span>
+      <span style="padding: 4px 0; border-top: 1px solid var(--border);">Tương phản với nền (≥ 3:1)</span>
+      <span style="padding: 4px 0; border-top: 1px solid var(--border); text-align: right; color: var(--warning);">cần nhãn</span>
+      <span style="padding: 4px 0; border-top: 1px solid var(--border); text-align: right; color: var(--success);">đạt</span>
+    </div>
+    <div style="display: flex; gap: 8px; padding: 12px; border-radius: 10px; background: color-mix(in oklch, var(--warning), transparent 92%);">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      <span style="font-size: 13px; line-height: 1.5;">Ở chế độ sáng, xanh ngọc, vàng và hồng sen đều dưới 3:1 trên nền trắng. Mọi biểu đồ dùng các slot đó <strong>phải</strong> có nhãn trực tiếp nhìn thấy được hoặc kèm bảng dữ liệu.</span>
+    </div>
+  </div>
+
+  <!-- Bề mặt -->
+  <div class="the">
+    <h2 class="tieu-de-the">Bề mặt và đường viền</h2>
+    <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px;">
+      <div class="o-mau"><div class="khoi-mau" style="background: #ffffff;"></div><span class="ten-mau">--background</span><span class="ma-mau">#ffffff · tối #0a0a0a</span></div>
+      <div class="o-mau"><div class="khoi-mau" style="background: #ffffff;"></div><span class="ten-mau">--card</span><span class="ma-mau">#ffffff · tối #171717</span></div>
+      <div class="o-mau"><div class="khoi-mau" style="background: #f5f5f5;"></div><span class="ten-mau">--muted</span><span class="ma-mau">#f5f5f5 · tối #262626</span></div>
+      <div class="o-mau"><div class="khoi-mau" style="background: #e5e5e5;"></div><span class="ten-mau">--border</span><span class="ma-mau">#e5e5e5 · tối trắng 10%</span></div>
+      <div class="o-mau"><div class="khoi-mau" style="background: #fafafa;"></div><span class="ten-mau">--sidebar</span><span class="ma-mau">#fafafa · tối #171717</span></div>
+    </div>
+    <p class="phu">Thẻ dùng <strong>vòng viền 1px ở 10% màu chữ</strong>, không dùng đổ bóng — preset <code style="font-size: 12px;">radix-nova</code> là phẳng.</p>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"cheDo":{"editor":"enum","options":["sáng","tối"],"default":"sáng","section":"Hiển thị"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { lopCheDo: (this.props.cheDo ?? 'sáng') === 'tối' ? 'toi' : '' };
+  }
+}
+</script>
+</body>
+</html>
