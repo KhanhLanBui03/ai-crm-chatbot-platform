@@ -4,7 +4,13 @@
 > Tài liệu này truy vết **ngược** từ đó xuống lược đồ, hợp đồng API và giao diện. Lược đồ, hợp
 > đồng và màn hình phục vụ use case — không bao giờ ngược lại.
 >
-> Cập nhật lần cuối: **25/08/2026**, sau migration V113 (Track A) và V208 (Track B).
+> Cập nhật lần cuối: **25/08/2026** — **đợt hai**, sau migration V114/V115 (Track A), V209
+> (Track B) và **ADR-0014**.
+>
+> Đợt một truy vết ở mức **bảng** và kết luận 42/42 đạt. Đợt hai diff ở mức **cột ↔ trường hợp
+> đồng** (365 thuộc tính của `components/schemas` với toàn bộ tên cột trong migration) và kiểm
+> **đường chạy thật** của dữ liệu Track B. Tìm ra sáu cột thiếu và một chỗ chặn ở tầng định tuyến.
+> Vẫn **không bảng mới nào** — xem §8.
 
 ---
 
@@ -56,13 +62,13 @@ Ký hiệu schema: `pf` = `platform` · `eg` = `engagement` · `sl` = `sales` ·
 | **UC014** Chuyển giao AI → nhân viên | SCR021 | `POST /conversations/{id}/handoff` | `eg.conversations.status` `handover_at` `handover_reason` `priority` · `pf.tenants.assignment_mode` (chọn nhân viên, b6) · `an.metrics_daily.handover_count` (b9) |
 | **UC015** Gán hội thoại | SCR021 | `POST /conversations/{id}/assign` | `eg.conversations.assigned_user_id` `assigned_at` · `pf.outbox_events` (b7) · `pf.audit_logs` (4.2) |
 | **UC016** Quản lý danh bạ | SCR024, SCR025, SCR026, SCR027 | `/contacts`, `/{id}`, `/{id}/merge` | `eg.contacts.merged_into_contact_id` (hợp nhất mềm, 5a) · `eg.channel_identities` · `pf.audit_logs` |
-| **UC017** Ghi chú và gắn thẻ | SCR028 | `/contacts/{id}/notes`, `/tags`, `/contacts/{id}/tags/{tagId}` | `eg.contact_notes.author_user_id` · `eg.tags.usage_count` · `eg.contact_tags` |
+| **UC017** Ghi chú và gắn thẻ | SCR028 | `/contacts/{id}/notes`, `/tags`, `/contacts/{id}/tags/{tagId}` | `eg.contact_notes.author_user_id` `updated_at` (= `editedAt`, 1a-3a) · `eg.tags.usage_count` · `eg.contact_tags` · **`pf.subscription_plans.max_tags`** (9.1 — V115) |
 
 ### Nhóm C — Tri thức và tích hợp
 
 | UC | Màn | Endpoint | Bảng · cột then chốt |
 |---|---|---|---|
-| **UC018** Tải lên tài liệu | SCR029 | `POST /documents` | `kn.knowledge_documents.status='PENDING'` `file_path` · `pf.subscription_plans.max_documents` (5.6) · `pf.outbox_events` |
+| **UC018** Tải lên tài liệu | SCR029 | `POST /documents` | `kn.knowledge_documents.status='PENDING'` `file_path` **`description`** (b3, b7 — V209) · `pf.subscription_plans.max_documents` (5.6) · `pf.outbox_events` |
 | **UC019** Nạp và lập chỉ mục | SCR030, SCR033 | `/ingestion-jobs`, `/documents/{id}/reindex` | `kn.knowledge_documents.status` `chunk_count` `error_message` `indexed_at` · `kn.knowledge_chunks.embedding` `content_segmented` `embedding_model` `embedding_version` |
 | **UC020** Quản lý kho tri thức | SCR030, SCR031, SCR032 | `/documents`, `/{id}`, `/{id}/chunks`, `POST /knowledge/search` | `kn.knowledge_documents.version` (thay thế không để trống tri thức, 10a) · `kn.knowledge_chunks.heading` |
 | **UC021** Cấu hình MCP | SCR037, SCR038, SCR039 | `/mcp-servers`, `/{id}/handshake`, `/tools`, `/tools/{toolId}` | `ig.mcp_servers.spec_version` `credential_encrypted` `allowed_tools` · **`tool_schema_cache`** — sổ đăng ký: `schema_hash`, `enabled` (mặc định false, b7), `risk_level`, `requires_approval` (9.2) |
@@ -72,12 +78,12 @@ Ký hiệu schema: `pf` = `platform` · `eg` = `engagement` · `sl` = `sales` ·
 | UC | Màn | Endpoint | Bảng · cột then chốt |
 |---|---|---|---|
 | **UC022** Phân loại ý định và định tuyến | SCR036 | `/ai-interactions` | `ai.ai_interactions.intent` `intent_confidence` `branch` `model_name` `model_version` · **`safety_flag`** (chỉ thị ẩn, 5.2) · `eg.conversations.primary_intent` |
-| **UC023** Trả lời theo tri thức | SCR031, SCR036 | *(nội bộ)* + `POST /knowledge/search` | `kn.knowledge_chunks` (HNSW + GIN) · `ai.ai_interactions.retrieved_chunk_ids` `retrieval_top_score` `prompt_tokens` `completion_tokens` `cost_vnd` `latency_ms` |
+| **UC023** Trả lời theo tri thức | SCR031, SCR036 | *(nội bộ)* + `POST /knowledge/search` | `kn.knowledge_chunks` (HNSW + GIN) · `ai.ai_interactions.retrieved_chunk_ids` `retrieval_top_score` **`groundedness_score`** (b8 — V209, khác `retrieval_top_score`) **`is_cached`** (1.2 — V209) `prompt_tokens` `completion_tokens` `cost_vnd` `latency_ms` |
 | **UC024** Truy vấn hệ thống ngoài qua MCP | SCR035, SCR040 | `/tool-calls`, `/tool-calls/{id}/approval` | `ai.ai_tool_calls.tool_name` `arguments` `latency_ms` `outcome` `approval_status` · `ai.ai_interactions.safety_flag` (kết quả có dạng chỉ thị, 6.2) |
 | **UC025** Từ chối khi thiếu căn cứ | SCR034, SCR051 | `GET /knowledge-gaps` | `ai.ai_interactions.is_answered=false` `refusal_reason` `retrieval_top_score` · `safety_flag='INTERNAL_DATA_PROBE'` (3.4) · danh sách khoảng trống = **truy vấn gộp**, không phải bảng |
-| **UC026** Tóm tắt hội thoại | SCR019+020 | `/conversations/{id}/context` | `eg.conversations.summary` `summarized_at` · `ai.ai_interactions.branch='SUMMARY'` |
+| **UC026** Tóm tắt hội thoại | SCR019+020 | `/conversations/{id}/context` · `PATCH /internal/conversations/{id}/summary` | `eg.conversations.summary` `summarized_at` **`summary_data`** (bốn phần, b3) **`summary_trigger`** **`summary_model_version`** (hậu điều kiện — V114, `ck_conv_summary_complete` cưỡng chế đủ bộ) · `ai.ai_interactions.branch='SUMMARY'` |
 | **UC027** Đánh giá chất lượng | SCR019+020 | `POST /ai-interactions/{id}/feedback` | `ai.ai_feedback.rating` `reason_code` `rater_type` (khách vs nhân viên tách riêng, 1a-2a) · chỉ mục `uq_feedback_rater` |
-| **UC028** Chặn lời gọi vi phạm | SCR035, SCR040, SCR054 | `/tool-calls`, `/safety-events` | `ai.ai_tool_calls.decision` `block_reason` `risk_level` · `ig.mcp_servers.tool_schema_cache[].schema_hash` (**b3 — đối chiếu hash đã duyệt**) |
+| **UC028** Chặn lời gọi vi phạm | SCR035, SCR040, SCR054 | `/tool-calls`, `/safety-events` | `ai.ai_tool_calls.decision` `block_reason` `risk_level` **`guard_latency_ms`** (b8 — V209, khác `latency_ms` của UC024 b9) · `ig.mcp_servers.tool_schema_cache[].schema_hash` `approved_schema_hash` (**b3 — đối chiếu hash đã duyệt**) |
 
 ### Nhóm E — Bán hàng và cơ hội
 
@@ -103,7 +109,8 @@ Ký hiệu schema: `pf` = `platform` · `eg` = `engagement` · `sl` = `sales` ·
 | **UC041** Xoá dữ liệu cá nhân | SCR055, SCR056, SCR057, SCR058 | `/erasure-requests`, `/preview`, `/{id}`, `/{id}/execute` | `pf.data_erasure_requests.items` (tiến độ theo bảng, 6.4) `legal_basis` `certificate_uri` · `eg.contacts.anonymized_at` · `eg.messages.is_redacted` |
 | **UC042** Xuất báo cáo ra tệp | *(nút trên SCR048–SCR052)* | `POST /reports/exports` | `pf.audit_logs` `action='REPORT_EXPORTED'` — hiện thực **nhánh 4.2** (xuất đồng bộ), xem §6 |
 
-**42/42 đạt** theo chuẩn ở §1.
+**42/42 đạt** theo chuẩn ở §1 — sau đợt hai, bốn dòng UC018 · UC023 · UC026 · UC028 chuyển từ
+*đạt ở mức bảng* sang *đạt ở mức cột*. Xem §8.
 
 ---
 
@@ -156,6 +163,25 @@ gỡ khỏi repo (xem §4).
 
 Ba mục, **không** mục nào cần bảng mới.
 
+**Đợt hai bổ sung sáu cột — vẫn không bảng nào:**
+
+| Cột | Bảng | Câu trong bản đặc tả | Migration |
+|---|---|---|---|
+| `summary_data` `summary_trigger` `summary_model_version` | `eg.conversations` | UC026 b3 "tóm tắt **có cấu trúc** gồm bốn phần"; b4 "kèm thời điểm sinh **và phiên bản mô hình**" | V114 |
+| `max_tags` | `pf.subscription_plans` | UC017 9.1 "số lượng thẻ **vượt giới hạn cho phép**" | V115 |
+| `groundedness_score` | `ai.ai_interactions` | UC023 hậu điều kiện "**điểm bám nguồn** … ghi đầy đủ" | V209 |
+| `is_cached` | `ai.ai_interactions` | UC023 1.2 "**đánh dấu lượt này là dùng đệm**" | V209 |
+| `guard_latency_ms` | `ai.ai_tool_calls` | UC028 b8 "**độ trễ của bước kiểm duyệt**" | V209 |
+| `description` | `kn.knowledge_documents` | UC018 b3 "nhập tiêu đề **và mô tả ngắn**" | V209 |
+
+Và ba chỗ **không** cần cột, giải bằng trường suy ra — đúng bước 2 của thang ưu tiên ở §1:
+
+| Trường hợp đồng | Suy ra từ |
+|---|---|
+| `LuotXuLyAi.discardedAnswer` | `is_answered = false ? response_text : null`. `is_answered` vốn đã mang nghĩa "câu trả lời có tới khách hay không" |
+| `GhiChu.editedAt` | `contact_notes.updated_at` khi lớn hơn `created_at` — trigger `touch_updated_at()` đã giữ sẵn |
+| Định danh hội thoại của UC028 b8 | Nối `ai_interaction_id → ai_interactions.conversation_id`, cùng schema `ai` |
+
 ### 4.2. Bảng thực sự cần thêm — hai bảng
 
 | Bảng | Vì sao không tránh được |
@@ -177,6 +203,22 @@ Ba mục, **không** mục nào cần bảng mới.
 **Vì sao không gỡ:** gỡ sáu cột này buộc phải sửa entity, DTO và tầng mock đang xanh, đổi lại
 tiết kiệm vài byte mỗi dòng. Ghi chú chúng ở đây và trong ERD rẻ hơn, và trả lời được câu
 *"cột này phục vụ use case nào?"* nếu hội đồng hỏi: **không cái nào — đây là dự phòng có ý thức.**
+
+### 4.3b. Trường hợp đồng đã gỡ ở đợt hai — chiều ngược lại
+
+Sáu cột trên là *cột không có use case*. Đây là *trường hợp đồng không có cột* — dashboard đòi dữ
+liệu mà không bảng nào giữ, nên chúng chỉ sống được ở tầng mock:
+
+| Trường | Ở đâu | Vì sao gỡ |
+|---|---|---|
+| `refusalHandoffThreshold` · `summaryTurnThreshold` | `DoanhNghiep`, SCR007 | UC025 b9 và UC026 tiền điều kiện gọi là *"ngưỡng đã hiệu chỉnh"* — hằng số hiệu chỉnh mô hình ở tầng ứng dụng, không phải thiết lập của từng doanh nghiệp |
+| `restrictAgentScope` | `DoanhNghiep`, SCR007 | Đã có cơ chế: `pf.roles.permissions` (jsonb) |
+| `autoLeadDailyLimit` | `DoanhNghiep`, SCR007 | UC031 3.4 là cảnh báo rà soát lại ngưỡng **điểm**, không phải hạn mức theo ngày |
+| `messageRetentionDays` | `DoanhNghiep`, SCR007 | Không use case nào có xoá theo thời hạn; UC041 là xoá **theo yêu cầu** |
+| `usedOcr` | `CongViecNap`, SCR033 | UC019 3.2 chỉ đòi ghi lại khi nhánh OCR **thất bại** — `status='FAILED'` + `error_message` đã có |
+
+UC004 bước 2 liệt kê **đúng sáu trường** của SCR007: tên, lĩnh vực, múi giờ, ngôn ngữ mặc định, giờ
+làm việc, giọng điệu tác tử AI. Năm trường đầu bảng trên không nằm trong số đó.
 
 ### 4.4. API dư so với use case — đã gỡ
 
@@ -224,11 +266,12 @@ trường `status` / `resolvedDocumentId`.
 
 | Chỉ tiêu | Trước rà soát | Sau |
 |---|---|---|
-| **Use Case Coverage** | 38/42 (UC030, UC036, UC039, UC040 gãy ở hậu điều kiện hoặc luồng chính) | **42/42** |
-| **Database Coverage** | 30 bảng · 1 hợp đồng nội bộ trỏ vào bảng không tồn tại · 1 ranh giới quyền không có đường vượt | **32 bảng** · +3 nhóm cột |
+| **Use Case Coverage** | 38/42 (UC030, UC036, UC039, UC040 gãy ở hậu điều kiện hoặc luồng chính) | **42/42** ở mức bảng · sau đợt hai: **42/42 ở mức cột** |
+| **Database Coverage** | 30 bảng · 1 hợp đồng nội bộ trỏ vào bảng không tồn tại · 1 ranh giới quyền không có đường vượt | **32 bảng** · +3 nhóm cột (đợt một) · **+6 cột** (đợt hai) · **vẫn 32 bảng** |
 | **Screen Coverage** | 58 màn · 3 màn không truy vết được | **54 mã màn** · 47 CORE, 7 SUPPORTING, 0 FUTURE |
 | **API Coverage** | 85 đường dẫn · 7 nhóm chạy mock không bảng | **78 đường dẫn** · 2 nhóm có bảng thật, 2 nhóm là truy vấn gộp, 3 nhóm bỏ |
-| **Thesis Scope Consistency** | ERD, OpenAPI và bản đặc tả lệch nhau ở 7 chỗ | Tài liệu này là nguồn chung; ERD §8 và §11 đã cập nhật theo |
+| **Data Path Coverage** | *(không kiểm ở đợt một)* | 17 đường dẫn Track B **không có đường lấy dữ liệu** → giải bằng **ADR-0014**, xem §8 |
+| **Thesis Scope Consistency** | ERD, OpenAPI và bản đặc tả lệch nhau ở 7 chỗ | Tài liệu này là nguồn chung; ERD §8, §10.3, §11 và §16 đã cập nhật theo |
 | **Production Readiness** | — | **Chưa.** Xem §7 |
 
 ---
@@ -304,6 +347,7 @@ Lược đồ đã sẵn sàng cho cả ba; đây là việc ở tầng mã, kh�
 | Thiếu | Ảnh hưởng |
 |---|---|
 | Consumer `analytics-cg` ghi `an.metrics_daily` từ `crm.ai-interaction.v1` + `crm.conversation.v1` | UC006, UC036, UC038, UC039 chạy trên bảng rỗng cho tới khi có consumer |
+| Bề mặt đọc Track B ở `ai-service-to-java-core.yaml` mới là đặc tả, chưa có mã | 13 màn (SCR029–040, SCR051, SCR054) vẫn chạy trên mock cho tới khi java-core proxy thật — xem §8 |
 | `web-widget` chưa có dòng mã nào | UC009 và UC010 chưa chạy đầu-cuối được |
 | Nợ kỹ thuật: tách chunk khi build (gói chính 1,52 MB), ADR-0008 và ADR-0009 còn TODO | Không chặn nghiệp vụ |
 
@@ -321,3 +365,57 @@ Lược đồ đã sẵn sàng cho cả ba; đây là việc ở tầng mã, kh�
 | `crm_app` `UPDATE sales.lead_scores` | `ERROR: permission denied` — append-only cưỡng chế bằng quyền, không bằng quy ước |
 | `npm run gen:api` · `typecheck` · `build` | Sạch cả ba |
 | Bộ kiểm CDP trên các màn bị đụng | **13/13 đạt**, console sạch — gồm ba route đã gỡ không render trang cũ |
+
+
+---
+
+## 8. Đợt hai — chỗ chặn thật không nằm ở lược đồ
+
+Đợt một kết luận "42/42 đạt" và kết luận đó **vẫn đúng** ở mức nó kiểm: mọi use case đều có đủ
+bảng. Đợt hai kiểm thêm hai thứ đợt một không kiểm, và mỗi thứ ra một loại phát hiện khác nhau.
+
+### 8.1. Diff ở mức cột — sáu cột thiếu
+
+Cách làm: trích toàn bộ tên thuộc tính trong `components/schemas` của `dashboard-api.yaml` (365
+cái), đổi sang `snake_case`, đối chiếu với mọi tên cột trong 23 file migration, rồi đọc ngược từng
+chỗ lệch lên bản đặc tả `.docx` để xem use case có thật sự đòi hay không.
+
+Kết quả ở §4.1: **sáu cột thiếu, ba trường suy ra được, mười một trường không use case nào đòi.**
+Không mục nào cần bảng mới. Xem ERD §10.3 để biết câu đặc tả nào làm lộ ra từng cột.
+
+Đáng nói: đợt này cũng **suýt cắt nhầm hai trường**. `maxTags` và `cached` trông như tiện ích giao
+diện, nhưng UC017 9.1 và UC023 1.2 có yêu cầu tường minh. Bài học lặp lại của cả hai đợt: đọc câu
+trong bản đặc tả, đừng đoán từ tên trường.
+
+### 8.2. Đường chạy của dữ liệu — 17 đường dẫn không có nguồn
+
+Ba sự việc, mỗi cái riêng lẻ đều đúng, ghép lại thì mâu thuẫn:
+
+1. `dashboard-api.yaml` giao **cả 78 đường dẫn** cho java-core phục vụ, và nói thẳng điều đó ở mô
+   tả `GET /documents`.
+2. Gateway định tuyến đúng như vậy: `/api/v1/**` → `lb://java-core`.
+3. `V111` **không** cấp cho `crm_app` `USAGE` trên `knowledge`, `ai`, `integration` — cố ý, đúng
+   ADR-0002.
+
+Nên 17 đường dẫn đọc dữ liệu Track B không có nguồn nào, và `ai-service-to-java-core.yaml` lúc đó
+chỉ có bốn endpoint ghi/xử lý. **13 màn chỉ chạy được trên tầng mock** — không phải vì thiếu bảng,
+mà vì thiếu đường.
+
+Kèm theo, ba trường `uploadedByName` · `approvedByName` · `contactName` không bên nào tự giải
+được: bảng Track B chỉ giữ `uuid` trần, và `ai_app` cũng không có quyền trên `platform`.
+
+**Giải bằng ADR-0014**: java-core là mặt tiền duy nhất, ai-service mở bề mặt đọc nội bộ (mục B của
+`ai-service-to-java-core.yaml`), java-core làm giàu tên người trước khi trả về. **0 bảng, 0 cột.**
+
+Cùng loại nhầm lẫn ở chiều ngược lại đã gỡ: `POST /internal/ai-interactions` giao cho java-core ghi
+vào `ai.ai_interactions` — bảng của Track B mà `crm_app` không có quyền. Số liệu vốn đã sang Track A
+bằng đường khác: `crm.ai-interaction.v1` → `analytics-cg` → `an.metrics_daily`.
+
+### 8.3. Kết luận đợt hai
+
+| Câu hỏi | Trả lời |
+|---|---|
+| Có bảng nào thừa? | Không. Bốn cặp gần nhau nhất đều không gộp được mà không mất một ràng buộc đang có tác dụng |
+| Có bảng nào thiếu? | **Không.** Sáu thiếu hụt đều là cột |
+| Có cần đổi thiết kế? | Không. Không khoá chính nào đổi, không bảng nào tách lại |
+| Còn chỗ nào chặn? | Có, và nó ở tầng định tuyến chứ không ở lược đồ — §8.2 |
