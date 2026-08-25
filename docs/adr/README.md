@@ -28,5 +28,6 @@ Mỗi quyết định kiến trúc một file. Nguồn trực tiếp cho **chư�
 | 0011 | shadcn/ui trên Tailwind v4; 21 màn vẽ chi tiết + 37 màn từ 6 mẫu lặp | Lệch so với KH |
 | 0012 | Redux Toolkit + RTK Query quản lý toàn bộ state của web-dashboard | Lệch so với KH |
 | 0013 | WebSocket cho hộp thư thời gian thực, xác thực bằng khung `AUTH` | KH mục 4.3 |
+| 0014 | java-core là mặt tiền duy nhất của dashboard, kể cả với dữ liệu Track B | Rà soát truy vết |
 
 `KH` = tài liệu `Ke-hoach-do-an-Chatbot-AI-CRM-v2-nhom-2-nguoi.docx`.

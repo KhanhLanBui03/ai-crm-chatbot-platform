@@ -1,11 +1,23 @@
 # Giao ước: java-core GỌI ai-service
 # Track B viết đặc tả, Track A rà soát. Hạn chốt: 07/09 (kế hoạch mục 1.3).
+#
+# HAI NHÓM, HAI LÝ DO TỒN TẠI KHÁC NHAU — đừng trộn khi đọc:
+#
+#   A. Nhóm XỬ LÝ (/v1/answer, /v1/summarize, /v1/leads/score, /v1/documents/ingest)
+#      java-core nhờ ai-service làm một việc tốn mô hình. Có từ đầu.
+#
+#   B. Nhóm ĐỌC BỀ MẶT DASHBOARD (mục B bên dưới) — thêm 25/08/2026, xem ADR-0014.
+#      dashboard-api.yaml giao cho java-core phục vụ CẢ 78 đường dẫn, trong đó 17
+#      đường đọc dữ liệu ở schema knowledge/ai/integration. Mà V111 không cấp cho
+#      crm_app USAGE trên ba schema đó — cố ý, đúng ADR-0002. Không có nhóm B thì
+#      13 màn (SCR029–040, SCR051, SCR054) không có đường lấy dữ liệu nào.
 openapi: 3.1.0
 info:
   title: ai-service API (dành cho java-core)
   version: 0.1.0-draft
   description: |
-    java-core gọi được gì để yêu cầu trả lời, yêu cầu tóm tắt, yêu cầu chấm điểm.
+    java-core gọi được gì để yêu cầu trả lời, yêu cầu tóm tắt, yêu cầu chấm điểm,
+    và để đọc dữ liệu Track B mà dashboard cần.
     TODO: chốt trước 07/09.
 servers:
   - url: http://ai-service:8000
@@ -14,6 +26,9 @@ servers:
     description: qua gateway (lb://ai-service)
 
 paths:
+  # ══════════════════════════════════════════════════════════════════════════════
+  # A. Nhóm xử lý — java-core nhờ ai-service làm việc tốn mô hình
+  # ══════════════════════════════════════════════════════════════════════════════
   /v1/answer:
     post:
       summary: Sinh câu trả lời cho một lượt hội thoại
@@ -37,6 +52,154 @@ paths:
     post:
       summary: Nạp một tài liệu vào chỉ mục tri thức
       description: Thường được kích hoạt bất đồng bộ qua topic `crm.document.v1`.
+      # TODO
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # B. Bề mặt đọc cho dashboard — ADR-0014
+  #
+  # Mỗi đường dẫn ở đây ánh xạ 1–1 với một đường dẫn /api/v1/* của dashboard-api.yaml.
+  # java-core nhận request của dashboard, gọi xuống đây, rồi LÀM GIÀU trước khi trả về.
+  #
+  # LÀM GIÀU LÀ PHẦN KHÔNG BỎ ĐƯỢC, không phải tiện ích:
+  # ba trường uploadedByName · approvedByName · contactName nằm trong hợp đồng
+  # dashboard nhưng KHÔNG bảng nào của Track B có. Bảng Track B chỉ giữ uuid trần
+  # (uploaded_by, approved_by) vì tham chiếu liên làn không có khoá ngoại, và ai_app
+  # không có USAGE trên platform/engagement. java-core là nơi DUY NHẤT nối được hai
+  # đầu — nên ai-service trả uuid, java-core đổi thành tên.
+  #
+  # Hệ quả cho Track B: mọi phản hồi ở nhóm B trả uuid trần, KHÔNG cố đoán tên người.
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  # --- Kho tri thức (knowledge) — SCR029–SCR033, UC018–UC020 ---
+  /v1/documents:
+    get:
+      summary: Danh sách tài liệu — nguồn của GET /api/v1/documents
+      description: |
+        java-core làm giàu `uploaded_by` → `uploadedByName` từ `platform.users`.
+      parameters:
+        - { name: page,       in: query, schema: { type: integer, default: 0 } }
+        - { name: size,       in: query, schema: { type: integer, default: 20 } }
+        - { name: keyword,    in: query, schema: { type: string } }
+        - { name: status,     in: query, schema: { type: string } }
+        - { name: sourceType, in: query, schema: { type: string } }
+      # TODO: response — Page<TaiLieu> nhưng với uploadedBy (uuid) thay uploadedByName
+    post:
+      summary: Nhận tài liệu tải lên — nguồn của POST /api/v1/documents
+      description: |
+        multipart. java-core kiểm hạn mức `max_documents` và `STORAGE_MB` TRƯỚC khi
+        chuyển tiếp — hạn mức nằm ở `platform.subscription_plans`, ai-service không
+        đọc được. Tài liệu vào `PENDING`, ai-service tự chạy nạp bất đồng bộ.
+      # TODO
+
+  /v1/documents/{documentId}:
+    get:
+      summary: Chi tiết tài liệu — nguồn của GET /api/v1/documents/{documentId}
+      # TODO
+    delete:
+      summary: Gỡ tài liệu — nguồn của DELETE /api/v1/documents/{documentId}
+      # TODO
+
+  /v1/documents/{documentId}/reindex:
+    post:
+      summary: Nạp lại và lập chỉ mục — UC019, SCR033
+      # TODO
+
+  /v1/documents/{documentId}/chunks:
+    get:
+      summary: Các đoạn của tài liệu — SCR032
+      # TODO
+
+  /v1/knowledge/search:
+    post:
+      summary: Tìm thử trên kho tri thức — SCR031, UC020
+      description: |
+        Trả về cả thứ hạng của hai làn truy hồi (`vectorRank`, `keywordRank`) trước khi
+        hợp nhất RRF — đó là thứ làm SCR031 có giá trị chứng minh cho ADR-0006.
+      # TODO
+
+  /v1/ingestion-jobs:
+    get:
+      summary: Tiến độ nạp — SCR033
+      description: Chiếu từ `knowledge_documents.status`, không phải bảng riêng.
+      # TODO
+
+  /v1/knowledge-gaps:
+    get:
+      summary: Khoảng trống tri thức — SCR034, UC039 bước 9-10
+      description: |
+        Truy vấn GỘP trên `ai.ai_interactions` (`is_answered = false`, nhóm theo
+        `user_query` đã chuẩn hoá), không phải bảng. Xem ERD mục 11.
+      # TODO
+
+  # --- Máy chủ MCP và sổ đăng ký công cụ (integration) — SCR037–SCR039, UC021 ---
+  /v1/mcp-servers:
+    get:
+      summary: Danh sách máy chủ MCP
+      # TODO
+    post:
+      summary: Thêm máy chủ MCP — SCR038
+      # TODO
+  /v1/mcp-servers/{serverId}:
+    get:
+      summary: Chi tiết máy chủ MCP
+      # TODO
+    patch:
+      summary: Sửa cấu hình máy chủ MCP
+      # TODO
+    delete:
+      summary: Gỡ máy chủ MCP
+      # TODO
+  /v1/mcp-servers/{serverId}/handshake:
+    post:
+      summary: Bắt tay và khám phá công cụ — UC021 bước 5-7
+      description: Công cụ mới luôn về `enabled = false` (UC021 bước 7).
+      # TODO
+
+  /v1/tools:
+    get:
+      summary: Sổ đăng ký công cụ — SCR039
+      description: |
+        Chiếu từ `integration.mcp_servers.tool_schema_cache`. Trả `approved_by` (uuid);
+        java-core đổi thành `approvedByName`.
+      # TODO
+  /v1/tools/{toolId}:
+    patch:
+      summary: Bật/tắt và duyệt lược đồ công cụ — UC021 bước 8-9
+      # TODO
+
+  # --- Nhật ký của tác tử (ai) — SCR035, SCR036, SCR040, SCR051 ---
+  /v1/tool-calls:
+    get:
+      summary: Nhật ký gọi công cụ — SCR035, UC024/UC028
+      description: |
+        Trả `conversation_id` (nối qua `ai_interactions`) và `approved_by` dưới dạng
+        uuid; java-core đổi thành `contactName` và `approvedByName`.
+      # TODO
+  /v1/tool-calls/{callId}/approval:
+    post:
+      summary: Duyệt hoặc từ chối một lời gọi chờ — SCR040, UC024 6.x
+      # TODO
+
+  /v1/ai-interactions:
+    get:
+      summary: Giám sát từng lượt xử lý — SCR036
+      # TODO
+  /v1/ai-interactions/{interactionId}/feedback:
+    post:
+      summary: Ghi đánh giá chất lượng — UC027
+      # TODO
+
+  /v1/safety-events:
+    get:
+      summary: Phần Track B của cảnh báo an toàn — UC040 bước 8
+      description: |
+        CHỈ hai trong ba nguồn: `ai_tool_calls.decision = 'BLOCKED'` và
+        `ai_interactions.safety_flag IS NOT NULL`.
+
+        Nguồn thứ ba — `platform.audit_logs.severity = 'CRITICAL'` — java-core tự đọc
+        rồi trộn vào, sắp chung theo thời gian. Đây là lý do `/safety-events` không thể
+        do một mình bên nào phục vụ, và cũng là lý do không dựng bảng `ai.safety_events`
+        chung: bảng chung buộc java-core ghi vào schema Track B, đúng cái ADR-0002 đóng.
       # TODO
 
   /health:

@@ -26,6 +26,19 @@ paths:
     get:
       summary: Đọc tin nhắn của hội thoại, có phân trang
       # TODO
+  /internal/conversations/{conversationId}/summary:
+    patch:
+      summary: Ghi bản tóm tắt có cấu trúc — UC026 bước 4
+      description: |
+        Bốn phần của UC026 bước 3 cộng phiên bản mô hình và lý do kích hoạt, ghi vào
+        `engagement.conversations` (`summary_data`, `summary_trigger`,
+        `summary_model_version`, `summarized_at`, `summary`) — xem migration V114.
+
+        `summary_model_version` BẮT BUỘC: hậu điều kiện UC026 đòi nó, và java-core
+        không đọc nhờ được `ai.ai_interactions.model_version` (crm_app không có USAGE
+        trên schema `ai`, V111). `ck_conv_summary_complete` từ chối bản ghi thiếu nó.
+      # TODO: body — {trigger, mainNeed, providedInfo, unresolvedIssues, nextSteps,
+      #       modelVersion, summaryText}
 
   # --- Ghi lead / điểm lead (sales) ---
   # Track B ghi qua API này, KHÔNG ghi thẳng vào schema sales (mục 9)
@@ -39,10 +52,17 @@ paths:
       # TODO
 
   # --- Ghi tương tác AI (ai) ---
-  /internal/ai-interactions:
-    post:
-      summary: Ghi một lượt gọi AI — ai.AI_INTERACTIONS
-      # TODO: cost_vnd, latency_ms, retrieved_chunk_ids, groundedness_score, refused
+  #
+  # ĐÃ GỠ 25/08/2026: POST /internal/ai-interactions — "ghi một lượt gọi AI vào
+  # ai.AI_INTERACTIONS". Endpoint này không hiện thực được và không cần thiết:
+  #   · ai.ai_interactions thuộc schema của Track B, ai-service GHI THẲNG.
+  #   · crm_app không có USAGE trên schema ai (V111), nên java-core không thể ghi hộ
+  #     kể cả khi muốn.
+  # Số liệu chi phí/token/độ trễ đi sang Track A bằng ĐƯỜNG KHÁC, đã có: sự kiện
+  # crm.ai-interaction.v1 → consumer analytics-cg → analytics.metrics_daily (V113).
+  #
+  # Cùng loại nhầm lẫn với G1 trong docs/traceability-uc-db-api-screen.md: giao cho
+  # một service phục vụ dữ liệu nằm sau ranh giới quyền của service kia.
 
 components:
   securitySchemes:
