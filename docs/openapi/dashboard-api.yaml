@@ -25,7 +25,8 @@ info:
   title: web-dashboard API
   version: 0.1.0-draft
   description: |
-    Bề mặt HTTP mà bảng điều khiển quản trị gọi. Phủ 58 màn hình SCR001–SCR058.
+    Bề mặt HTTP mà bảng điều khiển quản trị gọi. Phủ **54 mã màn** — SCR011, SCR022, SCR023 và
+    SCR053 đã gỡ vì không truy vết được tới use case nào (xem `docs/traceability-uc-db-api-screen.md`).
 
     **Phân quyền** đọc từ `platform.roles.permissions` (jsonb), không phải từ tên vai trò.
     ERD chỉ có hai vai trò: `TENANT_ADMIN` và `AGENT`. Endpoint nào đòi quyền quản trị thì ghi
@@ -45,7 +46,7 @@ security:
 
 tags:
   - name: Xác thực
-    description: SCR001–SCR005, SCR011 — đăng ký, đăng nhập, phiên làm việc
+    description: SCR001–SCR005 — đăng ký, đăng nhập, quên và đặt lại mật khẩu
   - name: Người dùng
     description: SCR008–SCR010 — mời người dùng, phân quyền
   - name: Doanh nghiệp
@@ -53,7 +54,7 @@ tags:
   - name: Kênh
     description: SCR016–SCR018 — Zalo OA, Facebook, Web Widget
   - name: Hộp thư
-    description: SCR019–SCR023 — hội thoại, tin nhắn, chuyển giao, phân công
+    description: SCR019–SCR021 — hội thoại, tin nhắn, chuyển giao, phân công
   - name: Khách hàng
     description: SCR024–SCR028 — danh bạ, ghi chú, thẻ, hợp nhất
   - name: Tri thức
@@ -63,7 +64,7 @@ tags:
   - name: Bán hàng
     description: SCR041–SCR047 — cơ hội tiềm năng, cơ hội bán hàng, hoạt động
   - name: Phân tích
-    description: SCR048–SCR053 — bảng điều khiển, phễu, chủ đề, hiệu quả AI, xuất báo cáo
+    description: SCR048–SCR052 — bảng điều khiển, phễu, chủ đề, hiệu quả AI, xuất báo cáo
   - name: Kiểm toán
     description: SCR054–SCR058 — nhật ký kiểm toán, xóa dữ liệu cá nhân
 
@@ -236,8 +237,11 @@ paths:
       tags: [Xác thực]
       summary: SCR005 — đặt lại mật khẩu bằng mã
       description: |
-        Thành công thì thu hồi toàn bộ phiên đang mở của người dùng đó
-        (`revoked_reason = PASSWORD_CHANGED`).
+        Thành công thì thu hồi toàn bộ phiên đang mở của người dùng đó.
+
+        Không có bảng phiên: JWT không trạng thái, danh sách thu hồi nằm ở **Redis** (ERD mục 11).
+        Thu hồi = ghi `jti` của mọi refresh token còn hạn của người dùng vào danh sách đó. Mã đặt
+        lại mật khẩu cũng ở Redis, dùng một lần kèm TTL — không phải một bảng.
       security: []
       requestBody:
         required: true
@@ -856,13 +860,20 @@ paths:
         '404': { $ref: '#/components/responses/KhongThay' }
 
   /api/v1/conversations/{conversationId}/context:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
     get:
       tags: [Hộp thư]
       summary: Khung ngữ cảnh bên phải màn hộp thư
       description: |
         Gộp bốn nguồn cho cột phải: hồ sơ khách hàng, bản tóm tắt gần nhất
-        (`ai.conversation_summaries`), lượt xử lý AI gần nhất (`ai.ai_interactions` — độ bám nguồn,
+        (`engagement.conversations.summary_data` — bốn phần của UC026 b3, kèm
+        `summary_model_version`; **không** phải bảng `ai.conversation_summaries`, bảng đó đã cân
+        nhắc rồi bỏ, xem ERD mục 11), lượt xử lý AI gần nhất (`ai.ai_interactions` — độ bám nguồn,
         trích dẫn, lý do từ chối), và điểm tiềm năng hiện tại.
+
+        Ba trong bốn nguồn thuộc Track A, nguồn `ai.ai_interactions` lấy qua bề mặt đọc nội bộ của
+        ai-service (ADR-0014).
 
         Gộp một lời gọi thay vì bốn: cột phải luôn hiện cùng lúc với hội thoại, tách ra chỉ tạo
         bốn trạng thái tải rời rạc nhấp nháy cạnh nhau.
@@ -1377,8 +1388,13 @@ paths:
       summary: SCR029 — tải lên tài liệu
       description: |
         UC018. Tệp lưu ở đường dẫn **có chứa `tenantId`** — cô lập ngay ở tầng kho lưu trữ, không
-        chỉ ở truy vấn. Tài liệu vào `PENDING`, việc nạp và lập chỉ mục chạy bất đồng bộ qua
-        `ingestion_jobs`; theo dõi tiến độ ở `/api/v1/ingestion-jobs`.
+        chỉ ở truy vấn. Tài liệu vào `PENDING`, việc nạp và lập chỉ mục chạy bất đồng bộ; theo dõi
+        tiến độ ở `/api/v1/ingestion-jobs`, vốn là **chiếu từ `knowledge_documents.status`** chứ
+        không phải một bảng `ingestion_jobs` riêng (ERD mục 11 — một tài liệu có đúng một tiến
+        trình nạp đang chạy).
+
+        `description` lưu ở `knowledge.knowledge_documents.description` (V209) — UC018 bước 7
+        gọi nó là "siêu dữ liệu do người dùng nhập".
 
         Vượt `plans.max_documents` hoặc vượt giới hạn dung lượng mỗi tệp thì 409.
       requestBody:
@@ -3283,7 +3299,6 @@ components:
           maximum: 100
           description: Điểm từ mức này trở lên thì tự tạo cơ hội tiềm năng
         autoLeadCreation: { type: boolean }
-        autoLeadDailyLimit: { type: integer }
         assignmentMode:
           $ref: '#/components/schemas/CheDoPhanCong'
         assignmentConfig:
@@ -3295,17 +3310,23 @@ components:
 
             Thay cho một tập thực thể `assignment_rules` riêng: một doanh nghiệp vừa và nhỏ có
             **một** chế độ phân công, không phải một danh sách quy tắc có vòng đời độc lập.
-        restrictAgentScope:
-          type: boolean
-          description: Nhân viên chỉ thấy khách hàng mình phụ trách
-        refusalHandoffThreshold:
-          type: integer
-          description: Số lần tác tử AI từ chối liên tiếp trước khi chuyển cho người
-        summaryTurnThreshold: { type: integer }
-        messageRetentionDays:
-          type: [integer, 'null']
-          description: Chính sách lưu trữ có thời hạn (Nghị định 13). `null` là giữ vô thời hạn.
         status: { $ref: '#/components/schemas/TrangThaiDoanhNghiep' }
+      # ĐÃ GỠ 25/08/2026 — năm thiết lập không truy vết được tới use case nào, và không cột nào
+      # trong platform.tenants giữ chúng. UC004 bước 2 liệt kê ĐÚNG SÁU trường hiển thị ở màn
+      # này: tên, lĩnh vực, múi giờ, ngôn ngữ mặc định, giờ làm việc, giọng điệu tác tử AI.
+      #
+      #   restrictAgentScope       → đã có cơ chế: platform.roles.permissions (jsonb)
+      #   refusalHandoffThreshold  → UC025 bước 9 gọi là "ngưỡng đã hiệu chỉnh": hằng số hiệu
+      #                              chỉnh mô hình ở tầng ứng dụng, không phải thiết lập của
+      #                              từng doanh nghiệp
+      #   summaryTurnThreshold     → cùng lý do (UC026 tiền điều kiện)
+      #   autoLeadDailyLimit       → UC031 3.4 là cảnh báo rà soát lại ngưỡng ĐIỂM, không phải
+      #                              một hạn mức theo ngày
+      #   messageRetentionDays     → không use case nào có xoá theo thời hạn; UC041 là xoá THEO
+      #                              YÊU CẦU và đã có platform.data_erasure_requests
+      #
+      # Muốn cho từng doanh nghiệp chỉnh hai ngưỡng đầu về sau thì thêm một cột ai_settings
+      # jsonb — KHÔNG nhét vào assignment_config, vì làm vậy là để tên cột nói dối.
 
     CapNhatDoanhNghiepRequest:
       type: object
@@ -3317,13 +3338,8 @@ components:
         aiTone: { $ref: '#/components/schemas/GiongDieuAi' }
         leadScoreThreshold: { type: integer, minimum: 0, maximum: 100 }
         autoLeadCreation: { type: boolean }
-        autoLeadDailyLimit: { type: integer, minimum: 0 }
         assignmentMode: { $ref: '#/components/schemas/CheDoPhanCong' }
         assignmentConfig: { type: object, additionalProperties: true }
-        restrictAgentScope: { type: boolean }
-        refusalHandoffThreshold: { type: integer, minimum: 1 }
-        summaryTurnThreshold: { type: integer, minimum: 1 }
-        messageRetentionDays: { type: [integer, 'null'], minimum: 1 }
 
     CheDoPhanCong:
       type: string
@@ -3816,9 +3832,9 @@ components:
           enum: [UPLOAD, REINDEX, REPLACE]
         state: { $ref: '#/components/schemas/TrangThaiCongViecNap' }
         attempt: { type: integer }
-        usedOcr:
-          type: boolean
-          description: Bản quét ảnh phải qua nhận dạng ký tự quang học
+        # ĐÃ GỠ 25/08/2026 — usedOcr. UC019 3.2 có nhánh nhận dạng ký tự quang học, nhưng chỉ
+        # yêu cầu ghi lại khi nhánh đó THẤT BẠI (status = FAILED + error_message, đã có). Không
+        # câu nào đòi lưu việc đã dùng OCR, và knowledge_documents không có cột nào giữ nó.
         chunksCreated: { type: integer }
         tokensUsed: { type: integer, format: int64 }
         costVnd: { type: number }
@@ -4048,12 +4064,19 @@ components:
             - { type: 'null' }
         cached:
           type: boolean
-          description: Lượt dùng đệm ngữ nghĩa — không tính chi phí gọi mô hình
+          description: |
+            Lượt dùng đệm ngữ nghĩa — không tính chi phí gọi mô hình (UC023 1.2).
+            Nguồn: `ai.ai_interactions.is_cached` (V209).
         discardedAnswer:
           type: [string, 'null']
           description: |
             Câu trả lời **không đạt ngưỡng bám nguồn nên bị hủy, chưa từng gửi cho khách**. Giao
             diện phải nói rõ điều đó, nếu không người xem tưởng khách đã nhận được nó.
+
+            UC023 8.2 đòi "lưu lại trường hợp này để phân tích". **Không có cột riêng** — đây là
+            trường suy ra: `is_answered = false ? response_text : null`. `is_answered` vốn đã mang
+            đúng nghĩa "câu trả lời có tới khách hay không", nên một cột thứ hai chỉ để lặp lại
+            điều đó là chỗ hai nguồn sự thật bắt đầu lệch nhau.
         errorCode: { type: [string, 'null'] }
         toolCalls:
           type: array

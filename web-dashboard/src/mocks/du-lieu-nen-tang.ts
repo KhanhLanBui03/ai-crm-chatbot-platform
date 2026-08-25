@@ -159,13 +159,8 @@ export const hoSoDoanhNghiep: DoanhNghiep = {
   aiTone: 'FRIENDLY',
   leadScoreThreshold: 70,
   autoLeadCreation: true,
-  autoLeadDailyLimit: 50,
   assignmentMode: 'LEAST_BUSY',
   assignmentConfig: {},
-  restrictAgentScope: false,
-  refusalHandoffThreshold: 2,
-  summaryTurnThreshold: 8,
-  messageRetentionDays: 365,
   status: 'ACTIVE',
 }
 

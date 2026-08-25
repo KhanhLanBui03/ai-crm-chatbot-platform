@@ -328,8 +328,11 @@ export interface paths {
         put?: never;
         /**
          * SCR005 — đặt lại mật khẩu bằng mã
-         * @description Thành công thì thu hồi toàn bộ phiên đang mở của người dùng đó
-         *     (`revoked_reason = PASSWORD_CHANGED`).
+         * @description Thành công thì thu hồi toàn bộ phiên đang mở của người dùng đó.
+         *
+         *     Không có bảng phiên: JWT không trạng thái, danh sách thu hồi nằm ở **Redis** (ERD mục 11).
+         *     Thu hồi = ghi `jti` của mọi refresh token còn hạn của người dùng vào danh sách đó. Mã đặt
+         *     lại mật khẩu cũng ở Redis, dùng một lần kèm TTL — không phải một bảng.
          */
         post: {
             parameters: {
@@ -1447,14 +1450,21 @@ export interface paths {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                conversationId: components["parameters"]["ConversationId"];
+            };
             cookie?: never;
         };
         /**
          * Khung ngữ cảnh bên phải màn hộp thư
          * @description Gộp bốn nguồn cho cột phải: hồ sơ khách hàng, bản tóm tắt gần nhất
-         *     (`ai.conversation_summaries`), lượt xử lý AI gần nhất (`ai.ai_interactions` — độ bám nguồn,
+         *     (`engagement.conversations.summary_data` — bốn phần của UC026 b3, kèm
+         *     `summary_model_version`; **không** phải bảng `ai.conversation_summaries`, bảng đó đã cân
+         *     nhắc rồi bỏ, xem ERD mục 11), lượt xử lý AI gần nhất (`ai.ai_interactions` — độ bám nguồn,
          *     trích dẫn, lý do từ chối), và điểm tiềm năng hiện tại.
+         *
+         *     Ba trong bốn nguồn thuộc Track A, nguồn `ai.ai_interactions` lấy qua bề mặt đọc nội bộ của
+         *     ai-service (ADR-0014).
          *
          *     Gộp một lời gọi thay vì bốn: cột phải luôn hiện cùng lúc với hội thoại, tách ra chỉ tạo
          *     bốn trạng thái tải rời rạc nhấp nháy cạnh nhau.
@@ -1463,7 +1473,9 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: never;
-                path?: never;
+                path: {
+                    conversationId: components["parameters"]["ConversationId"];
+                };
                 cookie?: never;
             };
             requestBody?: never;
@@ -2307,8 +2319,13 @@ export interface paths {
         /**
          * SCR029 — tải lên tài liệu
          * @description UC018. Tệp lưu ở đường dẫn **có chứa `tenantId`** — cô lập ngay ở tầng kho lưu trữ, không
-         *     chỉ ở truy vấn. Tài liệu vào `PENDING`, việc nạp và lập chỉ mục chạy bất đồng bộ qua
-         *     `ingestion_jobs`; theo dõi tiến độ ở `/api/v1/ingestion-jobs`.
+         *     chỉ ở truy vấn. Tài liệu vào `PENDING`, việc nạp và lập chỉ mục chạy bất đồng bộ; theo dõi
+         *     tiến độ ở `/api/v1/ingestion-jobs`, vốn là **chiếu từ `knowledge_documents.status`** chứ
+         *     không phải một bảng `ingestion_jobs` riêng (ERD mục 11 — một tài liệu có đúng một tiến
+         *     trình nạp đang chạy).
+         *
+         *     `description` lưu ở `knowledge.knowledge_documents.description` (V209) — UC018 bước 7
+         *     gọi nó là "siêu dữ liệu do người dùng nhập".
          *
          *     Vượt `plans.max_documents` hoặc vượt giới hạn dung lượng mỗi tệp thì 409.
          */
@@ -4887,7 +4904,6 @@ export interface components {
             /** @description Điểm từ mức này trở lên thì tự tạo cơ hội tiềm năng */
             leadScoreThreshold?: number;
             autoLeadCreation?: boolean;
-            autoLeadDailyLimit?: number;
             assignmentMode?: components["schemas"]["CheDoPhanCong"];
             /**
              * @description Tuỳ chọn phân công theo kênh và theo thẻ của UC015 2b:
@@ -4899,13 +4915,6 @@ export interface components {
             assignmentConfig?: {
                 [key: string]: unknown;
             };
-            /** @description Nhân viên chỉ thấy khách hàng mình phụ trách */
-            restrictAgentScope?: boolean;
-            /** @description Số lần tác tử AI từ chối liên tiếp trước khi chuyển cho người */
-            refusalHandoffThreshold?: number;
-            summaryTurnThreshold?: number;
-            /** @description Chính sách lưu trữ có thời hạn (Nghị định 13). `null` là giữ vô thời hạn. */
-            messageRetentionDays?: number | null;
             status: components["schemas"]["TrangThaiDoanhNghiep"];
         };
         CapNhatDoanhNghiepRequest: {
@@ -4918,15 +4927,10 @@ export interface components {
             aiTone?: components["schemas"]["GiongDieuAi"];
             leadScoreThreshold?: number;
             autoLeadCreation?: boolean;
-            autoLeadDailyLimit?: number;
             assignmentMode?: components["schemas"]["CheDoPhanCong"];
             assignmentConfig?: {
                 [key: string]: unknown;
             };
-            restrictAgentScope?: boolean;
-            refusalHandoffThreshold?: number;
-            summaryTurnThreshold?: number;
-            messageRetentionDays?: number | null;
         };
         /**
          * @description UC014 bước 6 · UC015 · UC031 bước 5. `MANUAL` là hội thoại vào hàng chờ chung, không tự gán.
@@ -5336,8 +5340,6 @@ export interface components {
             trigger: "UPLOAD" | "REINDEX" | "REPLACE";
             state: components["schemas"]["TrangThaiCongViecNap"];
             attempt: number;
-            /** @description Bản quét ảnh phải qua nhận dạng ký tự quang học */
-            usedOcr?: boolean;
             chunksCreated?: number;
             /** Format: int64 */
             tokensUsed?: number;
@@ -5531,11 +5533,19 @@ export interface components {
             citations?: components["schemas"]["TrichDan"][];
             refused: boolean;
             refusalReason?: components["schemas"]["LyDoTuChoi"] | null;
-            /** @description Lượt dùng đệm ngữ nghĩa — không tính chi phí gọi mô hình */
+            /**
+             * @description Lượt dùng đệm ngữ nghĩa — không tính chi phí gọi mô hình (UC023 1.2).
+             *     Nguồn: `ai.ai_interactions.is_cached` (V209).
+             */
             cached: boolean;
             /**
              * @description Câu trả lời **không đạt ngưỡng bám nguồn nên bị hủy, chưa từng gửi cho khách**. Giao
              *     diện phải nói rõ điều đó, nếu không người xem tưởng khách đã nhận được nó.
+             *
+             *     UC023 8.2 đòi "lưu lại trường hợp này để phân tích". **Không có cột riêng** — đây là
+             *     trường suy ra: `is_answered = false ? response_text : null`. `is_answered` vốn đã mang
+             *     đúng nghĩa "câu trả lời có tới khách hay không", nên một cột thứ hai chỉ để lặp lại
+             *     điều đó là chỗ hai nguồn sự thật bắt đầu lệch nhau.
              */
             discardedAnswer?: string | null;
             errorCode?: string | null;

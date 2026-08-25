@@ -186,11 +186,6 @@ function ThongSoViec({ viec }: { viec: CongViecNap }) {
           <span className="tabular-nums">{(viec.tokensUsed ?? 0).toLocaleString('vi-VN')}</span>
         </HangThongTin>
         <HangThongTin nhan="Chi phí nhúng">{tienVnd(viec.costVnd)}</HangThongTin>
-        {viec.usedOcr && (
-          <HangThongTin nhan="Nhận dạng ký tự">
-            <StatusChip sacThai="warning">Có dùng OCR</StatusChip>
-          </HangThongTin>
-        )}
         <HangThongTin nhan="Bắt đầu">
           {viec.startedAt ? format(new Date(viec.startedAt), 'HH:mm:ss dd/MM/yyyy') : 'Chưa chạy'}
         </HangThongTin>

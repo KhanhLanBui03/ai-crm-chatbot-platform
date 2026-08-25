@@ -152,24 +152,6 @@ export function TenantProfilePage() {
                   {GIONG_DIEU[nhap.aiTone ?? 'FRIENDLY'].moTa}
                 </FieldDescription>
               </Field>
-
-              <Field>
-                <FieldLabel htmlFor="dn-tu-choi">
-                  Số lần từ chối liên tiếp trước khi chuyển cho người
-                </FieldLabel>
-                <Input
-                  id="dn-tu-choi"
-                  type="number"
-                  min={1}
-                  className="max-w-28"
-                  value={nhap.refusalHandoffThreshold ?? 2}
-                  onChange={(e) => dat('refusalHandoffThreshold', Number(e.target.value))}
-                />
-                <FieldDescription>
-                  Tác tử từ chối liên tiếp nghĩa là kho tri thức chưa phủ câu hỏi này — để nó thử
-                  thêm lần nữa chỉ làm khách bực thêm.
-                </FieldDescription>
-              </Field>
             </>
           ),
         },
@@ -191,20 +173,6 @@ export function TenantProfilePage() {
                 />
                 <FieldDescription>
                   Từ 0 đến 100. Hạ ngưỡng xuống quá thấp là ngập CRM bằng cơ hội không có thật.
-                </FieldDescription>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="dn-gioi-han">Giới hạn mỗi ngày</FieldLabel>
-                <Input
-                  id="dn-gioi-han"
-                  type="number"
-                  min={0}
-                  className="max-w-28"
-                  value={nhap.autoLeadDailyLimit ?? 50}
-                  onChange={(e) => dat('autoLeadDailyLimit', Number(e.target.value))}
-                />
-                <FieldDescription>
-                  Chốt chặn cuối: một đợt tin nhắn bất thường không thể sinh ra hàng nghìn cơ hội.
                 </FieldDescription>
               </Field>
             </>
@@ -237,30 +205,10 @@ export function TenantProfilePage() {
             </Field>
           ),
         },
-        {
-          tieuDe: 'Lưu trữ dữ liệu',
-          moTa: 'Nghị định 13/2023/NĐ-CP — dữ liệu cá nhân chỉ được giữ trong thời hạn cần thiết.',
-          noiDung: nhap && (
-            <Field>
-              <FieldLabel htmlFor="dn-luu-tru">Giữ tin nhắn trong (ngày)</FieldLabel>
-              <Input
-                id="dn-luu-tru"
-                type="number"
-                min={1}
-                className="max-w-28"
-                value={nhap.messageRetentionDays ?? ''}
-                placeholder="Vô thời hạn"
-                onChange={(e) =>
-                  dat('messageRetentionDays', e.target.value ? Number(e.target.value) : null)
-                }
-              />
-              <FieldDescription>
-                Bỏ trống là giữ vô thời hạn. Quá hạn thì tin nhắn bị xoá tự động, không phục hồi
-                được — và số liệu thống kê đã tổng hợp thì vẫn giữ.
-              </FieldDescription>
-            </Field>
-          ),
-        },
+        // Gỡ 25/08/2026 — ba khối "Số lần từ chối liên tiếp", "Giới hạn mỗi ngày" và "Lưu trữ
+        // dữ liệu". UC004 bước 2 liệt kê đúng sáu trường của màn này và không có ba thứ đó;
+        // platform.tenants cũng không có cột nào giữ chúng, nên chúng chỉ tồn tại ở tầng mock.
+        // Xoá theo yêu cầu của Nghị định 13 nằm ở UC041 — SCR055–SCR058, không phải ở đây.
       ]}
     />
   )

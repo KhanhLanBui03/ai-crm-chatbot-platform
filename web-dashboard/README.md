@@ -194,6 +194,18 @@ Ngoài ra SCR034 bỏ thao tác "đánh dấu đã xử lý": danh sách khoản
 `ai_interactions`, không phải bảng có trạng thái riêng, và không use case nào cho phép đóng một
 mục bằng tay.
 
+**SCR007 gỡ ba khối ở đợt rà soát thứ hai** (25/08/2026): "Số lần từ chối liên tiếp", "Giới hạn
+mỗi ngày" và "Lưu trữ dữ liệu". UC004 bước 2 liệt kê **đúng sáu trường** của màn này — tên, lĩnh
+vực, múi giờ, ngôn ngữ mặc định, giờ làm việc, giọng điệu tác tử AI — và `platform.tenants` không
+có cột nào giữ ba thứ kia, nên chúng chỉ tồn tại ở tầng mock. Hai ngưỡng của tác tử là hằng số
+hiệu chỉnh ở tầng ứng dụng (bản đặc tả gọi là *"ngưỡng đã hiệu chỉnh"*), phạm vi nhân viên đọc từ
+`roles.permissions`, còn xoá theo Nghị định 13 nằm ở SCR055–SCR058.
+
+**13 màn của C5 và SCR054 đọc dữ liệu Track B** (`knowledge`, `ai`, `integration`). Chúng vẫn gọi
+`/api/v1/*` như mọi màn khác, nhưng java-core **không** đọc thẳng ba schema đó — nó gọi xuống bề
+mặt đọc nội bộ của ai-service rồi làm giàu tên người trước khi trả về (**ADR-0014**). Cho tới khi
+java-core hiện thực phần proxy, chúng chạy trên MSW.
+
 > **Kiểm thử qua CDP — ba cái bẫy của môi trường này.** Cửa sổ Chrome ở máy phát triển bị che
 > (`document.visibilityState === 'hidden'`), nên (1) animation đóng băng: hộp thoại đã đóng vẫn
 > nằm lại DOM ở `data-state="closed"` — phải hỏi `data-state`, đừng hỏi phần tử còn tồn tại;
@@ -213,6 +225,10 @@ mục bằng tay.
 - [x] **C2 Nền tảng** — SCR001, 002, 004, 005, 006 (5 màn)
 - [x] **Kiểm toán** — SCR054–SCR058 (5 màn)
 - [x] Rà soát truy vết 42 UC — gỡ 4 màn, 7 endpoint; `assignmentMode` vào SCR007
+- [x] **Rà soát truy vết đợt hai** — diff 365 thuộc tính hợp đồng với tên cột trong migration.
+      Gỡ 6 trường không có cột và không có use case (5 ở SCR007, `usedOcr` ở SCR033); 6 cột mới
+      ở V114/V115/V209 phục vụ UC017 · UC018 · UC023 · UC026 · UC028. **Không bảng mới.**
+      Đường đọc dữ liệu Track B: **ADR-0014**
 - [ ] Tách gói khi build — gói chính đang vượt 500 kB
 - [ ] `web-widget` vẫn trống — TypeScript thuần, không kéo React vào
 
