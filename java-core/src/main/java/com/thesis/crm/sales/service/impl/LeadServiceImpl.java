@@ -32,6 +32,8 @@ public class LeadServiceImpl implements LeadService {
     @Transactional
     public LeadResponse create(CreateLeadRequest request) {
         // TODO: ánh xạ request -> Lead, lấy tenantId từ ngữ cảnh bảo mật (KHÔNG lấy từ request)
+        // TODO: đặt source = LeadSource.MANUAL — nhánh AI_AUTO đi qua API nội bộ của Track B
+        // TODO: đặt status = LeadStatus.NEW; KHÔNG đặt currentScore (Track B tính, ghi qua API)
         // TODO: leadRepository.save(lead)
         // TODO: ghi outbox_events {aggregate_type=lead, event_type=LeadCreated, event_version=1}
         //       trong CÙNG transaction này — xem platform/messaging/
