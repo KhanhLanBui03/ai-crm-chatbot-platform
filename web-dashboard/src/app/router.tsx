@@ -24,11 +24,9 @@ import { ErasureRequestsPage } from '@/features/audit/ErasureRequestsPage'
 import { ConversationStatsPage } from '@/features/analytics/ConversationStatsPage'
 import { FunnelPage } from '@/features/analytics/FunnelPage'
 import { OverviewPage } from '@/features/analytics/OverviewPage'
-import { ReportExportsPage } from '@/features/analytics/ReportExportsPage'
 import { TopicsPage } from '@/features/analytics/TopicsPage'
 import { ContactDetailPage } from '@/features/contacts/ContactDetailPage'
 import { ContactsPage } from '@/features/contacts/ContactsPage'
-import { AssignmentRulesPage } from '@/features/conversations/AssignmentRulesPage'
 import { ActivitiesPage } from '@/features/deals/ActivitiesPage'
 import { DealDetailPage } from '@/features/deals/DealDetailPage'
 import { DealsBoardPage } from '@/features/deals/DealsBoardPage'
@@ -37,7 +35,6 @@ import { LeadsPage } from '@/features/leads/LeadsPage'
 import { InboxPage } from '@/features/conversations/InboxPage'
 import { ChannelsPage } from '@/features/settings/ChannelsPage'
 import { RolesPage } from '@/features/settings/RolesPage'
-import { SessionsPage } from '@/features/settings/SessionsPage'
 import { SettingsIndexPage } from '@/features/settings/SettingsIndexPage'
 import { SubscriptionPage } from '@/features/settings/SubscriptionPage'
 import { TenantProfilePage } from '@/features/settings/TenantProfilePage'
@@ -112,7 +109,6 @@ export function Router() {
         <Route path="/phan-tich/pheu" element={<FunnelPage />} />
         <Route path="/phan-tich/chu-de" element={<TopicsPage />} />
         <Route path="/phan-tich/hieu-qua-ai" element={<AiPerformancePage />} />
-        <Route path="/phan-tich/bao-cao" element={<ReportExportsPage />} />
 
         {/* Cài đặt — mười mục gom sau một trang chủ thay vì rải ra thanh bên */}
         <Route path="/cai-dat" element={<SettingsIndexPage />} />
@@ -122,10 +118,8 @@ export function Router() {
         <Route path="/cai-dat/thue-bao" element={<SubscriptionPage />} />
         <Route path="/cai-dat/han-muc" element={<UsagePage />} />
         <Route path="/cai-dat/muc-su-dung" element={<UsageDailyPage />} />
-        <Route path="/cai-dat/quy-tac-phan-cong" element={<AssignmentRulesPage />} />
         <Route path="/cai-dat/kenh" element={<ChannelsPage />} />
         <Route path="/cai-dat/widget" element={<WidgetConfigPage />} />
-        <Route path="/cai-dat/phien" element={<SessionsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/hop-thu" replace />} />

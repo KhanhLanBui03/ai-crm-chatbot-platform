@@ -8,7 +8,6 @@ import type {
   MaGoi,
   MaVaiTro,
   NguoiDung,
-  PhienDangNhap,
   ThueBao,
   TrangThaiNguoiDung,
   VaiTro,
@@ -132,16 +131,6 @@ export const platformApi = apiSlice.injectEndpoints({
       providesTags: ['HanMuc'],
     }),
 
-    // ── SCR011 — phiên đăng nhập ──────────────────────────────────────────────
-    danhSachPhien: build.query<PhienDangNhap[], void>({
-      query: () => ({ url: '/api/v1/me/sessions' }),
-      providesTags: ['PhienDangNhap'],
-    }),
-
-    thuHoiPhien: build.mutation<void, string>({
-      query: (id) => ({ url: `/api/v1/me/sessions/${id}`, method: 'DELETE' }),
-      invalidatesTags: ['PhienDangNhap'],
-    }),
   }),
 })
 
@@ -158,6 +147,4 @@ export const {
   useDoiGoiMutation,
   useHanMucHienTaiQuery,
   useMucSuDungTheoNgayQuery,
-  useDanhSachPhienQuery,
-  useThuHoiPhienMutation,
 } = platformApi

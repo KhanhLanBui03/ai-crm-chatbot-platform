@@ -4,7 +4,6 @@ import type {
   GoiDichVu,
   HanMucSuDung,
   NguoiDung,
-  PhienDangNhap,
   ThueBao,
   VaiTro,
 } from '@/types/schema'
@@ -161,7 +160,8 @@ export const hoSoDoanhNghiep: DoanhNghiep = {
   leadScoreThreshold: 70,
   autoLeadCreation: true,
   autoLeadDailyLimit: 50,
-  autoAssignEnabled: true,
+  assignmentMode: 'LEAST_BUSY',
+  assignmentConfig: {},
   restrictAgentScope: false,
   refusalHandoffThreshold: 2,
   summaryTurnThreshold: 8,
@@ -281,32 +281,3 @@ export const mucSuDungTheoNgay: DiemSuDungNgay[] = daySoNgay(21, new Date('2026-
     }),
 )
 
-// ── SCR011 phiên đăng nhập ────────────────────────────────────────────────────
-
-export const danhSachPhien: PhienDangNhap[] = [
-  {
-    id: 's-0001',
-    ipAddress: '113.161.44.28',
-    userAgent: 'Chrome 151 · macOS 15',
-    issuedAt: gio('2026-08-21', '08:02'),
-    expiresAt: gio('2026-08-28', '08:02'),
-    isCurrent: true,
-  },
-  {
-    id: 's-0002',
-    ipAddress: '113.161.44.28',
-    userAgent: 'Safari 18 · iPhone',
-    issuedAt: gio('2026-08-20', '19:41'),
-    expiresAt: gio('2026-08-27', '19:41'),
-    isCurrent: false,
-  },
-  {
-    id: 's-0003',
-    // Địa chỉ khác tỉnh — đúng loại phiên mà SCR011 tồn tại để người dùng nhận ra và thu hồi
-    ipAddress: '14.191.203.77',
-    userAgent: 'Chrome 149 · Windows 11',
-    issuedAt: gio('2026-08-11', '23:14'),
-    expiresAt: gio('2026-08-18', '23:14'),
-    isCurrent: false,
-  },
-]

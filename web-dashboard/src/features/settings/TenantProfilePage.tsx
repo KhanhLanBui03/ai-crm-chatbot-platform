@@ -13,12 +13,27 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useAppSelector } from '@/app/store/hooks'
-import type { DoanhNghiep, GiongDieuAi } from '@/types/schema'
+import type { CheDoPhanCong, DoanhNghiep, GiongDieuAi } from '@/types/schema'
 
 const GIONG_DIEU: Record<GiongDieuAi, { nhan: string; moTa: string }> = {
   PROFESSIONAL: { nhan: 'Chuyên nghiệp', moTa: 'Xưng hô trang trọng, câu đầy đủ chủ vị.' },
   FRIENDLY: { nhan: 'Thân thiện', moTa: 'Gần gũi, dùng "mình" và "bạn".' },
   CONCISE: { nhan: 'Ngắn gọn', moTa: 'Trả lời thẳng, ít câu xã giao.' },
+}
+
+const CHE_DO_PHAN_CONG: Record<CheDoPhanCong, { nhan: string; moTa: string }> = {
+  LEAST_BUSY: {
+    nhan: 'Người ít việc nhất',
+    moTa: 'Giao cho nhân viên đang phụ trách ít hội thoại đang mở nhất. Không cần cấu hình gì thêm.',
+  },
+  ROUND_ROBIN: {
+    nhan: 'Luân phiên',
+    moTa: 'Chia đều theo vòng, không nhìn tải hiện tại. Công bằng về số lượng, không công bằng về công sức.',
+  },
+  MANUAL: {
+    nhan: 'Thủ công',
+    moTa: 'Hội thoại vào hàng chờ chung, nhân viên tự nhận. Chọn khi đội nhỏ và ai cũng thấy hết hàng chờ.',
+  },
 }
 
 const MUI_GIO = ['Asia/Ho_Chi_Minh', 'Asia/Bangkok', 'Asia/Singapore', 'UTC']
@@ -193,6 +208,33 @@ export function TenantProfilePage() {
                 </FieldDescription>
               </Field>
             </>
+          ),
+        },
+        {
+          tieuDe: 'Phân công',
+          moTa: 'Cách chọn nhân viên khi tác tử AI chuyển giao hội thoại hoặc khi có cơ hội tiềm năng mới.',
+          noiDung: nhap && (
+            <Field>
+              <FieldLabel htmlFor="dn-phan-cong">Chế độ phân công</FieldLabel>
+              <Select
+                value={nhap.assignmentMode ?? 'LEAST_BUSY'}
+                onValueChange={(v) => dat('assignmentMode', v as CheDoPhanCong)}
+              >
+                <SelectTrigger id="dn-phan-cong" className="max-w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(CHE_DO_PHAN_CONG).map(([ma, { nhan }]) => (
+                    <SelectItem key={ma} value={ma}>
+                      {nhan}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                {CHE_DO_PHAN_CONG[nhap.assignmentMode ?? 'LEAST_BUSY'].moTa}
+              </FieldDescription>
+            </Field>
           ),
         },
         {

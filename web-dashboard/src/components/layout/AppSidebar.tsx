@@ -93,7 +93,6 @@ const MUC_PHAN_TICH = [
   { duongDan: '/phan-tich/pheu', nhan: 'Phễu chuyển đổi' },
   { duongDan: '/phan-tich/chu-de', nhan: 'Chủ đề hội thoại' },
   { duongDan: '/phan-tich/hieu-qua-ai', nhan: 'Hiệu quả tác tử AI' },
-  { duongDan: '/phan-tich/bao-cao', nhan: 'Tệp báo cáo' },
 ] as const
 
 export function AppSidebar() {

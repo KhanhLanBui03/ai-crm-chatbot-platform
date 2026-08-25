@@ -7,7 +7,6 @@ import {
   danhSachHoatDong,
   danhSachLead,
   danhSachPheu,
-  danhSachTepBaoCao,
   hoiThoaiTheoNgay,
   pheuChuyenDoi,
   thongKeChuDe,
@@ -17,12 +16,11 @@ import { chiTietKhachHang } from '@/mocks/du-lieu-khach-hang'
 import { danhSachNguoiDung } from '@/mocks/du-lieu-nen-tang'
 import { NGUOI_DUNG_MAU } from '@/mocks/handlers/xac-thuc'
 import { locTheo, loi, ok, trangHoa } from '@/mocks/tienIch'
-import type { Deal, HoatDong, Lead, Pheu, TepBaoCao } from '@/types/schema'
+import type { Deal, HoatDong, Lead, Pheu } from '@/types/schema'
 
 let lead: Lead[] = [...danhSachLead]
 let deal: Deal[] = [...danhSachDeal]
 let hoatDong: HoatDong[] = [...danhSachHoatDong]
-let tepBaoCao: TepBaoCao[] = [...danhSachTepBaoCao]
 
 /** Tính lại số đếm và tổng tiền của từng giai đoạn từ danh sách deal hiện tại. */
 function pheuTuoi(): Pheu[] {
@@ -65,37 +63,30 @@ export const banHangHandlers = [
     return HttpResponse.json(ok(thongKeChuDe))
   }),
 
-  // ── SCR053 tệp báo cáo ────────────────────────────────────────────────────
-  http.get('/api/v1/reports/exports', async ({ request }) => {
-    await delay(300)
-    return HttpResponse.json(
-      ok(trangHoa(tepBaoCao, { url: new URL(request.url), co: 10, sapMacDinh: '-requestedAt' })),
-    )
-  }),
-
+  // UC042 nhánh 4.2 — máy chủ sinh tệp đồng bộ và trả thẳng nội dung. Không có
+  // danh sách tệp đã xuất vì không có tệp nào được lưu lại; hậu điều kiện "ghi vào
+  // nhật ký kiểm toán" do handler audit-logs đảm nhiệm.
   http.post('/api/v1/reports/exports', async ({ request }) => {
     await delay(700)
-    const than = (await request.json()) as { reportType: TepBaoCao['reportType']; format: 'CSV' | 'XLSX' | 'PDF' }
-    const moi: TepBaoCao = {
-      id: crypto.randomUUID(),
-      reportType: than.reportType,
-      format: than.format,
-      // Xuất báo cáo là việc chạy nền — trả về QUEUED chứ không trả về tệp
-      status: 'QUEUED',
-      rowCount: null,
-      partIndex: null,
-      partTotal: null,
-      fileUri: null,
-      fileSizeBytes: null,
-      containsPersonalData: than.reportType === 'AUDIT_LOG',
-      expiresAt: null,
-      requestedByName: NGUOI_DUNG_MAU.fullName ?? NGUOI_DUNG_MAU.email,
-      requestedAt: new Date().toISOString(),
-      completedAt: null,
-      errorMessage: null,
+    const than = (await request.json()) as {
+      reportType: string
+      format: 'CSV' | 'XLSX'
+      confirmPersonalData?: boolean
     }
-    tepBaoCao = [moi, ...tepBaoCao]
-    return HttpResponse.json(ok(moi), { status: 202 })
+    if (than.reportType === 'AUDIT_LOG' && !than.confirmPersonalData) {
+      return HttpResponse.json(
+        loi('Báo cáo có chứa dữ liệu cá nhân. Cần xác nhận trước khi xuất.'),
+        { status: 422 },
+      )
+    }
+    const noiDung = `bao_cao;${than.reportType};${new Date().toISOString()}\n`
+    return new HttpResponse(noiDung, {
+      status: 200,
+      headers: {
+        'Content-Type': than.format === 'CSV' ? 'text/csv' : 'application/octet-stream',
+        'Content-Disposition': `attachment; filename="${than.reportType.toLowerCase()}.${than.format.toLowerCase()}"`,
+      },
+    })
   }),
 
   // ── SCR041–SCR043 cơ hội tiềm năng ────────────────────────────────────────

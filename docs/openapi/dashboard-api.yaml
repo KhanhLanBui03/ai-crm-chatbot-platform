@@ -5,8 +5,11 @@
 # Nhưng nó vẫn là hợp đồng: `web-dashboard/src/types/api.d.ts` sinh tự động từ đây bằng
 # `npx openapi-typescript`, và tầng mock MSW phải trả đúng hình dạng ghi ở đây.
 #
-# Dẫn xuất từ ma trận UC → bảng (`docs/erd-ai-crm.md` mục 16) và 58 màn hình SCR001–SCR058.
-# Mọi enum lấy nguyên văn từ ràng buộc CHECK của ERD — không phát minh giá trị mới.
+# Dẫn xuất từ ma trận UC → bảng (`docs/erd-ai-crm.md` mục 10.1) và 58 màn hình SCR001–SCR058.
+#
+# FILE NÀY LÀ NGUỒN CHÂN LÝ CỦA ENUM. Lược đồ CSDL theo nó, không ngược lại: ràng buộc CHECK
+# trong migration V1xx/V2xx chép giá trị từ `components/schemas` ở đây. Đổi một enum tại đây là
+# đổi hợp đồng với web-dashboard (type TS sinh tự động) VÀ buộc phải sửa migration tương ứng.
 #
 # BA QUY TẮC BẤT BIẾN CỦA TOÀN BỘ FILE
 #
@@ -271,35 +274,11 @@ paths:
                   - $ref: '#/components/schemas/ApiResponse'
                   - properties: { data: { $ref: '#/components/schemas/NguoiDungHienTai' } }
 
-  /api/v1/me/sessions:
-    get:
-      tags: [Xác thực]
-      summary: SCR011 — các phiên đăng nhập đang mở
-      description: |
-        UC002 bước 5. Hiển thị địa chỉ IP và trình duyệt để người dùng tự nhận ra phiên lạ.
-        Chỉ trả phiên còn hiệu lực (`revoked_at IS NULL` và chưa hết hạn).
-      responses:
-        '200':
-          description: Danh sách phiên
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/ApiResponse'
-                  - properties:
-                      data:
-                        type: array
-                        items: { $ref: '#/components/schemas/PhienDangNhap' }
-
-  /api/v1/me/sessions/{sessionId}:
-    delete:
-      tags: [Xác thực]
-      summary: Thu hồi một phiên đăng nhập
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
-      responses:
-        '200': { $ref: '#/components/responses/OkRong' }
-        '404': { $ref: '#/components/responses/KhongThay' }
+  # Không có /me/sessions — xem docs/traceability-uc-db-api-screen.md mục "API dư".
+  # Không use case nào cho người dùng tự xem hay thu hồi phiên của mình. UC003 3a và
+  # UC007 bước 10 chỉ đòi HỆ THỐNG thu hồi phiên khi vô hiệu hoá tài khoản hoặc tạm
+  # ngưng doanh nghiệp — việc đó nằm trong POST /users/{userId}/disable và thao tác
+  # tạm ngưng tenant, không cần bề mặt API riêng. SCR011 gỡ theo.
 
   # ══════════════════════════════════════════════════════════════════════════════
   # B. Người dùng và phân quyền — UC003
@@ -1070,98 +1049,16 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/OkRong' }
 
-  /api/v1/canned-responses:
-    get:
-      tags: [Hộp thư]
-      summary: Mẫu câu trả lời
-      description: |
-        Khác với gợi ý câu trả lời của tác tử AI — gợi ý đó truy hồi động từ kho tri thức, còn đây
-        là mẫu do doanh nghiệp soạn sẵn, gọi bằng gõ tắt.
-      parameters:
-        - $ref: '#/components/parameters/TuKhoa'
-      responses:
-        '200':
-          description: Danh sách mẫu câu
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/ApiResponse'
-                  - properties:
-                      data:
-                        type: array
-                        items: { $ref: '#/components/schemas/MauCauTraLoi' }
+  # Không có /canned-responses — mẫu câu trả lời soạn sẵn chỉ xuất hiện ở UC013 luồng
+  # THAY THẾ 3.1. Luồng chính UC013 bước 4 là "gợi ý câu trả lời được truy hồi từ kho
+  # tri thức", tức POST /knowledge/search đã có sẵn bên dưới. Giữ cả hai là dựng hai
+  # cơ chế gợi ý song song cho cùng một ô soạn thảo.
 
-  /api/v1/assignment-rules:
-    get:
-      tags: [Hộp thư]
-      summary: SCR022 — quy tắc phân công tự động
-      description: Dùng chung cho hội thoại (UC015) và cơ hội tiềm năng (UC031) qua cột `appliesTo`.
-      parameters:
-        - name: appliesTo
-          in: query
-          schema:
-            type: string
-            enum: [CONVERSATION, LEAD]
-      responses:
-        '200':
-          description: Danh sách quy tắc, sắp theo `priority`
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/ApiResponse'
-                  - properties:
-                      data:
-                        type: array
-                        items: { $ref: '#/components/schemas/QuyTacPhanCong' }
-    post:
-      tags: [Hộp thư]
-      summary: SCR023 — tạo quy tắc phân công
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/LuuQuyTacPhanCongRequest' }
-      responses:
-        '201':
-          description: Đã tạo
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/ApiResponse'
-                  - properties: { data: { $ref: '#/components/schemas/QuyTacPhanCong' } }
-        '403': { $ref: '#/components/responses/KhongDuQuyen' }
-
-  /api/v1/assignment-rules/{ruleId}:
-    parameters:
-      - name: ruleId
-        in: path
-        required: true
-        schema: { type: string, format: uuid }
-    patch:
-      tags: [Hộp thư]
-      summary: Sửa quy tắc phân công
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/LuuQuyTacPhanCongRequest' }
-      responses:
-        '200':
-          description: Đã cập nhật
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/ApiResponse'
-                  - properties: { data: { $ref: '#/components/schemas/QuyTacPhanCong' } }
-    delete:
-      tags: [Hộp thư]
-      summary: Xóa quy tắc phân công
-      responses:
-        '200': { $ref: '#/components/responses/OkRong' }
+  # Không có /assignment-rules — UC014 bước 6 và UC031 bước 5 (luồng chính) chỉ cần
+  # "chọn nhân viên phù hợp theo quy tắc phân công đã cấu hình"; quy tắc theo kênh và
+  # theo thẻ nằm ở UC015 2b, luồng THAY THẾ. Cấu hình đó là hai trường của doanh
+  # nghiệp, không phải một tập thực thể có vòng đời riêng — xem `assignmentMode` và
+  # `assignmentConfig` ở GET/PUT /tenant. SCR022 và SCR023 gộp vào SCR007.
 
   # ══════════════════════════════════════════════════════════════════════════════
   # F. Khách hàng — UC016, UC017
@@ -1667,15 +1564,16 @@ paths:
 
         `distinctContactCount` quan trọng hơn `occurrenceCount`: cùng một câu hỏi bị từ chối bởi
         **nhiều khách khác nhau** là tín hiệu mạnh hơn một khách hỏi đi hỏi lại.
+
+        **Nguồn dữ liệu:** truy vấn gộp trên `ai.ai_interactions` — `is_answered = false`, nhóm
+        theo `user_query` đã chuẩn hoá, đếm theo `conversation_id` phân biệt. Không có bảng
+        `knowledge_gaps` riêng: một khoảng trống không có thuộc tính nào ngoài những thứ suy ra
+        được từ chính các lượt từ chối, và không thao tác nào của người dùng ghi vào nó.
+        Đánh đổi: gom nhóm bằng chuẩn hoá chuỗi chứ không bằng ngữ nghĩa, nên hai cách hỏi khác
+        hẳn về câu chữ của cùng một vấn đề sẽ nằm ở hai dòng.
       parameters:
         - $ref: '#/components/parameters/Trang'
         - $ref: '#/components/parameters/CoSize'
-        - name: status
-          in: query
-          schema:
-            type: string
-            enum: [OPEN, RESOLVED, IGNORED]
-            default: OPEN
         - name: gapType
           in: query
           schema: { $ref: '#/components/schemas/LoaiKhoangTrong' }
@@ -1696,39 +1594,11 @@ paths:
                                 type: array
                                 items: { $ref: '#/components/schemas/KhoangTrongTriThuc' }
 
-  /api/v1/knowledge-gaps/{gapId}:
-    patch:
-      tags: [Tri thức]
-      summary: Đánh dấu khoảng trống đã xử lý hoặc bỏ qua
-      parameters:
-        - name: gapId
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [status]
-              properties:
-                status:
-                  type: string
-                  enum: [RESOLVED, IGNORED]
-                resolvedDocumentId:
-                  type: [string, 'null']
-                  format: uuid
-                  description: Tài liệu vừa bổ sung để lấp khoảng trống này
-      responses:
-        '200':
-          description: Đã cập nhật
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/ApiResponse'
-                  - properties: { data: { $ref: '#/components/schemas/KhoangTrongTriThuc' } }
+  # Không có PATCH /knowledge-gaps/{gapId} — không use case nào cho phép đánh dấu một
+  # khoảng trống là đã xử lý. UC025 bước 7 chỉ đưa câu hỏi VÀO danh sách; UC039 bước
+  # 9-10 chỉ ĐỌC nó, sắp theo tần suất. Trạng thái thật của một khoảng trống là "kho
+  # tri thức đã bao phủ hay chưa", và câu đó tự trả lời khi tài liệu mới được nạp:
+  # lượt từ chối ngừng phát sinh thì mục đó tụt khỏi đầu danh sách.
 
   # ══════════════════════════════════════════════════════════════════════════════
   # H. Tác tử AI, MCP và giám sát — UC021, UC024, UC027, UC028
@@ -1847,6 +1717,13 @@ paths:
     get:
       tags: [Tác tử AI]
       summary: SCR039 — sổ đăng ký công cụ
+      description: |
+        UC021 hậu điều kiện. **Nguồn dữ liệu:** mảng `integration.mcp_servers.tool_schema_cache`,
+        không phải một bảng `tool_registry` riêng — công cụ không có vòng đời độc lập với máy chủ
+        của nó, ngắt máy chủ là toàn bộ công cụ mất hiệu lực (UC021 1a-2a).
+
+        `id` là UUIDv5 sinh từ cặp (`serverId`, `name`), nên nó ổn định qua mọi lần khám phá lại:
+        một công cụ đã duyệt không đổi định danh chỉ vì máy chủ được bắt tay lần nữa.
       parameters:
         - name: serverId
           in: query
@@ -1875,9 +1752,14 @@ paths:
       tags: [Tác tử AI]
       summary: Bật, tắt hoặc duyệt lại lược đồ công cụ
       description: |
-        Bật một công cụ có `riskLevel` khác `READ` thì `requiresConfirmation` **bắt buộc** bằng
-        true — ràng buộc này nằm ở tầng cơ sở dữ liệu, gửi false lên sẽ bị từ chối 422 chứ không
-        phải được ghi rồi bỏ qua.
+        UC021 bước 9. Bật một công cụ có `riskLevel` khác `READ` thì `requiresConfirmation`
+        **bắt buộc** bằng true và không được tắt (UC021 9.2) — gửi false lên bị từ chối 422 chứ
+        không phải được ghi rồi bỏ qua.
+
+        Ràng buộc này cưỡng chế ở **tầng ứng dụng**, không phải ở CSDL: sổ đăng ký nằm trong
+        `mcp_servers.tool_schema_cache` (jsonb) và PostgreSQL không kiểm được từng trường bên
+        trong. Đánh đổi có chủ ý — đổi lại UC028 không phải nối bảng ở đường chạy trước **mọi**
+        lời gọi công cụ.
 
         `approveSchemaHash` là cách chấp nhận lược đồ đã đổi: khi máy chủ MCP đổi lược đồ, công cụ
         tự tắt (`auto_disabled_reason = SCHEMA_HASH_CHANGED`) và chờ người duyệt lại — một máy chủ
@@ -2075,6 +1957,20 @@ paths:
       tags: [Tác tử AI]
       summary: Cảnh báo an toàn
       description: |
+        UC040 bước 7-8 (luồng chính). **Nguồn dữ liệu: hợp nhất ba chỗ**, không có bảng
+        `safety_events` riêng —
+
+        | Loại sự kiện | Nguồn |
+        |---|---|
+        | `TOOL_CALL_BLOCKED` | `ai.ai_tool_calls` với `decision = 'BLOCKED'`, kèm `block_reason` |
+        | `PROMPT_INJECTION_*` · `*_PROBE` | `ai.ai_interactions.safety_flag` |
+        | Nỗ lực truy cập ngoài phạm vi doanh nghiệp | `platform.audit_logs` với `severity = 'CRITICAL'` |
+
+        Ba nguồn vì ba chủ sở hữu khác nhau: hai cái đầu do `ai-service` ghi (Track B), cái cuối
+        do `java-core` ghi (Track A), và `ai_app` **không** có quyền trên schema của Track A —
+        đó là ADR-0002 chứ không phải thiếu sót. Gộp lại ở tầng đọc rẻ hơn nhiều so với dựng một
+        đường ghi xuyên ranh giới hai làn.
+
         `threatSurface` nối thẳng tới `docs/threat-model.md` (T1–T8), nên bảng này dùng được luôn
         cho phần đánh giá an toàn của báo cáo.
 
@@ -2672,39 +2568,25 @@ paths:
                   - properties: { data: { $ref: '#/components/schemas/HieuQuaAi' } }
 
   /api/v1/reports/exports:
-    get:
-      tags: [Phân tích]
-      summary: SCR053 — danh sách tệp báo cáo đã xuất
-      description: Tệp quá `expiresAt` bị dọn — trạng thái chuyển `EXPIRED`, `fileUri` thành rỗng.
-      parameters:
-        - $ref: '#/components/parameters/Trang'
-        - $ref: '#/components/parameters/CoSize'
-      responses:
-        '200':
-          description: Trang tệp báo cáo
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/ApiResponse'
-                  - properties:
-                      data:
-                        allOf:
-                          - $ref: '#/components/schemas/Page'
-                          - properties:
-                              items:
-                                type: array
-                                items: { $ref: '#/components/schemas/TepBaoCao' }
     post:
       tags: [Phân tích]
-      summary: Yêu cầu xuất báo cáo
+      summary: Xuất một báo cáo ra tệp
       description: |
-        UC042. Chạy bất đồng bộ: trả 202 với trạng thái `QUEUED`, giao diện hỏi lại cho tới khi
-        `READY`.
+        UC042, hiện thực theo nhánh **4.2** của chính use case: *"Nếu khối lượng dữ liệu nhỏ →
+        xuất trực tiếp và trả tệp ngay, không cần tạo công việc chạy nền."* Ở quy mô doanh nghiệp
+        vừa và nhỏ, mọi báo cáo trong 42 use case đều rơi vào nhánh đó, nên máy chủ sinh tệp
+        đồng bộ và trả thẳng nội dung thay vì trả một mã công việc để giao diện hỏi lại.
+
+        Hậu điều kiện *"ghi thao tác xuất vào nhật ký kiểm toán"* do `platform.audit_logs` đảm
+        nhiệm, `action = REPORT_EXPORTED`, `after_data` chứa loại báo cáo và phạm vi dữ liệu.
 
         `containsPersonalData = true` thì máy chủ **bắt buộc** nhận `confirmPersonalData = true`,
         nếu không trả 422. Đây là bước xác nhận có ý thức trước khi dữ liệu cá nhân rời khỏi hệ
         thống dưới dạng tệp — nghĩa vụ theo Nghị định 13.
+
+        Vượt `EXPORT_MAX_ROWS` thì trả 413 kèm gợi ý thu hẹp khoảng thời gian (UC042 4.5). Khi
+        một lần xuất bắt đầu vượt 30 giây thì mới cần `analytics.report_exports` và luồng chạy
+        nền của UC042 bước 5-8; đó là một migration cộng thêm, không đòi sửa endpoint này.
       requestBody:
         required: true
         content:
@@ -2716,7 +2598,7 @@ paths:
                 reportType: { $ref: '#/components/schemas/LoaiBaoCao' }
                 format:
                   type: string
-                  enum: [CSV, XLSX, PDF]
+                  enum: [CSV, XLSX]
                 params:
                   type: object
                   additionalProperties: true
@@ -2725,38 +2607,23 @@ paths:
                   type: boolean
                   default: false
       responses:
-        '202':
-          description: Đã xếp hàng
+        '200':
+          description: Nội dung tệp báo cáo
+          content:
+            text/csv:
+              schema: { type: string }
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '413':
+          description: Vượt giới hạn số dòng cho một lần xuất
           content:
             application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/ApiResponse'
-                  - properties: { data: { $ref: '#/components/schemas/TepBaoCao' } }
+              schema: { $ref: '#/components/schemas/ApiResponse' }
         '422':
           description: Báo cáo chứa dữ liệu cá nhân nhưng chưa xác nhận
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ApiResponse' }
-
-  /api/v1/reports/exports/{exportId}:
-    get:
-      tags: [Phân tích]
-      summary: Trạng thái một lần xuất báo cáo
-      parameters:
-        - name: exportId
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          description: Tệp báo cáo
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/ApiResponse'
-                  - properties: { data: { $ref: '#/components/schemas/TepBaoCao' } }
 
   # ══════════════════════════════════════════════════════════════════════════════
   # K. Kiểm toán và tuân thủ — UC040, UC041
@@ -2995,11 +2862,6 @@ components:
       in: query
       description: Ngày kết thúc khoảng thống kê
       schema: { type: string, format: date }
-    SessionId:
-      name: sessionId
-      in: path
-      required: true
-      schema: { type: string, format: uuid }
     UserId:
       name: userId
       in: path
@@ -3276,9 +3138,6 @@ components:
     LoaiBaoCao:
       type: string
       enum: [OVERVIEW, FUNNEL, TOPICS, AI_PERFORMANCE, AUDIT_LOG]
-    TrangThaiTepBaoCao:
-      type: string
-      enum: [QUEUED, RUNNING, READY, FAILED, EXPIRED]
     MucNghiemTrongKiemToan:
       type: string
       enum: [INFO, WARNING, CRITICAL]
@@ -3357,19 +3216,6 @@ components:
         tenantName: { type: string }
         planName: { type: string }
 
-    PhienDangNhap:
-      type: object
-      required: [id, issuedAt, expiresAt, isCurrent]
-      properties:
-        id: { type: string, format: uuid }
-        ipAddress: { type: [string, 'null'] }
-        userAgent: { type: [string, 'null'] }
-        issuedAt: { type: string, format: date-time }
-        expiresAt: { type: string, format: date-time }
-        isCurrent:
-          type: boolean
-          description: Phiên đang dùng để gọi chính endpoint này — giao diện không cho tự thu hồi nó
-
     # ── B. Người dùng và phân quyền ────────────────────────────────────────────
 
     NguoiDung:
@@ -3438,7 +3284,17 @@ components:
           description: Điểm từ mức này trở lên thì tự tạo cơ hội tiềm năng
         autoLeadCreation: { type: boolean }
         autoLeadDailyLimit: { type: integer }
-        autoAssignEnabled: { type: boolean }
+        assignmentMode:
+          $ref: '#/components/schemas/CheDoPhanCong'
+        assignmentConfig:
+          type: object
+          additionalProperties: true
+          description: |
+            Tuỳ chọn phân công theo kênh và theo thẻ của UC015 2b:
+            `{"byChannel": {...}, "byTag": {...}}`. Rỗng thì áp `assignmentMode` cho mọi hội thoại.
+
+            Thay cho một tập thực thể `assignment_rules` riêng: một doanh nghiệp vừa và nhỏ có
+            **một** chế độ phân công, không phải một danh sách quy tắc có vòng đời độc lập.
         restrictAgentScope:
           type: boolean
           description: Nhân viên chỉ thấy khách hàng mình phụ trách
@@ -3462,11 +3318,19 @@ components:
         leadScoreThreshold: { type: integer, minimum: 0, maximum: 100 }
         autoLeadCreation: { type: boolean }
         autoLeadDailyLimit: { type: integer, minimum: 0 }
-        autoAssignEnabled: { type: boolean }
+        assignmentMode: { $ref: '#/components/schemas/CheDoPhanCong' }
+        assignmentConfig: { type: object, additionalProperties: true }
         restrictAgentScope: { type: boolean }
         refusalHandoffThreshold: { type: integer, minimum: 1 }
         summaryTurnThreshold: { type: integer, minimum: 1 }
         messageRetentionDays: { type: [integer, 'null'], minimum: 1 }
+
+    CheDoPhanCong:
+      type: string
+      enum: [ROUND_ROBIN, LEAST_BUSY, MANUAL]
+      description: |
+        UC014 bước 6 · UC015 · UC031 bước 5. `MANUAL` là hội thoại vào hàng chờ chung, không tự gán.
+        `LEAST_BUSY` mặc định vì nó không cần cấu hình gì thêm và đúng với luồng chính.
 
     GoiDichVu:
       type: object
@@ -3796,66 +3660,6 @@ components:
         acceptedAt: { type: [string, 'null'], format: date-time }
         occurredAt: { type: string, format: date-time }
 
-    MauCauTraLoi:
-      type: object
-      required: [id, title, content]
-      properties:
-        id: { type: string, format: uuid }
-        title: { type: string }
-        content: { type: string }
-        shortcut: { type: [string, 'null'] }
-        category: { type: [string, 'null'] }
-        usageCount: { type: integer }
-
-    QuyTacPhanCong:
-      type: object
-      required: [id, name, appliesTo, strategy, priority, isActive]
-      properties:
-        id: { type: string, format: uuid }
-        name: { type: string }
-        appliesTo:
-          type: string
-          enum: [CONVERSATION, LEAD]
-        strategy:
-          type: string
-          enum: [LEAST_BUSY, ROUND_ROBIN, FIXED_USER]
-        channelType:
-          oneOf:
-            - { $ref: '#/components/schemas/LoaiKenh' }
-            - { type: 'null' }
-          description: Điều kiện áp dụng; `null` là mọi kênh
-        tagId: { type: [string, 'null'], format: uuid }
-        targetUserId:
-          type: [string, 'null']
-          format: uuid
-          description: Bắt buộc khi `strategy = FIXED_USER`
-        targetUserName: { type: [string, 'null'] }
-        maxConcurrent: { type: [integer, 'null'] }
-        priority:
-          type: integer
-          description: Thứ tự xét quy tắc — số nhỏ xét trước
-        isActive: { type: boolean }
-
-    LuuQuyTacPhanCongRequest:
-      type: object
-      required: [name, appliesTo, strategy]
-      properties:
-        name: { type: string, maxLength: 100 }
-        appliesTo:
-          type: string
-          enum: [CONVERSATION, LEAD]
-        strategy:
-          type: string
-          enum: [LEAST_BUSY, ROUND_ROBIN, FIXED_USER]
-        channelType:
-          oneOf:
-            - { $ref: '#/components/schemas/LoaiKenh' }
-            - { type: 'null' }
-        tagId: { type: [string, 'null'], format: uuid }
-        targetUserId: { type: [string, 'null'], format: uuid }
-        maxConcurrent: { type: [integer, 'null'], minimum: 1 }
-        priority: { type: integer, default: 0 }
-        isActive: { type: boolean, default: true }
 
     # ── F. Khách hàng ──────────────────────────────────────────────────────────
 
@@ -4059,7 +3863,7 @@ components:
 
     KhoangTrongTriThuc:
       type: object
-      required: [id, questionText, gapType, occurrenceCount, distinctContactCount, status]
+      required: [id, questionText, gapType, occurrenceCount, distinctContactCount]
       properties:
         id: { type: string, format: uuid }
         questionText: { type: string }
@@ -4070,11 +3874,9 @@ components:
           description: |
             Tín hiệu mạnh hơn `occurrenceCount`: cùng câu hỏi bị từ chối bởi nhiều khách khác nhau
             khác hẳn một khách hỏi đi hỏi lại.
-        priority: { type: integer }
-        status:
-          type: string
-          enum: [OPEN, RESOLVED, IGNORED]
-        resolvedDocumentId: { type: [string, 'null'], format: uuid }
+        priority:
+          type: integer
+          description: Hình chiếu của `distinctContactCount` theo bậc, để giao diện tô màu mà không tự đặt ngưỡng
         firstSeenAt: { type: string, format: date-time }
         lastSeenAt: { type: string, format: date-time }
 
@@ -4715,28 +4517,6 @@ components:
           type: array
           items: { type: string }
 
-    TepBaoCao:
-      type: object
-      required: [id, reportType, format, status, requestedAt]
-      properties:
-        id: { type: string, format: uuid }
-        reportType: { $ref: '#/components/schemas/LoaiBaoCao' }
-        format:
-          type: string
-          enum: [CSV, XLSX, PDF]
-        status: { $ref: '#/components/schemas/TrangThaiTepBaoCao' }
-        rowCount: { type: [integer, 'null'] }
-        partIndex: { type: [integer, 'null'] }
-        partTotal:
-          type: [integer, 'null']
-          description: Báo cáo lớn tự chia thành nhiều tệp
-        fileUri: { type: [string, 'null'] }
-        fileSizeBytes: { type: [integer, 'null'], format: int64 }
-        containsPersonalData: { type: boolean }
-        expiresAt: { type: [string, 'null'], format: date-time }
-        requestedByName: { type: string }
-        requestedAt: { type: string, format: date-time }
-        completedAt: { type: [string, 'null'], format: date-time }
         errorMessage: { type: [string, 'null'] }
 
     # ── K. Kiểm toán và tuân thủ ───────────────────────────────────────────────

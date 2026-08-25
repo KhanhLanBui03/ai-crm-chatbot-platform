@@ -32,7 +32,6 @@ export const knowledgeApi = apiSlice.injectEndpoints({
         url: '/api/v1/documents',
         params: {
           q: bo.tuKhoa || undefined,
-          status: bo.trangThai,
           sourceType: bo.loaiNguon,
           page: bo.trang ?? 0,
           size: 10,
@@ -121,13 +120,12 @@ export const knowledgeApi = apiSlice.injectEndpoints({
     // ── SCR034 — khoảng trống tri thức ────────────────────────────────────────
     danhSachKhoangTrong: build.query<
       Page<KhoangTrongTriThuc>,
-      { tuKhoa?: string; trangThai?: string; loai?: LoaiKhoangTrong; trang?: number }
+      { tuKhoa?: string; loai?: LoaiKhoangTrong; trang?: number }
     >({
       query: (bo) => ({
         url: '/api/v1/knowledge-gaps',
         params: {
           q: bo.tuKhoa || undefined,
-          status: bo.trangThai,
           gapType: bo.loai,
           page: bo.trang ?? 0,
           size: 10,
@@ -136,17 +134,6 @@ export const knowledgeApi = apiSlice.injectEndpoints({
       providesTags: ['ChunkTriThuc'],
     }),
 
-    danhDauKhoangTrong: build.mutation<
-      KhoangTrongTriThuc,
-      { id: string; status: 'RESOLVED' | 'IGNORED'; resolvedDocumentId?: string | null }
-    >({
-      query: ({ id, ...than }) => ({
-        url: `/api/v1/knowledge-gaps/${id}`,
-        method: 'PATCH',
-        body: than,
-      }),
-      invalidatesTags: ['ChunkTriThuc'],
-    }),
   }),
 })
 
@@ -160,5 +147,4 @@ export const {
   useLazyTimTriThucQuery,
   useDanhSachCongViecNapQuery,
   useDanhSachKhoangTrongQuery,
-  useDanhDauKhoangTrongMutation,
 } = knowledgeApi

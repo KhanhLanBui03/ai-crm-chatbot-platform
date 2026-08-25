@@ -1,73 +1,18 @@
 import { HttpResponse, delay, http } from 'msw'
 
 import { chiTietHoiThoai, danhSachHoiThoai, nguCanhHoiThoai } from '@/mocks/du-lieu'
-import { danhSachQuyTac, mauCauTraLoi } from '@/mocks/du-lieu-hop-thu'
 import { danhSachNguoiDung } from '@/mocks/du-lieu-nen-tang'
 import { NGUOI_DUNG_MAU } from '@/mocks/handlers/xac-thuc'
-import { locTheo, loi, ok } from '@/mocks/tienIch'
+import { loi, ok } from '@/mocks/tienIch'
 import type { Page } from '@/types/api'
 import type {
   HoiThoaiTomTat,
   LyDoChuyenGiao,
-  QuyTacPhanCong,
   SuKienChuyenGiao,
   TrangThaiHoiThoai,
 } from '@/types/schema'
 
-let quyTac: QuyTacPhanCong[] = [...danhSachQuyTac]
-
 export const hopThuHandlers = [
-  // ── SCR022 · SCR023 quy tắc phân công ─────────────────────────────────────
-  http.get('/api/v1/assignment-rules', async ({ request }) => {
-    await delay(260)
-    const url = new URL(request.url)
-    const ket = locTheo(quyTac, url.searchParams.get('appliesTo'), (q, v) => q.appliesTo === v)
-    // Sắp theo priority giảm dần — đây chính là thứ tự máy chủ duyệt quy tắc, nên hiển thị
-    // khác đi là mời người dùng hiểu sai quy tắc nào thắng
-    return HttpResponse.json(ok([...ket].sort((a, b) => b.priority - a.priority)))
-  }),
-
-  http.post('/api/v1/assignment-rules', async ({ request }) => {
-    await delay(600)
-    const than = (await request.json()) as Partial<QuyTacPhanCong>
-    const nguoi = danhSachNguoiDung.find((u) => u.id === than.targetUserId)
-    const moi: QuyTacPhanCong = {
-      id: crypto.randomUUID(),
-      name: than.name ?? 'Quy tắc mới',
-      appliesTo: than.appliesTo ?? 'CONVERSATION',
-      strategy: than.strategy ?? 'LEAST_BUSY',
-      channelType: than.channelType ?? null,
-      tagId: than.tagId ?? null,
-      targetUserId: than.targetUserId ?? null,
-      targetUserName: nguoi?.fullName ?? null,
-      maxConcurrent: than.maxConcurrent ?? null,
-      priority: than.priority ?? 0,
-      isActive: than.isActive ?? true,
-    }
-    quyTac = [...quyTac, moi]
-    return HttpResponse.json(ok(moi), { status: 201 })
-  }),
-
-  http.patch('/api/v1/assignment-rules/:id', async ({ params, request }) => {
-    await delay(450)
-    const q = quyTac.find((x) => x.id === params.id)
-    if (!q) return HttpResponse.json(loi('Không tìm thấy quy tắc.'), { status: 404 })
-    Object.assign(q, await request.json())
-    quyTac = [...quyTac]
-    return HttpResponse.json(ok(q))
-  }),
-
-  http.delete('/api/v1/assignment-rules/:id', async ({ params }) => {
-    await delay(400)
-    quyTac = quyTac.filter((x) => x.id !== params.id)
-    return HttpResponse.json(ok(null))
-  }),
-
-  http.get('/api/v1/canned-responses', async () => {
-    await delay(200)
-    return HttpResponse.json(ok(mauCauTraLoi))
-  }),
-
   // ── SCR021 phân công và chuyển giao ───────────────────────────────────────
   http.post('/api/v1/conversations/:id/assign', async ({ params, request }) => {
     await delay(550)

@@ -386,8 +386,7 @@ export const triThucHandlers = [
   http.get('/api/v1/knowledge-gaps', async ({ request }) => {
     await delay(320)
     const url = new URL(request.url)
-    let ket = locTheo(khoangTrong, url.searchParams.get('status'), (k, v) => k.status === v)
-    ket = locTheo(ket, url.searchParams.get('gapType'), (k, v) => k.gapType === v)
+    const ket = locTheo(khoangTrong, url.searchParams.get('gapType'), (k, v) => k.gapType === v)
     return HttpResponse.json(
       ok(
         trangHoa(ket, {
@@ -398,20 +397,6 @@ export const triThucHandlers = [
         }),
       ),
     )
-  }),
-
-  http.patch('/api/v1/knowledge-gaps/:id', async ({ params, request }) => {
-    await delay(420)
-    const id = params.id as string
-    const k = khoangTrong.find((x) => x.id === id)
-    if (!k) return HttpResponse.json(loi('Không tìm thấy khoảng trống tri thức.'), { status: 404 })
-    const than = (await request.json()) as {
-      status: 'RESOLVED' | 'IGNORED'
-      resolvedDocumentId?: string | null
-    }
-    const capNhat = { ...k, status: than.status, resolvedDocumentId: than.resolvedDocumentId ?? null }
-    khoangTrong = khoangTrong.map((x) => (x.id === id ? capNhat : x))
-    return HttpResponse.json(ok(capNhat))
   }),
 
   // ── SCR037 · SCR038 — máy chủ MCP ─────────────────────────────────────────

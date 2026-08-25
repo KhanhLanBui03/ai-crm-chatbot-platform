@@ -153,7 +153,7 @@ bộ lọc** (lối thoát: gỡ lọc). Dùng nhầm là chỉ sai đường ch
 - [x] Tầng mock MSW + dữ liệu giả gắn kiểu theo giao ước
 - [x] Sáu mẫu lặp + `DataTable` trên TanStack Table v9
 - [x] WebSocket thời gian thực + máy chủ giả bằng `ws.link()` (ADR-0013)
-- [x] **58/58 màn hình thật** (SCR012+013 và SCR019+020 mỗi cặp chung một trang; SCR006 và
+- [x] **54/54 màn hình thật** (SCR012+013 và SCR019+020 mỗi cặp chung một trang; SCR006 và
       SCR048 chung một component, khác khung dẫn theo người đọc)
 
 ### Màn hình đã dựng
@@ -164,10 +164,9 @@ Thứ tự dựng theo plan bước 9 — rủi ro giảm dần: C3 → C4 → C
 |---|---|---|
 | Xác thực | SCR003 Đăng nhập | chữ ký |
 | **C3** Hộp thư | SCR019+020 Hộp thư · SCR021 Phân công & chuyển giao | chữ ký |
-| **C3** Quy tắc | SCR022 Quy tắc phân công · SCR023 Tạo quy tắc | M1 · M3 |
 | **C3** Khách hàng | SCR024 Hồ sơ · SCR025 Hợp nhất · SCR026 Danh bạ · SCR027 Tạo · SCR028 Ghi chú | chữ ký ×2 · M1 · M3 ×2 |
 | **C4** Bán hàng | SCR041 DS Lead · SCR042 Chi tiết Lead · SCR043 Tạo Lead · SCR044 Kanban · SCR045 Chi tiết Deal · SCR046 Tạo Deal · SCR047 Hoạt động | chữ ký ×4 · M3 ×2 · M1 |
-| **C4** Phân tích | SCR048 Tổng quan · SCR049 Hội thoại/ngày · SCR050 Phễu · SCR052 Chủ đề · SCR053 Tệp báo cáo | chữ ký ×2 · M5 · M1 ×2 |
+| **C4** Phân tích | SCR048 Tổng quan · SCR049 Hội thoại/ngày · SCR050 Phễu · SCR052 Chủ đề | chữ ký ×2 · M5 · M1 |
 | **C5** Tri thức | SCR029 Tải lên · SCR030 DS tài liệu · SCR031 Tìm thử · SCR032 Các đoạn · SCR033 Tiến độ nạp · SCR034 Khoảng trống | chữ ký ×2 · M1 ×3 · M6 |
 | **C5** Tác tử AI | SCR035 Nhật ký gọi công cụ · SCR036 Giám sát lượt xử lý · SCR037 Máy chủ MCP · SCR038 Thêm máy chủ · SCR039 Sổ đăng ký công cụ · SCR040 Duyệt lời gọi · SCR051 Hiệu quả & chi phí | chữ ký ×3 · M1 ×2 · M3 ×2 |
 | **C2** Nền tảng | SCR001 Đăng ký · SCR002 Xác thực thư · SCR004 Quên mật khẩu · SCR005 Đặt lại mật khẩu · SCR006 Bảng điều khiển quản trị | chữ ký · M6 · M3 dạng trang ×2 · dùng lại SCR048 |
@@ -175,11 +174,25 @@ Thứ tự dựng theo plan bước 9 — rủi ro giảm dần: C3 → C4 → C
 | Doanh nghiệp | SCR007 Hồ sơ · SCR008 Người dùng · SCR009 Mời · SCR010 Phân quyền | M4 · M1 · M3 · riêng |
 | Gói dịch vụ | SCR012+013 Thuê bao · SCR014 Hạn mức · SCR015 Mức dùng theo ngày | M2 · chữ ký · M1 |
 | Kênh | SCR016 Kênh · SCR017 Kết nối · SCR018 Web Widget | M1 · M3 · M4 |
-| Tài khoản | SCR011 Phiên đăng nhập | chữ ký |
 
 Mỗi màn kiểm bằng chuột thật qua Chrome DevTools Protocol trước khi coi là xong: **292 mục
 kiểm, tất cả đạt, console sạch** — 134 mục của C3/C4 cộng 158 mục của C5, C2, Kiểm toán và
 một bộ hồi quy cho các màn cũ.
+
+### Bốn màn đã gỡ — 58 → 54
+
+Đợt rà soát truy vết ngược 42 use case (`docs/traceability-uc-db-api-screen.md`) cho thấy bốn
+màn không truy vết được tới luồng chính hay hậu điều kiện của use case nào:
+
+| Màn | Vì sao gỡ |
+|---|---|
+| SCR011 Phiên đăng nhập | Không use case nào cho người dùng tự xem hay thu hồi phiên. UC003 3a và UC007 b10 chỉ đòi **hệ thống** thu hồi khi vô hiệu hoá tài khoản hoặc tạm ngưng doanh nghiệp |
+| SCR022 · SCR023 Quy tắc phân công | Chỉ có ở UC015 2b, luồng **thay thế**. Luồng chính UC014 b6 / UC031 b5 chỉ cần "người ít việc nhất" → gộp thành một khối `assignmentMode` trong **SCR007** |
+| SCR053 Tệp báo cáo | UC042 hiện thực theo nhánh **4.2** của chính use case (xuất đồng bộ, trả tệp ngay), nên không có tệp nào được lưu lại để liệt kê |
+
+Ngoài ra SCR034 bỏ thao tác "đánh dấu đã xử lý": danh sách khoảng trống là truy vấn gộp trên
+`ai_interactions`, không phải bảng có trạng thái riêng, và không use case nào cho phép đóng một
+mục bằng tay.
 
 > **Kiểm thử qua CDP — ba cái bẫy của môi trường này.** Cửa sổ Chrome ở máy phát triển bị che
 > (`document.visibilityState === 'hidden'`), nên (1) animation đóng băng: hộp thoại đã đóng vẫn
@@ -199,6 +212,7 @@ một bộ hồi quy cho các màn cũ.
 - [x] **C5 AI & Tri thức** — SCR029–SCR040, SCR051 (13 màn)
 - [x] **C2 Nền tảng** — SCR001, 002, 004, 005, 006 (5 màn)
 - [x] **Kiểm toán** — SCR054–SCR058 (5 màn)
+- [x] Rà soát truy vết 42 UC — gỡ 4 màn, 7 endpoint; `assignmentMode` vào SCR007
 - [ ] Tách gói khi build — gói chính đang vượt 500 kB
 - [ ] `web-widget` vẫn trống — TypeScript thuần, không kéo React vào
 

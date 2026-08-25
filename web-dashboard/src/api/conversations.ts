@@ -4,11 +4,8 @@ import type { Page } from '@/types/api'
 import type {
   HoiThoaiChiTiet,
   HoiThoaiTomTat,
-  LoaiKenh,
   LyDoChuyenGiao,
-  MauCauTraLoi,
   NguCanhHoiThoai,
-  QuyTacPhanCong,
   SuKienChuyenGiao,
   TrangThaiHoiThoai,
 } from '@/types/schema'
@@ -198,50 +195,9 @@ export const conversationsApi = apiSlice.injectEndpoints({
       invalidatesTags: (_kq, _loi, { id }) => [{ type: 'HoiThoai', id }, CA_DANH_SACH],
     }),
 
-    // ── SCR022 · SCR023 — quy tắc phân công tự động ───────────────────────────
-
-    danhSachQuyTac: build.query<QuyTacPhanCong[], { apDungCho?: 'CONVERSATION' | 'LEAD' }>({
-      query: (bo) => ({ url: '/api/v1/assignment-rules', params: { appliesTo: bo.apDungCho } }),
-      providesTags: ['HoiThoai'],
-    }),
-
-    taoQuyTac: build.mutation<QuyTacPhanCong, LuuQuyTac>({
-      query: (than) => ({ url: '/api/v1/assignment-rules', method: 'POST', body: than }),
-      invalidatesTags: ['HoiThoai'],
-    }),
-
-    suaQuyTac: build.mutation<QuyTacPhanCong, { id: string; than: Partial<LuuQuyTac> }>({
-      query: ({ id, than }) => ({
-        url: `/api/v1/assignment-rules/${id}`,
-        method: 'PATCH',
-        body: than,
-      }),
-      invalidatesTags: ['HoiThoai'],
-    }),
-
-    xoaQuyTac: build.mutation<void, string>({
-      query: (id) => ({ url: `/api/v1/assignment-rules/${id}`, method: 'DELETE' }),
-      invalidatesTags: ['HoiThoai'],
-    }),
-
-    danhSachMauCauTraLoi: build.query<MauCauTraLoi[], void>({
-      query: () => ({ url: '/api/v1/canned-responses' }),
-      providesTags: ['HoiThoai'],
-    }),
   }),
 })
 
-export interface LuuQuyTac {
-  name: string
-  appliesTo: 'CONVERSATION' | 'LEAD'
-  strategy: 'LEAST_BUSY' | 'ROUND_ROBIN' | 'FIXED_USER'
-  channelType?: LoaiKenh | null
-  tagId?: string | null
-  targetUserId?: string | null
-  maxConcurrent?: number | null
-  priority?: number
-  isActive?: boolean
-}
 
 export const {
   useDanhSachHoiThoaiQuery,
@@ -250,9 +206,4 @@ export const {
   usePhanCongHoiThoaiMutation,
   useChuyenGiaoHoiThoaiMutation,
   useDoiTrangThaiHoiThoaiMutation,
-  useDanhSachQuyTacQuery,
-  useTaoQuyTacMutation,
-  useSuaQuyTacMutation,
-  useXoaQuyTacMutation,
-  useDanhSachMauCauTraLoiQuery,
 } = conversationsApi

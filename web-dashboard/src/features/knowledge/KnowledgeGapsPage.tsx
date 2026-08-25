@@ -4,22 +4,14 @@ import { vi } from 'date-fns/locale'
 import { MessageCircleQuestion, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
 
-import { useDanhDauKhoangTrongMutation, useDanhSachKhoangTrongQuery } from '@/api/knowledge'
+import { useDanhSachKhoangTrongQuery } from '@/api/knowledge'
 import { ListPage } from '@/components/layout/ListPage'
 import type { CotBang } from '@/components/ui/data-table'
 import { StatusChip } from '@/components/ui/status-chip'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { NHAN_LOAI_KHOANG_TRONG } from '@/features/knowledge/nhan'
 import type { KhoangTrongTriThuc, LoaiKhoangTrong } from '@/types/schema'
-
-const NHAN_TRANG_THAI: Record<string, { nhan: string; sacThai: 'warning' | 'success' | 'neutral' }> =
-  {
-    OPEN: { nhan: 'Chưa xử lý', sacThai: 'warning' },
-    RESOLVED: { nhan: 'Đã bổ sung', sacThai: 'success' },
-    IGNORED: { nhan: 'Bỏ qua', sacThai: 'neutral' },
-  }
 
 /**
  * SCR034 — khoảng trống tri thức. Mẫu M1.
@@ -30,17 +22,20 @@ const NHAN_TRANG_THAI: Record<string, { nhan: string; sacThai: 'warning' | 'succ
  *
  * Loại khoảng trống quyết định cách xử lý, nên nó không chỉ là một nhãn phân loại:
  * `OUT_OF_SCOPE_DATA` cần nối công cụ MCP chứ viết bao nhiêu tài liệu cũng không giải quyết được.
+ *
+ * **Không có thao tác đánh dấu đã xử lý.** Danh sách này là truy vấn gộp trên `ai_interactions`
+ * chứ không phải một bảng có trạng thái riêng, và không use case nào cho phép đóng một mục bằng
+ * tay: một khoảng trống tự biến mất khi tài liệu mới được nạp và lượt từ chối ngừng phát sinh.
+ * Nút "đã xử lý" ở đây sẽ là lời nói dối — nó ẩn dòng đi mà không sửa gì trong kho tri thức.
  */
 export function KnowledgeGapsPage() {
   const dieuHuong = useNavigate()
   const [boLoc, datBoLoc] = useState<{
     tuKhoa?: string
-    trangThai?: string
     loai?: LoaiKhoangTrong
     trang?: number
-  }>({ trangThai: 'OPEN', trang: 0 })
+  }>({ trang: 0 })
   const [sapXep, datSapXep] = useState<SortingState>([{ id: 'distinctContactCount', desc: true }])
-  const [danhDau] = useDanhDauKhoangTrongMutation()
 
   const truyVan = useDanhSachKhoangTrongQuery(boLoc)
 
@@ -96,15 +91,6 @@ export function KnowledgeGapsPage() {
         ),
       },
       {
-        id: 'status',
-        accessorKey: 'status',
-        header: 'Trạng thái',
-        cell: ({ row }) => {
-          const t = NHAN_TRANG_THAI[row.original.status] ?? NHAN_TRANG_THAI.OPEN
-          return <StatusChip sacThai={t.sacThai}>{t.nhan}</StatusChip>
-        },
-      },
-      {
         id: 'lastSeenAt',
         accessorKey: 'lastSeenAt',
         header: 'Gặp gần nhất',
@@ -122,15 +108,6 @@ export function KnowledgeGapsPage() {
     [],
   )
 
-  async function danhDauNhieu(ids: string[], status: 'RESOLVED' | 'IGNORED') {
-    await Promise.all(ids.map((id) => danhDau({ id, status }).unwrap()))
-    toast.success(
-      status === 'RESOLVED'
-        ? `Đã đánh dấu ${ids.length} khoảng trống là đã bổ sung tài liệu.`
-        : `Đã bỏ qua ${ids.length} khoảng trống.`,
-    )
-  }
-
   return (
     <ListPage
       tieuDe="Khoảng trống tri thức"
@@ -145,14 +122,6 @@ export function KnowledgeGapsPage() {
       }}
       boLoc={[
         {
-          khoa: 'trangThai',
-          nhan: 'Trạng thái',
-          luaChon: Object.entries(NHAN_TRANG_THAI).map(([giaTri, v]) => ({
-            giaTri,
-            nhan: v.nhan,
-          })),
-        },
-        {
           khoa: 'loai',
           nhan: 'Loại',
           luaChon: Object.entries(NHAN_LOAI_KHOANG_TRONG).map(([giaTri, v]) => ({
@@ -161,13 +130,9 @@ export function KnowledgeGapsPage() {
           })),
         },
       ]}
-      giaTriBoLoc={{ trangThai: boLoc.trangThai, loai: boLoc.loai }}
-      onDoiBoLoc={(khoa, giaTri) =>
-        datBoLoc((cu) => ({
-          ...cu,
-          trang: 0,
-          ...(khoa === 'trangThai' ? { trangThai: giaTri } : { loai: giaTri as LoaiKhoangTrong }),
-        }))
+      giaTriBoLoc={{ loai: boLoc.loai }}
+      onDoiBoLoc={(_khoa, giaTri) =>
+        datBoLoc((cu) => ({ ...cu, trang: 0, loai: giaTri as LoaiKhoangTrong }))
       }
       onGoHetBoLoc={() => datBoLoc({ trang: 0 })}
       sapXep={{ trangThai: sapXep, onDoiSapXep: datSapXep }}
@@ -176,10 +141,6 @@ export function KnowledgeGapsPage() {
         nhan: 'Tải lên tài liệu bổ sung',
         onClick: () => dieuHuong('/tri-thuc'),
       }}
-      thaoTacHangLoat={[
-        { nhan: 'Đã bổ sung tài liệu', onClick: (ids) => danhDauNhieu(ids, 'RESOLVED') },
-        { nhan: 'Bỏ qua', onClick: (ids) => danhDauNhieu(ids, 'IGNORED') },
-      ]}
       khiChuaCoDuLieu={{
         BieuTuong: MessageCircleQuestion,
         tieuDe: 'Chưa ghi nhận khoảng trống nào',

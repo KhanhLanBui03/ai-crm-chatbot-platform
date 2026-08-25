@@ -3,7 +3,6 @@ import { HttpResponse, delay, http } from 'msw'
 import {
   danhSachGoi,
   danhSachNguoiDung,
-  danhSachPhien,
   danhSachVaiTro,
   hanMucHienTai,
   hoSoDoanhNghiep,
@@ -16,7 +15,6 @@ import type { DoanhNghiep, MaGoi } from '@/types/schema'
 /** Bản ghi sống của phiên chạy — sửa được, để thao tác ghi thấy được hiệu lực ngay. */
 let doanhNghiep: DoanhNghiep = { ...hoSoDoanhNghiep }
 let nguoiDung = [...danhSachNguoiDung]
-let phien = [...danhSachPhien]
 let thueBao = { ...thueBaoHienTai }
 
 export const nenTangHandlers = [
@@ -141,22 +139,4 @@ export const nenTangHandlers = [
     return HttpResponse.json(ok(hanMucHienTai))
   }),
 
-  // ── SCR011 phiên đăng nhập ─────────────────────────────────────────────────
-  http.get('/api/v1/me/sessions', async () => {
-    await delay(240)
-    return HttpResponse.json(ok(phien))
-  }),
-
-  http.delete('/api/v1/me/sessions/:id', async ({ params }) => {
-    await delay(450)
-    const p = phien.find((x) => x.id === params.id)
-    if (!p) return HttpResponse.json(loi('Không tìm thấy phiên.'), { status: 404 })
-    if (p.isCurrent) {
-      // Thu hồi chính phiên đang dùng là tự đăng xuất — máy chủ chặn, để nút "Đăng xuất" là
-      // đường duy nhất làm việc đó, có xác nhận đàng hoàng
-      return HttpResponse.json(loi('Không thu hồi được phiên đang dùng.'), { status: 409 })
-    }
-    phien = phien.filter((x) => x.id !== params.id)
-    return HttpResponse.json(ok(null))
-  }),
 ]

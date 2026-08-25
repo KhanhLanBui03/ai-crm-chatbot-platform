@@ -1,10 +1,8 @@
 import { apiSlice } from '@/api/apiSlice'
-import type { Page } from '@/types/api'
 import type {
   BacPheu,
   DiemHoiThoaiNgay,
   LoaiBaoCao,
-  TepBaoCao,
   ThongKeChuDe,
   TongQuan,
 } from '@/types/schema'
@@ -54,21 +52,23 @@ export const analyticsApi = apiSlice.injectEndpoints({
       providesTags: ['BaoCao'],
     }),
 
-    // ── SCR053 — tệp báo cáo đã xuất ──────────────────────────────────────────
-    danhSachTepBaoCao: build.query<Page<TepBaoCao>, { trang?: number; sapXep?: string }>({
-      query: (bo) => ({
-        url: '/api/v1/reports/exports',
-        params: { sort: bo.sapXep, page: bo.trang ?? 0, size: 10 },
-      }),
-      providesTags: ['BaoCao'],
-    }),
-
+    // UC042 nhánh 4.2 — máy chủ sinh tệp đồng bộ và trả thẳng nội dung, không có
+    // mã công việc để hỏi lại. Vì vậy đây là mutation trả Blob, không trả thực thể.
     yeuCauXuatBaoCao: build.mutation<
-      TepBaoCao,
-      { reportType: LoaiBaoCao; format: 'CSV' | 'XLSX' | 'PDF'; params?: Record<string, unknown> }
+      Blob,
+      {
+        reportType: LoaiBaoCao
+        format: 'CSV' | 'XLSX'
+        params?: Record<string, unknown>
+        confirmPersonalData?: boolean
+      }
     >({
-      query: (than) => ({ url: '/api/v1/reports/exports', method: 'POST', body: than }),
-      invalidatesTags: ['BaoCao'],
+      query: (than) => ({
+        url: '/api/v1/reports/exports',
+        method: 'POST',
+        body: than,
+        responseHandler: (res: Response) => res.blob(),
+      }),
     }),
   }),
 })
@@ -78,6 +78,5 @@ export const {
   useHoiThoaiTheoNgayQuery,
   usePheuChuyenDoiQuery,
   useThongKeChuDeQuery,
-  useDanhSachTepBaoCaoQuery,
   useYeuCauXuatBaoCaoMutation,
 } = analyticsApi

@@ -23,7 +23,6 @@ export const apiSlice = createApi({
     'Tenant',
     'NguoiDung',
     'VaiTro',
-    'PhienDangNhap',
     'GoiDichVu',
     'HanMuc',
     'NhatKyKiemToan',

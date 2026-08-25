@@ -407,79 +407,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/me/sessions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * SCR011 — các phiên đăng nhập đang mở
-         * @description UC002 bước 5. Hiển thị địa chỉ IP và trình duyệt để người dùng tự nhận ra phiên lạ.
-         *     Chỉ trả phiên còn hiệu lực (`revoked_at IS NULL` và chưa hết hạn).
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Danh sách phiên */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"] & {
-                            data?: components["schemas"]["PhienDangNhap"][];
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/me/sessions/{sessionId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Thu hồi một phiên đăng nhập */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    sessionId: components["parameters"]["SessionId"];
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                200: components["responses"]["OkRong"];
-                404: components["responses"]["KhongThay"];
-            };
-        };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/users": {
         parameters: {
             query?: never;
@@ -1861,181 +1788,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/canned-responses": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Mẫu câu trả lời
-         * @description Khác với gợi ý câu trả lời của tác tử AI — gợi ý đó truy hồi động từ kho tri thức, còn đây
-         *     là mẫu do doanh nghiệp soạn sẵn, gọi bằng gõ tắt.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Từ khóa tìm kiếm, không phân biệt hoa thường và không phân biệt dấu */
-                    q?: components["parameters"]["TuKhoa"];
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Danh sách mẫu câu */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"] & {
-                            data?: components["schemas"]["MauCauTraLoi"][];
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/assignment-rules": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * SCR022 — quy tắc phân công tự động
-         * @description Dùng chung cho hội thoại (UC015) và cơ hội tiềm năng (UC031) qua cột `appliesTo`.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    appliesTo?: "CONVERSATION" | "LEAD";
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Danh sách quy tắc, sắp theo `priority` */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"] & {
-                            data?: components["schemas"]["QuyTacPhanCong"][];
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        /** SCR023 — tạo quy tắc phân công */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["LuuQuyTacPhanCongRequest"];
-                };
-            };
-            responses: {
-                /** @description Đã tạo */
-                201: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"] & {
-                            data?: components["schemas"]["QuyTacPhanCong"];
-                        };
-                    };
-                };
-                403: components["responses"]["KhongDuQuyen"];
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/assignment-rules/{ruleId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ruleId: string;
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Xóa quy tắc phân công */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    ruleId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                200: components["responses"]["OkRong"];
-            };
-        };
-        options?: never;
-        head?: never;
-        /** Sửa quy tắc phân công */
-        patch: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    ruleId: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["LuuQuyTacPhanCongRequest"];
-                };
-            };
-            responses: {
-                /** @description Đã cập nhật */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"] & {
-                            data?: components["schemas"]["QuyTacPhanCong"];
-                        };
-                    };
-                };
-            };
-        };
-        trace?: never;
-    };
     "/api/v1/contacts": {
         parameters: {
             query?: never;
@@ -2897,6 +2649,13 @@ export interface paths {
          *
          *     `distinctContactCount` quan trọng hơn `occurrenceCount`: cùng một câu hỏi bị từ chối bởi
          *     **nhiều khách khác nhau** là tín hiệu mạnh hơn một khách hỏi đi hỏi lại.
+         *
+         *     **Nguồn dữ liệu:** truy vấn gộp trên `ai.ai_interactions` — `is_answered = false`, nhóm
+         *     theo `user_query` đã chuẩn hoá, đếm theo `conversation_id` phân biệt. Không có bảng
+         *     `knowledge_gaps` riêng: một khoảng trống không có thuộc tính nào ngoài những thứ suy ra
+         *     được từ chính các lượt từ chối, và không thao tác nào của người dùng ghi vào nó.
+         *     Đánh đổi: gom nhóm bằng chuẩn hoá chuỗi chứ không bằng ngữ nghĩa, nên hai cách hỏi khác
+         *     hẳn về câu chữ của cùng một vấn đề sẽ nằm ở hai dòng.
          */
         get: {
             parameters: {
@@ -2905,7 +2664,6 @@ export interface paths {
                     page?: components["parameters"]["Trang"];
                     /** @description Số bản ghi mỗi trang */
                     size?: components["parameters"]["CoSize"];
-                    status?: "OPEN" | "RESOLVED" | "IGNORED";
                     gapType?: components["schemas"]["LoaiKhoangTrong"];
                 };
                 header?: never;
@@ -2935,58 +2693,6 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/api/v1/knowledge-gaps/{gapId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Đánh dấu khoảng trống đã xử lý hoặc bỏ qua */
-        patch: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    gapId: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        /** @enum {string} */
-                        status: "RESOLVED" | "IGNORED";
-                        /**
-                         * Format: uuid
-                         * @description Tài liệu vừa bổ sung để lấp khoảng trống này
-                         */
-                        resolvedDocumentId?: string | null;
-                    };
-                };
-            };
-            responses: {
-                /** @description Đã cập nhật */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"] & {
-                            data?: components["schemas"]["KhoangTrongTriThuc"];
-                        };
-                    };
-                };
-            };
-        };
         trace?: never;
     };
     "/api/v1/mcp-servers": {
@@ -3196,7 +2902,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** SCR039 — sổ đăng ký công cụ */
+        /**
+         * SCR039 — sổ đăng ký công cụ
+         * @description UC021 hậu điều kiện. **Nguồn dữ liệu:** mảng `integration.mcp_servers.tool_schema_cache`,
+         *     không phải một bảng `tool_registry` riêng — công cụ không có vòng đời độc lập với máy chủ
+         *     của nó, ngắt máy chủ là toàn bộ công cụ mất hiệu lực (UC021 1a-2a).
+         *
+         *     `id` là UUIDv5 sinh từ cặp (`serverId`, `name`), nên nó ổn định qua mọi lần khám phá lại:
+         *     một công cụ đã duyệt không đổi định danh chỉ vì máy chủ được bắt tay lần nữa.
+         */
         get: {
             parameters: {
                 query?: {
@@ -3246,9 +2960,14 @@ export interface paths {
         head?: never;
         /**
          * Bật, tắt hoặc duyệt lại lược đồ công cụ
-         * @description Bật một công cụ có `riskLevel` khác `READ` thì `requiresConfirmation` **bắt buộc** bằng
-         *     true — ràng buộc này nằm ở tầng cơ sở dữ liệu, gửi false lên sẽ bị từ chối 422 chứ không
-         *     phải được ghi rồi bỏ qua.
+         * @description UC021 bước 9. Bật một công cụ có `riskLevel` khác `READ` thì `requiresConfirmation`
+         *     **bắt buộc** bằng true và không được tắt (UC021 9.2) — gửi false lên bị từ chối 422 chứ
+         *     không phải được ghi rồi bỏ qua.
+         *
+         *     Ràng buộc này cưỡng chế ở **tầng ứng dụng**, không phải ở CSDL: sổ đăng ký nằm trong
+         *     `mcp_servers.tool_schema_cache` (jsonb) và PostgreSQL không kiểm được từng trường bên
+         *     trong. Đánh đổi có chủ ý — đổi lại UC028 không phải nối bảng ở đường chạy trước **mọi**
+         *     lời gọi công cụ.
          *
          *     `approveSchemaHash` là cách chấp nhận lược đồ đã đổi: khi máy chủ MCP đổi lược đồ, công cụ
          *     tự tắt (`auto_disabled_reason = SCHEMA_HASH_CHANGED`) và chờ người duyệt lại — một máy chủ
@@ -3535,7 +3254,21 @@ export interface paths {
         };
         /**
          * Cảnh báo an toàn
-         * @description `threatSurface` nối thẳng tới `docs/threat-model.md` (T1–T8), nên bảng này dùng được luôn
+         * @description UC040 bước 7-8 (luồng chính). **Nguồn dữ liệu: hợp nhất ba chỗ**, không có bảng
+         *     `safety_events` riêng —
+         *
+         *     | Loại sự kiện | Nguồn |
+         *     |---|---|
+         *     | `TOOL_CALL_BLOCKED` | `ai.ai_tool_calls` với `decision = 'BLOCKED'`, kèm `block_reason` |
+         *     | `PROMPT_INJECTION_*` · `*_PROBE` | `ai.ai_interactions.safety_flag` |
+         *     | Nỗ lực truy cập ngoài phạm vi doanh nghiệp | `platform.audit_logs` với `severity = 'CRITICAL'` |
+         *
+         *     Ba nguồn vì ba chủ sở hữu khác nhau: hai cái đầu do `ai-service` ghi (Track B), cái cuối
+         *     do `java-core` ghi (Track A), và `ai_app` **không** có quyền trên schema của Track A —
+         *     đó là ADR-0002 chứ không phải thiếu sót. Gộp lại ở tầng đọc rẻ hơn nhiều so với dựng một
+         *     đường ghi xuyên ranh giới hai làn.
+         *
+         *     `threatSurface` nối thẳng tới `docs/threat-model.md` (T1–T8), nên bảng này dùng được luôn
          *     cho phần đánh giá an toàn của báo cáo.
          *
          *     `evidence` chỉ chứa trích đoạn **đã che**, không lưu nguyên văn nội dung tấn công.
@@ -4519,48 +4252,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * SCR053 — danh sách tệp báo cáo đã xuất
-         * @description Tệp quá `expiresAt` bị dọn — trạng thái chuyển `EXPIRED`, `fileUri` thành rỗng.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Số trang, đếm từ 0 */
-                    page?: components["parameters"]["Trang"];
-                    /** @description Số bản ghi mỗi trang */
-                    size?: components["parameters"]["CoSize"];
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Trang tệp báo cáo */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"] & {
-                            data?: components["schemas"]["Page"] & {
-                                items?: components["schemas"]["TepBaoCao"][];
-                            };
-                        };
-                    };
-                };
-            };
-        };
+        get?: never;
         put?: never;
         /**
-         * Yêu cầu xuất báo cáo
-         * @description UC042. Chạy bất đồng bộ: trả 202 với trạng thái `QUEUED`, giao diện hỏi lại cho tới khi
-         *     `READY`.
+         * Xuất một báo cáo ra tệp
+         * @description UC042, hiện thực theo nhánh **4.2** của chính use case: *"Nếu khối lượng dữ liệu nhỏ →
+         *     xuất trực tiếp và trả tệp ngay, không cần tạo công việc chạy nền."* Ở quy mô doanh nghiệp
+         *     vừa và nhỏ, mọi báo cáo trong 42 use case đều rơi vào nhánh đó, nên máy chủ sinh tệp
+         *     đồng bộ và trả thẳng nội dung thay vì trả một mã công việc để giao diện hỏi lại.
+         *
+         *     Hậu điều kiện *"ghi thao tác xuất vào nhật ký kiểm toán"* do `platform.audit_logs` đảm
+         *     nhiệm, `action = REPORT_EXPORTED`, `after_data` chứa loại báo cáo và phạm vi dữ liệu.
          *
          *     `containsPersonalData = true` thì máy chủ **bắt buộc** nhận `confirmPersonalData = true`,
          *     nếu không trả 422. Đây là bước xác nhận có ý thức trước khi dữ liệu cá nhân rời khỏi hệ
          *     thống dưới dạng tệp — nghĩa vụ theo Nghị định 13.
+         *
+         *     Vượt `EXPORT_MAX_ROWS` thì trả 413 kèm gợi ý thu hẹp khoảng thời gian (UC042 4.5). Khi
+         *     một lần xuất bắt đầu vượt 30 giây thì mới cần `analytics.report_exports` và luồng chạy
+         *     nền của UC042 bước 5-8; đó là một migration cộng thêm, không đòi sửa endpoint này.
          */
         post: {
             parameters: {
@@ -4574,7 +4284,7 @@ export interface paths {
                     "application/json": {
                         reportType: components["schemas"]["LoaiBaoCao"];
                         /** @enum {string} */
-                        format: "CSV" | "XLSX" | "PDF";
+                        format: "CSV" | "XLSX";
                         /** @description Khoảng thời gian, danh sách cột, điều kiện lọc */
                         params?: {
                             [key: string]: unknown;
@@ -4585,15 +4295,23 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Đã xếp hàng */
-                202: {
+                /** @description Nội dung tệp báo cáo */
+                200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ApiResponse"] & {
-                            data?: components["schemas"]["TepBaoCao"];
-                        };
+                        "text/csv": string;
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    };
+                };
+                /** @description Vượt giới hạn số dòng cho một lần xuất */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
                     };
                 };
                 /** @description Báo cáo chứa dữ liệu cá nhân nhưng chưa xác nhận */
@@ -4607,46 +4325,6 @@ export interface paths {
                 };
             };
         };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/reports/exports/{exportId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Trạng thái một lần xuất báo cáo */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    exportId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Tệp báo cáo */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"] & {
-                            data?: components["schemas"]["TepBaoCao"];
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5094,8 +4772,6 @@ export interface components {
         /** @enum {string} */
         LoaiBaoCao: "OVERVIEW" | "FUNNEL" | "TOPICS" | "AI_PERFORMANCE" | "AUDIT_LOG";
         /** @enum {string} */
-        TrangThaiTepBaoCao: "QUEUED" | "RUNNING" | "READY" | "FAILED" | "EXPIRED";
-        /** @enum {string} */
         MucNghiemTrongKiemToan: "INFO" | "WARNING" | "CRITICAL";
         /** @enum {string} */
         LoaiChuThe: "USER" | "AI_AGENT" | "SYSTEM" | "PLATFORM_ADMIN";
@@ -5156,18 +4832,6 @@ export interface components {
             tenantName: string;
             planName: string;
         };
-        PhienDangNhap: {
-            /** Format: uuid */
-            id: string;
-            ipAddress?: string | null;
-            userAgent?: string | null;
-            /** Format: date-time */
-            issuedAt: string;
-            /** Format: date-time */
-            expiresAt: string;
-            /** @description Phiên đang dùng để gọi chính endpoint này — giao diện không cho tự thu hồi nó */
-            isCurrent: boolean;
-        };
         NguoiDung: {
             /** Format: uuid */
             id: string;
@@ -5224,7 +4888,17 @@ export interface components {
             leadScoreThreshold?: number;
             autoLeadCreation?: boolean;
             autoLeadDailyLimit?: number;
-            autoAssignEnabled?: boolean;
+            assignmentMode?: components["schemas"]["CheDoPhanCong"];
+            /**
+             * @description Tuỳ chọn phân công theo kênh và theo thẻ của UC015 2b:
+             *     `{"byChannel": {...}, "byTag": {...}}`. Rỗng thì áp `assignmentMode` cho mọi hội thoại.
+             *
+             *     Thay cho một tập thực thể `assignment_rules` riêng: một doanh nghiệp vừa và nhỏ có
+             *     **một** chế độ phân công, không phải một danh sách quy tắc có vòng đời độc lập.
+             */
+            assignmentConfig?: {
+                [key: string]: unknown;
+            };
             /** @description Nhân viên chỉ thấy khách hàng mình phụ trách */
             restrictAgentScope?: boolean;
             /** @description Số lần tác tử AI từ chối liên tiếp trước khi chuyển cho người */
@@ -5245,12 +4919,21 @@ export interface components {
             leadScoreThreshold?: number;
             autoLeadCreation?: boolean;
             autoLeadDailyLimit?: number;
-            autoAssignEnabled?: boolean;
+            assignmentMode?: components["schemas"]["CheDoPhanCong"];
+            assignmentConfig?: {
+                [key: string]: unknown;
+            };
             restrictAgentScope?: boolean;
             refusalHandoffThreshold?: number;
             summaryTurnThreshold?: number;
             messageRetentionDays?: number | null;
         };
+        /**
+         * @description UC014 bước 6 · UC015 · UC031 bước 5. `MANUAL` là hội thoại vào hàng chờ chung, không tự gán.
+         *     `LEAST_BUSY` mặc định vì nó không cần cấu hình gì thêm và đúng với luồng chính.
+         * @enum {string}
+         */
+        CheDoPhanCong: "ROUND_ROBIN" | "LEAST_BUSY" | "MANUAL";
         GoiDichVu: {
             code: components["schemas"]["MaGoi"];
             name: string;
@@ -5527,55 +5210,6 @@ export interface components {
             /** Format: date-time */
             occurredAt: string;
         };
-        MauCauTraLoi: {
-            /** Format: uuid */
-            id: string;
-            title: string;
-            content: string;
-            shortcut?: string | null;
-            category?: string | null;
-            usageCount?: number;
-        };
-        QuyTacPhanCong: {
-            /** Format: uuid */
-            id: string;
-            name: string;
-            /** @enum {string} */
-            appliesTo: "CONVERSATION" | "LEAD";
-            /** @enum {string} */
-            strategy: "LEAST_BUSY" | "ROUND_ROBIN" | "FIXED_USER";
-            /** @description Điều kiện áp dụng; `null` là mọi kênh */
-            channelType?: components["schemas"]["LoaiKenh"] | null;
-            /** Format: uuid */
-            tagId?: string | null;
-            /**
-             * Format: uuid
-             * @description Bắt buộc khi `strategy = FIXED_USER`
-             */
-            targetUserId?: string | null;
-            targetUserName?: string | null;
-            maxConcurrent?: number | null;
-            /** @description Thứ tự xét quy tắc — số nhỏ xét trước */
-            priority: number;
-            isActive: boolean;
-        };
-        LuuQuyTacPhanCongRequest: {
-            name: string;
-            /** @enum {string} */
-            appliesTo: "CONVERSATION" | "LEAD";
-            /** @enum {string} */
-            strategy: "LEAST_BUSY" | "ROUND_ROBIN" | "FIXED_USER";
-            channelType?: components["schemas"]["LoaiKenh"] | null;
-            /** Format: uuid */
-            tagId?: string | null;
-            /** Format: uuid */
-            targetUserId?: string | null;
-            maxConcurrent?: number | null;
-            /** @default 0 */
-            priority: number;
-            /** @default true */
-            isActive: boolean;
-        };
         KhachHang: {
             /** Format: uuid */
             id: string;
@@ -5757,11 +5391,8 @@ export interface components {
              *     khác hẳn một khách hỏi đi hỏi lại.
              */
             distinctContactCount: number;
+            /** @description Hình chiếu của `distinctContactCount` theo bậc, để giao diện tô màu mà không tự đặt ngưỡng */
             priority?: number;
-            /** @enum {string} */
-            status: "OPEN" | "RESOLVED" | "IGNORED";
-            /** Format: uuid */
-            resolvedDocumentId?: string | null;
             /** Format: date-time */
             firstSeenAt?: string;
             /** Format: date-time */
@@ -6317,29 +5948,6 @@ export interface components {
                 [key: string]: number;
             };
             modelVersions?: string[];
-        };
-        TepBaoCao: {
-            /** Format: uuid */
-            id: string;
-            reportType: components["schemas"]["LoaiBaoCao"];
-            /** @enum {string} */
-            format: "CSV" | "XLSX" | "PDF";
-            status: components["schemas"]["TrangThaiTepBaoCao"];
-            rowCount?: number | null;
-            partIndex?: number | null;
-            /** @description Báo cáo lớn tự chia thành nhiều tệp */
-            partTotal?: number | null;
-            fileUri?: string | null;
-            /** Format: int64 */
-            fileSizeBytes?: number | null;
-            containsPersonalData?: boolean;
-            /** Format: date-time */
-            expiresAt?: string | null;
-            requestedByName?: string;
-            /** Format: date-time */
-            requestedAt: string;
-            /** Format: date-time */
-            completedAt?: string | null;
             errorMessage?: string | null;
         };
         BanGhiKiemToan: {
@@ -6501,7 +6109,6 @@ export interface components {
         TuNgay: string;
         /** @description Ngày kết thúc khoảng thống kê */
         DenNgay: string;
-        SessionId: string;
         UserId: string;
         ChannelId: string;
         ConversationId: string;
