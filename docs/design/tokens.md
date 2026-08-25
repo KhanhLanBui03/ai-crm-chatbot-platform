@@ -175,6 +175,8 @@ mặc định của shadcn).
 2. **Mọi chữ trên giao diện bằng tiếng Việt có dấu.**
 3. **Vẽ cả trạng thái rỗng và trạng thái đang tải**, không chỉ trạng thái đầy dữ liệu — 58
    màn đều cần và đó là chỗ dễ quên nhất khi chuyển sang code.
-4. **Giá trị enum phải lấy từ ERD**, không bịa. Xem `docs/erd-ai-crm.md`.
+4. **Giá trị enum phải lấy từ `docs/openapi/dashboard-api.yaml`** (mục `components/schemas`),
+   không bịa. Đây là nguồn chân lý của enum; `docs/erd-ai-crm.md` và ràng buộc `CHECK` trong
+   migration đều **theo** hợp đồng này chứ không ngược lại.
 5. **Không vẽ trường `tenant_id` trên bất kỳ biểu mẫu nào** — nó luôn đến từ ngữ cảnh đã xác
    thực, không bao giờ từ người dùng nhập.

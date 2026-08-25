@@ -17,7 +17,7 @@ Hai ràng buộc kỹ thuật phát sinh khi bắt tay:
 - `package.json` ghim `tailwindcss ^3.4.17`, nhưng **shadcn CLI 4.x đã bỏ hỗ trợ Tailwind v3**.
 - Đặc tả use case mô tả màn hình **gián tiếp** qua luồng sự kiện; toàn bộ 6 file `.docx` chỉ
   nhắc chữ "màn hình" 19 lần. Không đủ để dựng giao diện — phải suy ra từ luồng sự kiện cộng
-  ma trận UC ↔ bảng ở `docs/erd-ai-crm.md` mục 16.
+  ma trận UC ↔ bảng ở `docs/erd-ai-crm.md` mục 10.1.
 
 ## Các phương án đã cân nhắc
 
@@ -68,7 +68,9 @@ ghim `shadcn@2` vĩnh viễn (phương án D) là cái giá đắt hơn nhiều 
 
 ## Hệ quả
 
-- **Schema:** không ảnh hưởng. Mọi giá trị enum trên giao diện lấy từ `docs/erd-ai-crm.md`.
+- **Schema:** không ảnh hưởng. Mọi giá trị enum trên giao diện lấy từ
+  `docs/openapi/dashboard-api.yaml` — hợp đồng này là nguồn chân lý của enum, ERD và ràng buộc
+  `CHECK` trong migration đều theo nó.
 - **Giao ước hai làn:** làm lộ ra khoảng trống lớn nhất của repo — `docs/openapi/` chỉ có giao
   ước nội bộ java-core ↔ ai-service, **chưa có đặc tả nào cho `/api/v1/**`** mà dashboard gọi.
   Phải viết `docs/openapi/dashboard-api.yaml`, dẫn xuất từ ma trận UC ↔ bảng.
