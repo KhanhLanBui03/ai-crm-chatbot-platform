@@ -3,8 +3,8 @@
 Lược đồ cơ sở dữ liệu **chính thức** của hệ thống: **30 bảng nghiệp vụ** + 2 bảng hạ tầng, trên
 **7 schema** PostgreSQL 16, phủ trọn 8 actor và **42/42 use case** (UC001–UC042).
 
-> Tài liệu này **đã được hiện thực và kiểm chứng**: 21 file migration Flyway (V101–V113,
-> V201–V208) chạy sạch trên PostgreSQL 16 + pgvector, qua đủ 6 mục kiểm ở [mục 16](#16-kiểm-chứng).
+> Tài liệu này **đã được hiện thực và kiểm chứng**: 23 file migration Flyway (V101–V115,
+> V201–V209) chạy sạch trên PostgreSQL 16 + pgvector, qua đủ 6 mục kiểm ở [mục 16](#16-kiểm-chứng).
 > Mọi cột, mọi ràng buộc `CHECK` dưới đây lấy từ cơ sở dữ liệu đang chạy, không phải bản phác.
 
 ---
@@ -265,6 +265,7 @@ do RLS trên chính `user_roles` lo.
 | `conversation_quota` | int | — | — | Hạn mức hội thoại mỗi chu kỳ — trục thu phí của mô hình SaaS |
 | `ai_token_quota` | bigint | — | — | |
 | `max_users` · `max_documents` · `max_channels` · `storage_mb` | int/smallint | — | — | Bốn hạn mức còn lại |
+| `max_tags` | smallint | — | — | **V115.** Trần số thẻ phân loại — UC017 9.1 từ chối tạo thẻ khi vượt |
 | `is_active` | boolean | — | — | Gói ngừng bán vẫn phải giữ: thuê bao cũ còn tham chiếu |
 | `sort_order` | smallint | — | — | |
 | `created_at` · `updated_at` | timestamptz | — | — | |
@@ -420,7 +421,10 @@ là đặt `contact_id` cho nhiều dòng cùng trỏ về một `contact`.
 | `handover_at` · `handover_reason` | timestamptz · varchar(30) | ✓ | — | — | `CHECK`: đi cùng nhau. 8 lý do — xem dưới |
 | `primary_intent` · `topic` | varchar(50) · varchar(100) | ✓ | — | — | Nguồn cho thống kê chủ đề (UC038) |
 | `sentiment` | varchar(20) | ✓ | — | — | `POSITIVE` · `NEUTRAL` · `NEGATIVE` |
-| `summary` · `summarized_at` | text · timestamptz | ✓ | — | — | UC026 |
+| `summary` · `summarized_at` | text · timestamptz | ✓ | — | — | UC026. `summary` là bản phẳng của `summary_data` |
+| `summary_data` | jsonb | ✓ | — | — | **V114.** Bốn phần có tên của UC026 b3: `mainNeed` · `providedInfo` · `unresolvedIssues` · `nextSteps` |
+| `summary_trigger` | varchar(20) | ✓ | — | — | **V114.** `HANDOFF` · `CLOSING` · `TURN_THRESHOLD` · `MANUAL` |
+| `summary_model_version` | varchar(50) | ✓ | — | — | **V114.** Hậu điều kiện UC026 đòi tường minh. Ảnh chụp — không đọc nhờ `ai.ai_interactions` được |
 | `message_count` · `unread_count` | int | — | — | — | Cột đếm sẵn, trigger giữ đồng bộ |
 | `first_response_at` | timestamptz | ✓ | — | — | Trigger đặt ở tin đầu của `BOT`/`AGENT` |
 | `last_message_at` | timestamptz | ✓ | — | — | Cột sắp xếp chính của hộp thư |
@@ -699,6 +703,7 @@ vị chính xác thì phải quay về dữ liệu thô ở `ai.ai_interactions`
 | `id` | uuid | — | PK | — | |
 | `tenant_id` | uuid | — | ✓ | *(logic)* | **Không FK** — liên làn |
 | `title` | varchar(255) | — | ✓ | — | `UNIQUE (tenant_id, title, version)` |
+| `description` | text | ✓ | — | — | **V209.** Mô tả ngắn người tải lên nhập — UC018 b3, b7 |
 | `source_type` | varchar(30) | — | — | — | `PDF` · `DOCX` · `TXT` · `MD` · `HTML` · `URL` |
 | `file_name` · `file_path` · `mime_type` · `file_size_bytes` | | ✓ | — | — | Cộng vào hạn mức `STORAGE_MB` |
 | `source_url` | text | ✓ | — | — | `CHECK`: `URL` thì phải có, còn lại phải có `file_path` |
@@ -782,6 +787,8 @@ biết, và một thay đổi lược đồ công cụ không được phép là
 | `user_query` · `response_text` | text | ✓ | — | |
 | `retrieved_chunk_ids` | uuid[] | — | — | **Cơ sở để giải thích vì sao bot trả lời như vậy** |
 | `retrieval_top_score` | numeric(5,4) | ✓ | — | Dưới ngưỡng thì chuyển nhánh từ chối |
+| `groundedness_score` | numeric(4,3) | ✓ | — | **V209.** Điểm **bám nguồn** (UC023 b8) — KHÁC `retrieval_top_score` ở trên: cái kia đo đoạn có giống câu hỏi không, cái này đo câu trả lời có bám vào đoạn không |
+| `is_cached` | boolean | — | — | **V209.** UC023 1.2 — lượt dùng đệm ngữ nghĩa, không tính chi phí. Báo cáo UC039 phải tách nhóm này |
 | `is_answered` | boolean | — | — | `CHECK`: false thì phải có `refusal_reason` |
 | `refusal_reason` | varchar(50) | ✓ | — | `NOT_COVERED` · `OUT_OF_SCOPE_DATA` · `LOW_CONFIDENCE` · `SAFETY_PROBE` |
 | `safety_flag` | varchar(40) | ✓ | — | **V208.** `PROMPT_INJECTION_INPUT` · `PROMPT_INJECTION_TOOL_RESULT` · `PROMPT_INJECTION_DOCUMENT` · `CROSS_TENANT_PROBE` · `INTERNAL_DATA_PROBE`. Chỉ mục **bộ phận** `WHERE safety_flag IS NOT NULL`. Đánh cờ không dừng luồng — UC022 5.2 nói rõ phải định tuyến bình thường |
@@ -814,7 +821,8 @@ không phân tích được độ trễ theo nhánh, và không trả lời đư
 | `block_reason` | varchar(50) | ✓ | — | — | 6 giá trị, `CHECK` đi cùng `decision = 'BLOCKED'` |
 | `approval_status` · `approved_by` · `approved_at` | | ✓ | — | *(logic)* | `PENDING` · `APPROVED` · `REJECTED` · `EXPIRED` |
 | `outcome` | varchar(20) | ✓ | — | — | `SUCCESS` · `BUSINESS_ERROR` · `TIMEOUT` · `TRANSPORT_ERROR`. `CHECK`: chỉ khi `ALLOWED` |
-| `latency_ms` · `error_message` | int · text | ✓ | — | — | |
+| `guard_latency_ms` | int | ✓ | — | — | **V209.** Độ trễ **bước kiểm duyệt** (UC028 b8) — ghi cả khi `BLOCKED` |
+| `latency_ms` · `error_message` | int · text | ✓ | — | — | `latency_ms` là độ trễ **chặng gọi công cụ** (UC024 b9), chỉ có nghĩa khi `ALLOWED` |
 | `created_at` · `updated_at` | timestamptz | — | — | — | |
 
 `block_reason`: `NOT_ALLOWLISTED` · `TOOL_DISABLED` · `SCHEMA_HASH_MISMATCH` ·
@@ -1246,6 +1254,24 @@ Ngoài hai bảng đó, mọi thiếu hụt còn lại giải được bằng **
 trống tri thức). Năm bảng từng dự kiến — `knowledge_gaps`, `safety_events`, `tool_registry`,
 `canned_responses`, `assignment_rules` — đều **không** cần, xem mục 11.
 
+**Đợt rà soát thứ hai (25/08/2026) không tìm thêm bảng nào thiếu, nhưng tìm ra sáu cột thiếu.**
+Đợt đầu truy vết ở mức *bảng* và dừng đúng lúc mọi bảng đều truy được về use case; sáu chỗ dưới
+đây lọt qua vì chúng là *cột*. Cách tìm: diff từng thuộc tính của `components/schemas` trong
+`dashboard-api.yaml` với toàn bộ tên cột trong migration, rồi đọc ngược lên bản đặc tả.
+
+| Cột | Câu trong bản đặc tả | Migration |
+|---|---|---|
+| `conversations.summary_data` · `summary_trigger` · `summary_model_version` | UC026 b3 "tóm tắt **có cấu trúc** gồm nhu cầu chính, thông tin đã cung cấp, vấn đề chưa giải quyết, bước tiếp theo"; b4 "kèm thời điểm sinh **và phiên bản mô hình đã sử dụng**" | V114 |
+| `subscription_plans.max_tags` | UC017 9.1 "nếu số lượng thẻ của doanh nghiệp **vượt giới hạn cho phép**" | V115 |
+| `ai_interactions.groundedness_score` | UC023 hậu điều kiện + b10 "**điểm bám nguồn** … ghi đầy đủ vào bản ghi tương tác" | V209 |
+| `ai_interactions.is_cached` | UC023 1.2 "**đánh dấu lượt này là dùng đệm** và không tính chi phí gọi mô hình" | V209 |
+| `ai_tool_calls.guard_latency_ms` | UC028 b8 "**độ trễ của bước kiểm duyệt**" — khác UC024 b9 "độ trễ của chặng gọi công cụ" | V209 |
+| `knowledge_documents.description` | UC018 b3 "nhập tiêu đề **và mô tả ngắn**"; b7 "kèm siêu dữ liệu do người dùng nhập" | V209 |
+
+Ba thiếu hụt cùng đợt **không** cần cột: `discardedAnswer` suy ra từ `is_answered = false ?
+response_text : null` · `editedAt` của ghi chú suy ra từ `updated_at` · định danh hội thoại của
+UC028 b8 nối được qua `ai_interaction_id` trong cùng schema `ai`.
+
 ### 10.4. Có đạt 3NF không?
 
 Có, với **bốn chỗ chệch chuẩn được ghi rõ**:
@@ -1298,7 +1324,7 @@ khoá ngoại lên bảng cha.
 | `data_erasure_items` | `data_erasure_requests.items jsonb` | Chỉ đọc trọn gói để biết chỗ nào chạy lại; không có truy vấn nào đọc từng mục |
 | `topic_clusters` + `conversation_topics` | `conversations.topic` + `ai_interactions.intent` | Gom cụm là bài toán của tầng phân tích, không cần thực thể riêng |
 | `platform_admins` | `users.scope = 'PLATFORM'` | Cùng cấu trúc với `users`, khác mỗi phạm vi |
-| `user_sessions` + `auth_tokens` | JWT không trạng thái + Redis cho danh sách thu hồi | Phiên là dữ liệu tạm — đặt ở CSDL quan hệ là chọn sai kho lưu trữ |
+| `user_sessions` + `auth_tokens` | JWT không trạng thái + Redis cho danh sách thu hồi | Phiên là dữ liệu tạm — đặt ở CSDL quan hệ là chọn sai kho lưu trữ. **Mã dùng một lần cũng ở Redis kèm TTL**: xác minh thư (UC001), đặt lại mật khẩu (SCR004-005), lời mời người dùng (UC003). Chúng tự hết hạn, không có truy vấn nào đọc lịch sử của chúng, và giữ lại sau khi dùng là giữ một bí mật không còn lý do tồn tại |
 | ~~`usage_metrics_daily` + `funnel_snapshots` + `topic_stats`~~ | **Đã gộp thành `analytics.metrics_daily` (V113)** | Lập luận cũ ("SME chưa đủ dữ liệu để cần bảng tổng hợp") **sai ở chỗ nhìn nhầm vấn đề**: cản trở không phải hiệu năng mà là ranh giới quyền — `crm_app` không đọc được schema `ai`. Một bảng năm chiều thay cho ba bảng |
 | `eval_runs` + `eval_results` | — | Phục vụ chương thực nghiệm, không phải mô hình nghiệp vụ |
 | `tool_registry` | `mcp_servers.tool_schema_cache jsonb` có cấu trúc cam kết | Công cụ không có vòng đời độc lập với máy chủ — ngắt máy chủ là toàn bộ công cụ mất hiệu lực (UC021 1a). Đổi lại UC028 không phải nối bảng ở đường chạy trước **mọi** lời gọi công cụ |
@@ -1464,15 +1490,15 @@ Dựng lại từ đầu và chạy:
 
 ```bash
 docker compose down -v && docker compose up -d postgres
-mvn -pl java-core spring-boot:run        # Flyway V101–V112 + Hibernate validate
-bash scripts/migrate-ai.sh               # V201–V207
+mvn -pl java-core spring-boot:run        # Flyway V101–V115 + Hibernate validate
+bash scripts/migrate-ai.sh               # V201–V209
 ```
 
 Sáu mục kiểm dưới đây **đã chạy và đạt** trên PostgreSQL 16.15 + pgvector:
 
 | # | Mục kiểm | Kết quả |
 |---|---|---|
-| 1 | Đếm bảng theo schema | `platform` 10 · `engagement` 8 · `sales` 5 · `analytics` 1 · `knowledge` 2 · `ai` 3 · `integration` 1 = **30** |
+| 1 | Đếm bảng theo schema | `platform` 10 · `engagement` 8 · `sales` 6 · `analytics` 2 · `knowledge` 2 · `ai` 3 · `integration` 1 = **32** (30 nghiệp vụ + `outbox_events` + `processed_events`) |
 | 2 | Bảng thiếu `ENABLE`+`FORCE` | Đúng **3** dòng: `subscription_plans`, `outbox_events`, `processed_events` |
 | 3 | Cô lập tenant qua `crm_app` | Tenant A thấy 1 khách của A; đổi sang B thấy 1 khách của B; tài khoản `scope='PLATFORM'` **không** lọt vào phạm vi tenant; vai trò hệ thống vẫn đọc được |
 | 4 | Nhật ký chỉ ghi thêm | `INSERT` được, `UPDATE` → `permission denied for table audit_logs` |
@@ -1485,6 +1511,14 @@ Thêm hai mục phát sinh trong lúc kiểm:
 |---|---|---|
 | 7 | Thiếu `app.tenant_id` | Báo lỗi **chỉ đúng nguyên nhân** thay vì `invalid input syntax for type uuid` |
 | 8 | Trigger đếm tin nhắn | 2 tin (1 của khách, 1 của bot) → `message_count=2`, `unread_count=1`, `first_response_at` đã đặt |
+
+Ba mục thêm sau V114/V115/V209:
+
+| # | Mục kiểm | Kết quả |
+|---|---|---|
+| 9 | `ck_conv_summary_complete` | Ghi tóm tắt thiếu `summary_model_version` → bị từ chối. Đây là chỗ hậu điều kiện UC026 được cưỡng chế, không phải nhắc nhở |
+| 10 | Cột mới kế thừa quyền và RLS | `ALTER TABLE … ADD COLUMN` không cần `GRANT` lại; `crm_app` đọc được `summary_data`, `ai_app` đọc được `groundedness_score`, và truy vấn ở cuối mục này vẫn trả đúng **3** dòng |
+| 11 | Ranh giới quyền không đổi | `crm_app` chạm `ai.ai_interactions` vẫn nổ `permission denied for schema ai` — đây là lý do có ADR-0014 chứ không phải cấp thêm quyền |
 
 Câu truy vấn cho mục 2 — đáng chạy lại mỗi khi thêm bảng:
 
@@ -1543,7 +1577,7 @@ kỷ luật ở tầng ứng dụng.
 | Bảng nghiệp vụ | **30** |
 | Bảng hạ tầng (ADR-0003) | 2 → tổng **32** |
 | Bounded context | 9 · trên 7 schema PostgreSQL |
-| File migration | 21 (V101–V113 · V201–V208) |
+| File migration | 23 (V101–V115 · V201–V209) |
 | Bảng có `tenant_id` | 30/32 (trừ `tenants` và `subscription_plans`) |
 | Bảng bật RLS `ENABLE`+`FORCE` | **29/32** |
 | Hàm `SECURITY DEFINER` | 3 — chỉ cho đường chưa có ngữ cảnh tenant |

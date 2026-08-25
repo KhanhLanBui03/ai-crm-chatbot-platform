@@ -48,6 +48,7 @@ Nguồn: `docs/erd-ai-crm.md`. Sửa lược đồ thì sửa ERD trước, migr
 | V206 | `GRANT` cho `ai_app` | — |
 | V207 | **RLS** trên cả 6 bảng | — |
 | V208 | `ai_interactions.safety_flag` + cấu trúc bắt buộc cho `mcp_servers.tool_schema_cache` | — (chỉ `ALTER`) |
+| V209 | Điểm bám nguồn, cờ dùng đệm, độ trễ kiểm duyệt, mô tả tài liệu — UC018 · UC023 · UC028 | — (4 cột + COMMENT của `tool_schema_cache`) |
 
 `ai_interactions` và `ai_feedback` là hai bảng đắt giá nhất về mặt điểm số. Không có
 `ai_interactions` thì không tính được chi phí mỗi hội thoại, không phân tích được độ trễ theo
