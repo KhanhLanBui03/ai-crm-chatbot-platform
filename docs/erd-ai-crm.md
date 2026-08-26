@@ -969,50 +969,79 @@ báo lỗi quyền ngay chứ không âm thầm chạy.
 
 ## 8. Bước 5 — ERD tổng
 
+> Sơ đồ dưới đây chỉ vẽ **quan hệ**. Bản **đầy đủ cột, kiểu và khoá** — 9 sơ đồ tách theo bounded
+> context, sinh thẳng từ 24 file migration — nằm ở [`erd-mermaid.md`](erd-mermaid.md).
+
 ```mermaid
 erDiagram
-    TENANTS                ||--o{ USERS : "có"
-    TENANTS                ||--o{ ROLES : "định nghĩa"
-    TENANTS                ||--o{ TENANT_SUBSCRIPTIONS : "đăng ký"
-    TENANTS                ||--o{ CHANNELS : "kết nối"
-    TENANTS                ||--o{ CONTACTS : "sở hữu"
-    TENANTS                ||--o{ AUDIT_LOGS : "ghi nhận"
-    USERS                  }o--o{ ROLES : "USER_ROLES"
-    SUBSCRIPTION_PLANS     ||--o{ TENANT_SUBSCRIPTIONS : "được chọn"
-    TENANT_SUBSCRIPTIONS   ||--o{ USAGE_RECORDS : "đo bằng"
-    CHANNELS               ||--o{ CHANNEL_IDENTITIES : "nhận diện"
-    CONTACTS               ||--o{ CHANNEL_IDENTITIES : "hợp nhất từ"
-    CONTACTS               ||--o{ CONTACT_NOTES : "được ghi chú"
-    CONTACTS               }o--o{ TAGS : "CONTACT_TAGS"
-    CONTACTS               ||--o{ DATA_ERASURE_REQUESTS : "yêu cầu xoá"
-    CHANNEL_IDENTITIES     ||--o{ CONVERSATIONS : "mở"
-    CONTACTS               ||--o{ CONVERSATIONS : "phát sinh"
-    CONVERSATIONS          ||--o{ MESSAGES : "chứa"
-    CONVERSATIONS          ||--o{ AI_INTERACTIONS : "logic · liên làn"
-    CONVERSATIONS          ||--o{ LEADS : "sinh ra"
-    KNOWLEDGE_DOCUMENTS    ||--o{ KNOWLEDGE_CHUNKS : "chia thành"
-    KNOWLEDGE_CHUNKS       }o--o{ AI_INTERACTIONS : "được trích dẫn"
-    AI_INTERACTIONS        ||--o{ AI_TOOL_CALLS : "đề xuất gọi"
-    AI_INTERACTIONS        ||--o{ AI_FEEDBACK : "được đánh giá"
-    MCP_SERVERS            ||--o{ AI_TOOL_CALLS : "phục vụ"
-    CONTACTS               ||--o{ LEADS : "trở thành"
-    LEADS                  ||--o| DEALS : "chuyển đổi 1-1"
-    PIPELINES              ||--o{ DEAL_STAGES : "gồm"
-    PIPELINES              ||--o{ DEALS : "chứa"
-    DEAL_STAGES            ||--o{ DEALS : "đang ở"
-    CONTACTS               ||--o{ DEALS : "gắn với"
-    LEADS                  ||--o{ ACTIVITIES : "chăm sóc"
-    DEALS                  ||--o{ ACTIVITIES : "chăm sóc"
-    CONTACTS               ||--o{ ACTIVITIES : "chăm sóc"
-    USERS                  ||--o{ CONVERSATIONS : "phụ trách"
-    USERS                  ||--o{ ACTIVITIES : "thực hiện"
+    TENANTS               ||--o{ USERS                 : "có"
+    TENANTS               ||--o{ ROLES                 : "định nghĩa"
+    TENANTS               ||--o{ USER_ROLES            : "phạm vi"
+    USERS                 ||--o{ USER_ROLES            : "được gán"
+    ROLES                 ||--o{ USER_ROLES            : "gán cho"
+
+    TENANTS               ||--o{ TENANT_SUBSCRIPTIONS  : "đăng ký"
+    SUBSCRIPTION_PLANS    ||--o{ TENANT_SUBSCRIPTIONS  : "được chọn"
+    TENANT_SUBSCRIPTIONS  ||--o{ USAGE_RECORDS         : "đo bằng"
+
+    TENANTS               ||--o{ CHANNELS              : "kết nối"
+    CHANNELS              ||--o{ CHANNEL_IDENTITIES    : "nhận diện"
+    CONTACTS              ||--o{ CHANNEL_IDENTITIES    : "hợp nhất từ"
+    CHANNEL_IDENTITIES    ||--o{ CONVERSATIONS         : "mở"
+    CHANNELS              ||--o{ CONVERSATIONS         : "qua kênh"
+    CONTACTS              ||--o{ CONVERSATIONS         : "phát sinh"
+    USERS                 ||--o{ CONVERSATIONS         : "phụ trách"
+    CONVERSATIONS         ||--o{ MESSAGES              : "chứa"
+    USERS                 ||--o{ MESSAGES              : "gửi"
+
+    TENANTS               ||--o{ CONTACTS              : "sở hữu"
+    CONTACTS              ||--o{ CONTACTS              : "hợp nhất vào"
+    CONTACTS              ||--o{ CONTACT_NOTES         : "được ghi chú"
+    CONTACTS              ||--o{ CONTACT_TAGS          : "gắn"
+    TAGS                  ||--o{ CONTACT_TAGS          : "được gắn"
+    TENANTS               ||--o{ TAGS                  : "quản lý"
+
+    CONTACTS              ||--o{ LEADS                 : "trở thành"
+    CONVERSATIONS         ||--o{ LEADS                 : "sinh ra"
+    LEADS                 ||--o| DEALS                 : "chuyển đổi 1-1"
+    CONTACTS              ||--o{ DEALS                 : "gắn với"
+    PIPELINES             ||--o{ DEAL_STAGES           : "gồm"
+    PIPELINES             ||--o{ DEALS                 : "chứa"
+    DEAL_STAGES           ||--o{ DEALS                 : "đang ở"
+    CONTACTS              ||--o{ ACTIVITIES            : "chăm sóc"
+    LEADS                 ||--o{ ACTIVITIES            : "chăm sóc"
+    DEALS                 ||--o{ ACTIVITIES            : "chăm sóc"
+    USERS                 ||--o{ ACTIVITIES            : "thực hiện"
+    LEADS                 ||--o{ LEAD_SCORES           : "lịch sử điểm"
+    CONTACTS              ||--o{ LEAD_SCORES           : "của danh bạ"
+
+    TENANTS               ||--o{ AUDIT_LOGS            : "ghi nhận"
+    USERS                 ||--o{ AUDIT_LOGS            : "gây ra"
+    CONTACTS              ||--o{ DATA_ERASURE_REQUESTS : "yêu cầu xoá"
+    CHANNELS              ||--o{ METRICS_DAILY         : "tổng hợp theo"
+    TENANTS               ||--o{ OUTBOX_EVENTS         : "phát sinh"
+    TENANTS               ||--o{ PROCESSED_EVENTS      : "đã xử lý"
+
+    KNOWLEDGE_DOCUMENTS   ||--o{ KNOWLEDGE_CHUNKS      : "chia thành"
+    AI_INTERACTIONS       ||--o{ AI_TOOL_CALLS         : "đề xuất gọi"
+    AI_INTERACTIONS       ||--o{ AI_FEEDBACK           : "được đánh giá"
+    MCP_SERVERS           ||--o{ AI_TOOL_CALLS         : "phục vụ"
+
+    CONVERSATIONS         ||..o{ AI_INTERACTIONS       : "logic · không FK · ADR-0002"
+    MESSAGES              ||..o| AI_INTERACTIONS       : "logic · ngược chiều · không FK"
+    KNOWLEDGE_CHUNKS      }o..o{ AI_INTERACTIONS       : "trích dẫn qua mảng uuid[]"
 ```
+
+Đủ **32/32 bảng**. Ba đường **nét đứt** ở cuối là ba chỗ duy nhất bắc qua ranh giới hai làn —
+tham chiếu logic, không có khoá ngoại (mục 7). `USER_ROLES` và `CONTACT_TAGS` vẽ thành thực thể
+riêng chứ không gộp thành ký hiệu N–N: chúng mang cột riêng (`granted_by`, `tagged_at`,
+`tenant_id`), gộp lại là giấu mất.
 
 ### ERD dạng văn bản
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════════╗
-║  TRACK A — java-core · Flyway V101–V112 · platform / engagement / sales /        ║
+║  TRACK A — java-core · Flyway V101–V115 · platform / engagement / sales /        ║
 ║            analytics                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════════╝
 
@@ -1050,12 +1079,14 @@ erDiagram
            ║   │       └──1:N── deals ──────┘  FK KÉP (pipeline_id,stage_id) │
            ║   │  leads ──1:1── deals          ép giai đoạn thuộc đúng phễu  │
            ║   │   current_score ← ghi bằng API từ Track B                   │
+           ║   │        ├──1:N── lead_scores   (V113, lịch sử từng lần chấm) │
            ║   │        └────────── activities ──────────┘                   │
            ║   └─────────────────────────────────────────────────────────────┘
            ║
            ║   ┌──── ⑨ ANALYTICS & COMPLIANCE ──────────────────────────────┐
            ╚═══│  audit_logs (chỉ ghi thêm — REVOKE UPDATE/DELETE)          │
                │  data_erasure_requests (Nghị định 13, items jsonb)          │
+               │  metrics_daily (V113, read-model — UNIQUE NULLS NOT DISTINCT)│
                │  outbox_events · processed_events   ← hạ tầng, KHÔNG RLS   │
                └────────────────────────────────────────────────────────────┘
 
@@ -1065,7 +1096,7 @@ erDiagram
                      │            ── ADR-0002 ──            ▼
 
 ╔══════════════════════════════════════════════════════════════════════════════════╗
-║  TRACK B — ai-service · Flyway V201–V207 · knowledge / ai / integration          ║
+║  TRACK B — ai-service · Flyway V201–V209 · knowledge / ai / integration          ║
 ╚══════════════════════════════════════════════════════════════════════════════════╝
 
   ┌──── ⑥ KNOWLEDGE BASE ─────────────┐   ┌──── ⑦ AI PROCESSING ─────────────────┐
