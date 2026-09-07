@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #3259d1; text-decoration: none; }
+    a:hover { color: #24409a; }
+    .goc {
+      --background:#ffffff; --foreground:#0a0a0a; --card:#ffffff;
+      --primary:#3259d1; --primary-foreground:#fafafa;
+      --secondary:#f5f5f5; --secondary-foreground:#171717;
+      --muted:#f5f5f5; --muted-foreground:#737373;
+      --destructive:#e7000b; --success:#007e46; --warning:#be7200;
+      --border:#e5e5e5; --input:#e5e5e5; --vien-the:rgba(10,10,10,0.10);
+      font-family:'Geist','Geist Variable',system-ui,-apple-system,'Segoe UI',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    .goc.toi {
+      --background:#0a0a0a; --foreground:#fafafa; --card:#171717;
+      --primary:#7ba1fc; --primary-foreground:#0b152d;
+      --secondary:#262626; --secondary-foreground:#fafafa;
+      --muted:#262626; --muted-foreground:#a1a1a1;
+      --destructive:#ff6467; --success:#3bb974; --warning:#efa831;
+      --border:rgba(255,255,255,0.10); --input:rgba(255,255,255,0.15); --vien-the:rgba(250,250,250,0.10);
+    }
+    .nut { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 10px;
+           border-radius:10px; border:1px solid transparent; font-size:14px; font-weight:500; white-space:nowrap; }
+    .o-nhap { height:32px; border-radius:10px; border:1px solid var(--input); background:var(--background);
+              display:flex; align-items:center; gap:8px; padding:0 10px; font-size:14px; }
+    .nhan { font-size:14px; font-weight:500; }
+    .goi-y { font-size:12px; color:var(--muted-foreground); line-height:1.5; }
+  </style>
+</helmet>
+
+<div class="goc {{lopCheDo}}" style="width: 1440px; height: 900px; display: flex; align-items: center; justify-content: center; background: var(--background); color: var(--foreground); overflow: hidden;">
+
+  <div style="width: 480px; display: flex; flex-direction: column; gap: 24px;">
+
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--primary); color: var(--primary-foreground); display: flex; align-items: center; justify-content: center;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 9.9 9.9 3 12l6.9 2.1L12 21l2.1-6.9L21 12l-6.9-2.1z"/></svg>
+      </div>
+      <span style="font-size: 16px; font-weight: 600;">CRM AI</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em;">Đăng ký doanh nghiệp</h1>
+      <p style="margin: 0; font-size: 14px; color: var(--muted-foreground);">Dùng thử 14 ngày, không cần thẻ. Đã có tài khoản? <a href="#">Đăng nhập</a></p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <label class="nhan">Tên doanh nghiệp</label>
+        <div class="o-nhap"><span>Công ty TNHH Cát Tường</span></div>
+        <!-- slug sinh tự động từ tên — platform.tenants.slug UNIQUE toàn hệ thống -->
+        <span class="goi-y">Địa chỉ truy cập: <strong>cat-tuong</strong>.crm-ai.vn — đổi được sau trong Hồ sơ doanh nghiệp.</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <label class="nhan">Email công việc</label>
+        <div class="o-nhap"><span>an.pham@cattuong.vn</span></div>
+        <span class="goi-y">Đây sẽ là tài khoản quản trị viên đầu tiên. Chúng tôi gửi thư xác thực tới địa chỉ này.</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <label class="nhan">Mật khẩu</label>
+        <div class="o-nhap">
+          <span style="flex-grow: 1; letter-spacing: 0.15em;">•••••••••••••</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted-foreground);"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+        <!-- Thanh độ mạnh: bốn đoạn, có nhãn chữ chứ không chỉ dựa vào màu -->
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="display: flex; gap: 3px; flex-grow: 1;">
+            <div style="height: 4px; flex-grow: 1; border-radius: 26px; background: var(--success);"></div>
+            <div style="height: 4px; flex-grow: 1; border-radius: 26px; background: var(--success);"></div>
+            <div style="height: 4px; flex-grow: 1; border-radius: 26px; background: var(--success);"></div>
+            <div style="height: 4px; flex-grow: 1; border-radius: 26px; background: var(--muted);"></div>
+          </div>
+          <span style="font-size: 12px; color: var(--success); font-weight: 500;">Mạnh</span>
+        </div>
+        <span class="goi-y">Tối thiểu 10 ký tự, có chữ hoa, chữ thường và chữ số.</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <label class="nhan">Xác nhận mật khẩu</label>
+        <div class="o-nhap">
+          <span style="flex-grow: 1; letter-spacing: 0.15em;">•••••••••••••</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: flex-start; gap: 8px;">
+        <span style="width: 16px; height: 16px; border-radius: 5px; border: 1px solid var(--input); flex-shrink: 0; margin-top: 2px;"></span>
+        <span style="font-size: 13px; line-height: 1.5;">Tôi đồng ý với <a href="#">Điều khoản sử dụng</a> và cho phép xử lý dữ liệu cá nhân theo <a href="#">Chính sách bảo mật</a>.</span>
+      </div>
+
+      <span class="nut" style="height: 36px; background: var(--primary); color: var(--primary-foreground); width: 100%;">Tạo tài khoản</span>
+    </div>
+
+    <div style="display: flex; gap: 8px; padding: 12px; border-radius: 10px; background: var(--muted);">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px; color: var(--muted-foreground);"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span style="font-size: 12px; color: var(--muted-foreground); line-height: 1.5;">Dữ liệu của doanh nghiệp bạn được cô lập ở tầng cơ sở dữ liệu — không doanh nghiệp nào khác đọc được, kể cả khi có lỗi ở tầng ứng dụng.</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"cheDo":{"editor":"enum","options":["sáng","tối"],"default":"sáng","section":"Hiển thị"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { lopCheDo: (this.props.cheDo ?? 'sáng') === 'tối' ? 'toi' : '' };
+  }
+}
+</script>
+</body>
+</html>

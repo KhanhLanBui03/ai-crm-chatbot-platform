@@ -1,0 +1,177 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #3259d1; text-decoration: none; }
+    a:hover { color: #24409a; }
+    .goc {
+      --background:#ffffff; --foreground:#0a0a0a; --card:#ffffff;
+      --primary:#3259d1; --primary-foreground:#fafafa;
+      --secondary:#f5f5f5; --secondary-foreground:#171717;
+      --muted:#f5f5f5; --muted-foreground:#737373;
+      --destructive:#e7000b; --border:#e5e5e5; --input:#e5e5e5; --ring:#5b81e0;
+      --vien-the:rgba(10,10,10,0.10);
+      font-family:'Geist','Geist Variable',system-ui,-apple-system,'Segoe UI',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    .goc.toi {
+      --background:#0a0a0a; --foreground:#fafafa; --card:#171717;
+      --primary:#7ba1fc; --primary-foreground:#0b152d;
+      --secondary:#262626; --secondary-foreground:#fafafa;
+      --muted:#262626; --muted-foreground:#a1a1a1;
+      --destructive:#ff6467; --border:rgba(255,255,255,0.10); --input:rgba(255,255,255,0.15);
+      --vien-the:rgba(250,250,250,0.10);
+    }
+    .the { border-radius:14px; background:var(--card); box-shadow: inset 0 0 0 1px var(--vien-the); padding:16px; display:flex; flex-direction:column; gap:16px; }
+    .tieu-de-the { font-size:16px; font-weight:500; line-height:1.375; margin:0; }
+    .phu { font-size:13px; color:var(--muted-foreground); margin:0; }
+    .nhan-ky-thuat { font-size:11px; color:var(--muted-foreground); font-variant-numeric:tabular-nums; }
+    /* Nút — cao 32px, đệm ngang 10px, bo 10px, chữ 14px/500, biểu tượng 16px */
+    .nut { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 10px;
+           border-radius:10px; border:1px solid transparent; font-size:14px; font-weight:500; white-space:nowrap; cursor:default; }
+    .hang { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+  </style>
+</helmet>
+
+<div class="goc {{lopCheDo}}" style="width: 880px; padding: 24px; display: flex; flex-direction: column; gap: 16px; background: var(--background); color: var(--foreground); box-sizing: border-box;">
+
+  <div style="display: flex; flex-direction: column; gap: 4px;">
+    <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em;">Thành phần cơ bản</h1>
+    <p class="phu">Số đo lấy thẳng từ <code style="font-size: 12px;">src/components/ui/*.tsx</code> sau khi cài preset <code style="font-size: 12px;">radix-nova</code> — không phải ước lượng.</p>
+  </div>
+
+  <!-- Nút -->
+  <div class="the">
+    <div>
+      <h2 class="tieu-de-the">Nút — <span class="nhan-ky-thuat">Button</span></h2>
+      <p class="phu">Chú ý: biến thể <strong>destructive là nền pha loãng</strong>, không phải nền đỏ đặc. Dùng nền đỏ đặc là đi ngược ngôn ngữ của preset.</p>
+    </div>
+    <div class="hang">
+      <span class="nut" style="background: var(--primary); color: var(--primary-foreground);">Lưu thay đổi</span>
+      <span class="nut" style="background: var(--secondary); color: var(--secondary-foreground);">Huỷ bỏ</span>
+      <span class="nut" style="border-color: var(--border); background: var(--background); color: var(--foreground);">Xuất Excel</span>
+      <span class="nut" style="color: var(--foreground);">Bỏ qua</span>
+      <span class="nut" style="background: color-mix(in oklch, var(--destructive), transparent 90%); color: var(--destructive);">Xoá dữ liệu</span>
+      <span class="nut" style="color: var(--primary); text-decoration: underline; text-underline-offset: 4px; padding: 0;">Xem chi tiết</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; font-size: 11px; color: var(--muted-foreground);">
+      <span>default</span><span>secondary</span><span>outline</span><span>ghost</span><span>destructive</span><span>link</span>
+    </div>
+
+    <div style="height: 1px; background: var(--border);"></div>
+
+    <div class="hang">
+      <span class="nut" style="height: 24px; padding: 0 8px; border-radius: 8px; font-size: 12px; background: var(--primary); color: var(--primary-foreground);">xs · 24px</span>
+      <span class="nut" style="height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12.8px; background: var(--primary); color: var(--primary-foreground);">sm · 28px</span>
+      <span class="nut" style="background: var(--primary); color: var(--primary-foreground);">default · 32px</span>
+      <span class="nut" style="height: 36px; background: var(--primary); color: var(--primary-foreground);">lg · 36px</span>
+      <span class="nut" style="width: 32px; padding: 0; border-color: var(--border); background: var(--background);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+      </span>
+      <span class="nut" style="background: var(--primary); color: var(--primary-foreground); opacity: 0.5;">Đang tắt</span>
+    </div>
+  </div>
+
+  <!-- Ô nhập -->
+  <div class="the">
+    <div>
+      <h2 class="tieu-de-the">Ô nhập — <span class="nhan-ky-thuat">Input · Field · Select · Checkbox</span></h2>
+      <p class="phu">shadcn 4.x đã bỏ <code style="font-size: 12px;">Form</code>; biểu mẫu dựng bằng <code style="font-size: 12px;">Field</code> ghép với react-hook-form.</p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <label style="font-size: 14px; font-weight: 500;">Họ và tên</label>
+        <div style="height: 32px; border-radius: 10px; border: 1px solid var(--input); background: var(--background); display: flex; align-items: center; padding: 0 10px;">
+          <span style="font-size: 14px;">Nguyễn Thị Bích Hường</span>
+        </div>
+        <span style="font-size: 12px; color: var(--muted-foreground);">Tên hiển thị trong hộp thư và danh bạ.</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <label style="font-size: 14px; font-weight: 500;">Số điện thoại</label>
+        <!-- Trạng thái lỗi: viền destructive + vòng sáng 3px -->
+        <div style="height: 32px; border-radius: 10px; border: 1px solid var(--destructive); box-shadow: 0 0 0 3px color-mix(in oklch, var(--destructive), transparent 80%); background: var(--background); display: flex; align-items: center; padding: 0 10px;">
+          <span style="font-size: 14px;">090-123</span>
+        </div>
+        <span style="font-size: 12px; color: var(--destructive);">Số điện thoại phải có 10 chữ số.</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <label style="font-size: 14px; font-weight: 500;">Kênh liên hệ chính</label>
+        <div style="height: 32px; border-radius: 10px; border: 1px solid var(--input); background: var(--background); display: flex; align-items: center; gap: 8px; padding: 0 10px;">
+          <span style="font-size: 14px; flex-grow: 1;">Web Widget</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted-foreground);"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+        <span style="font-size: 12px; color: var(--muted-foreground);">Select</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <label style="font-size: 14px; font-weight: 500;">Ô nhập đang tắt</label>
+        <div style="height: 32px; border-radius: 10px; border: 1px solid var(--input); background: color-mix(in oklch, var(--input), transparent 50%); opacity: 0.5; display: flex; align-items: center; padding: 0 10px;">
+          <span style="font-size: 14px; color: var(--muted-foreground);">Không sửa được ở gói hiện tại</span>
+        </div>
+        <span style="font-size: 12px; color: var(--muted-foreground);">disabled</span>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="width: 16px; height: 16px; border-radius: 5px; background: var(--primary); color: var(--primary-foreground); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        </span>
+        <span style="font-size: 14px;">Tự động tạo cơ hội tiềm năng khi điểm vượt ngưỡng</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="width: 16px; height: 16px; border-radius: 5px; border: 1px solid var(--input); flex-shrink: 0;"></span>
+        <span style="font-size: 14px;">Gửi thông báo qua email cho người phụ trách</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nhãn, ảnh đại diện, tab -->
+  <div class="the">
+    <h2 class="tieu-de-the">Nhãn, ảnh đại diện và tab — <span class="nhan-ky-thuat">Badge · Avatar · Tabs</span></h2>
+
+    <div class="hang">
+      <span style="display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 26px; background: var(--primary); color: var(--primary-foreground); font-size: 12px; font-weight: 500;">Mặc định</span>
+      <span style="display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); font-size: 12px; font-weight: 500;">Web Widget</span>
+      <span style="display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 26px; border: 1px solid var(--border); font-size: 12px; font-weight: 500;">Viền</span>
+      <span style="display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 26px; background: color-mix(in oklch, var(--destructive), transparent 90%); color: var(--destructive); font-size: 12px; font-weight: 500;">Thất bại</span>
+      <span class="nhan-ky-thuat">cao 20px · bo viên thuốc · chữ 12px/500 · biểu tượng 12px</span>
+    </div>
+
+    <div class="hang">
+      <span style="width: 32px; height: 32px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500;">PH</span>
+      <span style="width: 28px; height: 28px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500;">TQ</span>
+      <span style="width: 24px; height: 24px; border-radius: 26px; background: var(--secondary); color: var(--secondary-foreground); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500;">LM</span>
+      <span class="nhan-ky-thuat">Không có ảnh thì dùng chữ cái đầu, không dùng biểu tượng người chung chung</span>
+    </div>
+
+    <div style="display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; border-radius: 10px; background: var(--muted);">
+      <span style="display: flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 8px; background: var(--background); font-size: 13px; font-weight: 500; box-shadow: inset 0 0 0 1px var(--vien-the);">Hồ sơ</span>
+      <span style="display: flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 8px; color: var(--muted-foreground); font-size: 13px; font-weight: 500;">Hội thoại</span>
+      <span style="display: flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 8px; color: var(--muted-foreground); font-size: 13px; font-weight: 500;">Cơ hội</span>
+      <span style="display: flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 8px; color: var(--muted-foreground); font-size: 13px; font-weight: 500;">Hoạt động</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"cheDo":{"editor":"enum","options":["sáng","tối"],"default":"sáng","section":"Hiển thị"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { lopCheDo: (this.props.cheDo ?? 'sáng') === 'tối' ? 'toi' : '' };
+  }
+}
+</script>
+</body>
+</html>

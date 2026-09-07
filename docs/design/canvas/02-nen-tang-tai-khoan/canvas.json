@@ -1,0 +1,33 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1440, "h": 900, "title": "SCR003 · Đăng nhập" },
+    { "file": "DangKy.dc.html", "x": 1520, "y": 0, "w": 1440, "h": 900, "title": "SCR001 · Đăng ký doanh nghiệp" },
+    { "file": "TongQuan.dc.html", "x": 0, "y": 1020, "w": 1184, "h": 700, "title": "SCR006 · Tổng quan" },
+    { "file": "PhienDangNhap.dc.html", "x": 1264, "y": 1020, "w": 1184, "h": 700, "title": "SCR011 · Phiên đăng nhập" },
+    { "file": "HanMuc.dc.html", "x": 0, "y": 1840, "w": 1184, "h": 940, "title": "SCR014 · Hạn mức sử dụng" }
+  ],
+  "annotations": [
+    {
+      "id": "chi-vung-noi-dung",
+      "x": 1264,
+      "y": 1840,
+      "w": 320,
+      "text": "Ba artboard dưới chỉ vẽ VÙNG NỘI DUNG, rộng 1184px = 1440 trừ sidebar 256.\n\nKhung ứng dụng đã đặc tả một lần ở canvas Hệ thống thiết kế. Vẽ lại nó trong từng màn là nhân bản đúng chỗ dễ lệch nhau nhất — trong mã nguồn nó cũng là một AppShell duy nhất, mỗi route chỉ dựng phần nội dung."
+    },
+    {
+      "id": "khoa-tai-khoan",
+      "x": 1520,
+      "y": 940,
+      "w": 300,
+      "text": "Màn đăng nhập vẽ ở trạng thái sai mật khẩu, không phải trạng thái trống.\n\nUC002 khoá tài khoản sau 5 lần sai trong 15 phút (users.failed_login_count, users.locked_until), nên phải đếm ngược số lần còn lại — đây là chỗ dễ bỏ sót khi viết code."
+    },
+    {
+      "id": "han-muc-lech-scr014",
+      "x": 1264,
+      "y": 2140,
+      "w": 320,
+      "text": "SCR014 ban đầu ghi bốn hạn mức Message / Token / Storage / Conversation.\n\nERD không có hạn mức dung lượng. Bảng platform.plans thực tế giới hạn: conversation_quota, token_quota, max_users, max_documents, max_tags.\n\nArtboard vẽ theo ERD — bốn thẻ là Hội thoại, Token, Người dùng, Tài liệu."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

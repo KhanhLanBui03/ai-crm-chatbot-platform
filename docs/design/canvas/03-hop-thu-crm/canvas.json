@@ -1,0 +1,39 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1184, "h": 760, "title": "SCR019+020 · Hộp thư hợp nhất" },
+    { "file": "ChuyenGiao.dc.html", "x": 1264, "y": 0, "w": 1184, "h": 760, "title": "SCR021 · Chuyển giao AI → nhân viên" },
+    { "file": "ChiTietKhachHang.dc.html", "x": 0, "y": 880, "w": 1184, "h": 880, "title": "SCR024 · Chi tiết khách hàng" },
+    { "file": "HopNhat.dc.html", "x": 1264, "y": 880, "w": 1184, "h": 800, "title": "SCR025 · Hợp nhất khách hàng" }
+  ],
+  "annotations": [
+    {
+      "id": "hop-thu-bam-duoc",
+      "x": 2528,
+      "y": 0,
+      "w": 320,
+      "text": "Hộp thư là artboard DUY NHẤT bấm được.\n\nBấm một hội thoại ở cột trái thì cả cột giữa lẫn cột phải đổi theo — đó là tương tác cốt lõi của màn hình quan trọng nhất, vẽ tĩnh không kiểm được.\n\nBốn hội thoại mẫu cố ý phủ đủ bốn trạng thái: chờ nhân viên, bot đang xử lý, bạn đang xử lý, đã giải quyết."
+    },
+    {
+      "id": "ba-cot-chat-cho",
+      "x": 2528,
+      "y": 320,
+      "w": 320,
+      "text": "Ba cột trong 1184px là chật: 320 danh sách + 544 tin nhắn + 320 ngữ cảnh.\n\nKhuyến nghị khi viết code: vào màn hộp thư thì tự thu sidebar về chế độ chỉ biểu tượng (48px), lấy lại 208px cho cột tin nhắn. shadcn Sidebar có sẵn chế độ đó."
+    },
+    {
+      "id": "cot-phai-la-diem-nhan",
+      "x": 2528,
+      "y": 620,
+      "w": 320,
+      "text": "Cột phải là phần đáng giá nhất của đề tài: nó cho nhân viên KIỂM ĐƯỢC câu trả lời của AI.\n\nÝ định, độ tin cậy, định tuyến, độ bám nguồn, chi phí, độ trễ, và danh sách đoạn tri thức đã truy hồi — tất cả đọc từ ai.ai_interactions.\n\nHội thoại thứ nhất cố ý ở trạng thái AI từ chối trả lời: độ bám nguồn 0,42 dưới ngưỡng 0,60."
+    },
+    {
+      "id": "hop-nhat-mem",
+      "x": 2528,
+      "y": 880,
+      "w": 320,
+      "text": "Hợp nhất là xoá MỀM: hồ sơ nguồn giữ nguyên, chỉ đánh dấu status = MERGED và trỏ merged_into_contact_id về hồ sơ đích.\n\nERD cố ý KHÔNG đặt ràng buộc duy nhất trên số điện thoại và email — luồng nghiệp vụ chỉ cảnh báo trùng rồi đề xuất hợp nhất, không chặn.\n\nÔ đồng ý dữ liệu cá nhân không cho chọn: luôn lấy bản có mốc thời gian sớm nhất."
+    }
+  ],
+  "launch": { "view": "focused", "file": "Main.dc.html" }
+}

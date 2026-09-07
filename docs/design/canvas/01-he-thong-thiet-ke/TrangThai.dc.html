@@ -1,0 +1,195 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #3259d1; text-decoration: none; }
+    a:hover { color: #24409a; }
+    .goc {
+      --background:#ffffff; --foreground:#0a0a0a; --card:#ffffff;
+      --primary:#3259d1; --primary-foreground:#fafafa;
+      --secondary:#f5f5f5; --secondary-foreground:#171717;
+      --muted:#f5f5f5; --muted-foreground:#737373;
+      --destructive:#e7000b; --warning:#be7200;
+      --border:#e5e5e5; --input:#e5e5e5; --vien-the:rgba(10,10,10,0.10);
+      font-family:'Geist','Geist Variable',system-ui,-apple-system,'Segoe UI',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    .goc.toi {
+      --background:#0a0a0a; --foreground:#fafafa; --card:#171717;
+      --primary:#7ba1fc; --primary-foreground:#0b152d;
+      --secondary:#262626; --secondary-foreground:#fafafa;
+      --muted:#262626; --muted-foreground:#a1a1a1;
+      --destructive:#ff6467; --warning:#efa831;
+      --border:rgba(255,255,255,0.10); --input:rgba(255,255,255,0.15); --vien-the:rgba(250,250,250,0.10);
+    }
+    .the { border-radius:14px; background:var(--card); box-shadow: inset 0 0 0 1px var(--vien-the); display:flex; flex-direction:column; }
+    .phu { font-size:13px; color:var(--muted-foreground); margin:0; }
+    .nhan-ky-thuat { font-size:11px; color:var(--muted-foreground); }
+    .nut { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 10px;
+           border-radius:10px; border:1px solid transparent; font-size:14px; font-weight:500; white-space:nowrap; }
+    .xuong { background:var(--muted); border-radius:6px; }
+    .trong { display:flex; flex-direction:column; align-items:center; text-align:center; gap:12px; padding:48px 24px; }
+    .vong-bieu-tuong { width:44px; height:44px; border-radius:26px; display:flex; align-items:center; justify-content:center; }
+  </style>
+</helmet>
+
+<div class="goc {{lopCheDo}}" style="width: 880px; padding: 24px; display: flex; flex-direction: column; gap: 16px; background: var(--background); color: var(--foreground); box-sizing: border-box;">
+
+  <div style="display: flex; flex-direction: column; gap: 4px;">
+    <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em;">Trạng thái</h1>
+    <p class="phu">Chỗ dễ quên nhất khi chuyển sang mã nguồn. Mọi màn hình trong 58 màn đều cần đủ những trạng thái này.</p>
+  </div>
+
+  <!-- Đang tải -->
+  <div class="the">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border);">
+      <span style="font-size: 14px; font-weight: 500;">Đang tải</span>
+      <span class="nhan-ky-thuat">Skeleton dựng theo đúng hình dạng dữ liệu sắp hiện, không phải một vòng xoay giữa màn</span>
+    </div>
+    <div style="display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border);">
+        <div class="xuong" style="width: 16px; height: 16px; border-radius: 5px;"></div>
+        <div class="xuong" style="width: 24px; height: 24px; border-radius: 26px;"></div>
+        <div style="display: flex; flex-direction: column; gap: 5px; flex-grow: 1;">
+          <div class="xuong" style="width: 180px; height: 13px;"></div>
+          <div class="xuong" style="width: 110px; height: 11px;"></div>
+        </div>
+        <div class="xuong" style="width: 86px; height: 20px; border-radius: 26px;"></div>
+        <div class="xuong" style="width: 32px; height: 13px;"></div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); opacity: 0.7;">
+        <div class="xuong" style="width: 16px; height: 16px; border-radius: 5px;"></div>
+        <div class="xuong" style="width: 24px; height: 24px; border-radius: 26px;"></div>
+        <div style="display: flex; flex-direction: column; gap: 5px; flex-grow: 1;">
+          <div class="xuong" style="width: 148px; height: 13px;"></div>
+          <div class="xuong" style="width: 132px; height: 11px;"></div>
+        </div>
+        <div class="xuong" style="width: 86px; height: 20px; border-radius: 26px;"></div>
+        <div class="xuong" style="width: 32px; height: 13px;"></div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; opacity: 0.4;">
+        <div class="xuong" style="width: 16px; height: 16px; border-radius: 5px;"></div>
+        <div class="xuong" style="width: 24px; height: 24px; border-radius: 26px;"></div>
+        <div style="display: flex; flex-direction: column; gap: 5px; flex-grow: 1;">
+          <div class="xuong" style="width: 164px; height: 13px;"></div>
+          <div class="xuong" style="width: 96px; height: 11px;"></div>
+        </div>
+        <div class="xuong" style="width: 86px; height: 20px; border-radius: 26px;"></div>
+        <div class="xuong" style="width: 32px; height: 13px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hai loại rỗng -->
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;">
+    <div class="the">
+      <div style="display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-bottom: 1px solid var(--border);">
+        <span style="font-size: 14px; font-weight: 500;">Rỗng — chưa từng có dữ liệu</span>
+        <span class="nhan-ky-thuat">Dạy người dùng bước tiếp theo</span>
+      </div>
+      <div class="trong">
+        <div class="vong-bieu-tuong" style="background: var(--muted); color: var(--muted-foreground);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 16px; font-weight: 500;">Chưa có khách hàng nào</span>
+          <span style="font-size: 13px; color: var(--muted-foreground); max-width: 300px; line-height: 1.5;">Khách hàng được tạo tự động khi có người nhắn tới widget, hoặc bạn nhập từ tệp Excel.</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <span class="nut" style="background: var(--primary); color: var(--primary-foreground);">Nhúng widget</span>
+          <span class="nut" style="border-color: var(--border); background: var(--background);">Nhập từ Excel</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="the">
+      <div style="display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-bottom: 1px solid var(--border);">
+        <span style="font-size: 14px; font-weight: 500;">Rỗng — bộ lọc không khớp</span>
+        <span class="nhan-ky-thuat">Khác hẳn ở trên: lối thoát là gỡ bộ lọc</span>
+      </div>
+      <div class="trong">
+        <div class="vong-bieu-tuong" style="background: var(--muted); color: var(--muted-foreground);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 16px; font-weight: 500;">Không có kết quả nào khớp</span>
+          <span style="font-size: 13px; color: var(--muted-foreground); max-width: 300px; line-height: 1.5;">Không có khách hàng nào ở trạng thái <strong>Chờ nhân viên</strong> trên kênh <strong>Zalo OA</strong>.</span>
+        </div>
+        <span class="nut" style="border-color: var(--border); background: var(--background);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          Gỡ 2 bộ lọc
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lỗi và không có quyền -->
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;">
+    <div class="the">
+      <div style="display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-bottom: 1px solid var(--border);">
+        <span style="font-size: 14px; font-weight: 500;">Lỗi</span>
+        <span class="nhan-ky-thuat">Luôn hiện traceId — nối được lỗi này với dòng log tương ứng</span>
+      </div>
+      <div class="trong">
+        <div class="vong-bieu-tuong" style="background: color-mix(in oklch, var(--destructive), transparent 90%); color: var(--destructive);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 16px; font-weight: 500;">Không tải được danh sách</span>
+          <span style="font-size: 13px; color: var(--muted-foreground); max-width: 300px; line-height: 1.5;">Máy chủ không phản hồi. Thử lại sau ít phút; nếu vẫn lỗi, gửi mã theo dõi bên dưới cho quản trị viên.</span>
+        </div>
+        <span style="font-size: 12px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; color: var(--muted-foreground); background: var(--muted); border-radius: 6px; padding: 4px 8px;">a3f1c9e2-7b04-4d18-9a6e-2c5f0d8b1e73</span>
+        <span class="nut" style="border-color: var(--border); background: var(--background);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+          Thử lại
+        </span>
+      </div>
+    </div>
+
+    <div class="the">
+      <div style="display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-bottom: 1px solid var(--border);">
+        <span style="font-size: 14px; font-weight: 500;">Không có quyền</span>
+        <span class="nhan-ky-thuat">Nói rõ cần vai trò nào, đừng chỉ nói &quot;bị từ chối&quot;</span>
+      </div>
+      <div class="trong">
+        <div class="vong-bieu-tuong" style="background: var(--muted); color: var(--muted-foreground);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 16px; font-weight: 500;">Mục này dành cho quản trị viên</span>
+          <span style="font-size: 13px; color: var(--muted-foreground); max-width: 300px; line-height: 1.5;">Tài khoản của bạn đang ở vai trò <strong>Nhân viên</strong>. Nhật ký kiểm toán chỉ mở cho vai trò <strong>Quản trị viên</strong>.</span>
+        </div>
+        <span class="nut" style="border-color: var(--border); background: var(--background);">Quay lại hộp thư</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hạn mức đã chạm trần -->
+  <div class="the" style="padding: 16px; flex-direction: row; gap: 12px; align-items: flex-start; background: color-mix(in oklch, var(--warning), transparent 94%); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--warning), transparent 80%);">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+    <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1;">
+      <span style="font-size: 14px; font-weight: 500;">Đã dùng hết hạn mức hội thoại của chu kỳ này</span>
+      <span style="font-size: 13px; color: var(--muted-foreground); line-height: 1.5;">Tác tử AI đã ngừng trả lời tự động từ 09:14 hôm nay. Hội thoại mới vẫn vào hộp thư và nhân viên vẫn trả lời được bình thường.</span>
+    </div>
+    <span class="nut" style="background: var(--primary); color: var(--primary-foreground); flex-shrink: 0;">Nâng gói</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"cheDo":{"editor":"enum","options":["sáng","tối"],"default":"sáng","section":"Hiển thị"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { lopCheDo: (this.props.cheDo ?? 'sáng') === 'tối' ? 'toi' : '' };
+  }
+}
+</script>
+</body>
+</html>

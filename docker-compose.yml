@@ -1,115 +1,304 @@
-version: "3.9"
+# Hạ tầng + dịch vụ cho môi trường phát triển.
+# Nguồn: kế hoạch phần 4 (kiến trúc), mục 4.3 (Kafka), mục 4.4 (Eureka), mục 4.5 (quan sát).
+#
+#   docker compose up -d postgres redis kafka        # chỉ hạ tầng (kéo theo zookeeper)
+#   docker compose up -d                             # thêm dịch vụ (cần code, xem README)
+#   docker compose --profile observability up -d      # thêm Prometheus + Grafana
+#
+# LƯU Ý: replication factor = 1, một broker Kafka và một nút ZooKeeper là cấu hình PHÁT TRIỂN.
+# Vận hành thật cần tối thiểu 3 broker và ZooKeeper ensemble 3 nút (số lẻ để bầu được
+# đa số) — ghi rõ điều này trong báo cáo (mục 4.3).
+
+name: thesis-crm-ai
+
+x-eureka-env: &eureka-env
+  EUREKA_URL: http://eureka-server:8761/eureka
 
 services:
+  # ─────────────────────────── HẠ TẦNG ───────────────────────────
+
   postgres:
-    image: postgres:16
-    container_name: aicrm-postgres
+    # pgvector trong cùng cụm PostgreSQL, không vận hành vector DB riêng (ADR-0007)
+    image: pgvector/pgvector:pg16
+    container_name: crm-postgres
     environment:
-      POSTGRES_DB: aicrm_db
-      POSTGRES_USER: aicrm_user
-      POSTGRES_PASSWORD: aicrm_password
+      POSTGRES_DB: ${DB_NAME:-thesis_crm}
+      POSTGRES_USER: ${DB_MIGRATION_USER:-crm_owner}
+      POSTGRES_PASSWORD: ${DB_MIGRATION_PASSWORD:-changeme}
     ports:
-      - "5432:5432"
+      # Cổng máy chủ tham số hóa: nhiều máy đã có PostgreSQL cài sẵn giữ 5432.
+      # Đổi bằng POSTGRES_HOST_PORT trong .env — xem .env.example.
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-
-  qdrant:
-    image: qdrant/qdrant
-    container_name: aicrm-qdrant
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - qdrant_data:/qdrant/storage
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_MIGRATION_USER:-crm_owner} -d ${DB_NAME:-thesis_crm}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [crm]
 
   redis:
-    image: redis:7
-    container_name: aicrm-redis
+    image: redis:7-alpine
+    container_name: crm-redis
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [crm]
 
-  discovery-server:
-    build:
-      context: ./backend-java/discovery-server
-    container_name: aicrm-discovery-server
+  zookeeper:
+    # Kafka chạy ở chế độ ZooKeeper (ADR-0009 — lệch so với kế hoạch mục 4.3, vốn ghi KRaft).
+    #
+    # LƯU Ý PHIÊN BẢN: ZooKeeper bị đánh dấu lỗi thời từ Kafka 3.5 (KIP-500) và bị XÓA HẲN
+    # ở Kafka 4.0. Kafka 3.9 / Confluent 7.9 là dòng cuối còn hỗ trợ. Vì vậy phiên bản image
+    # ở đây bị ghim cứng, không nâng lên 4.x được.
+    image: confluentinc/cp-zookeeper:7.9.0
+    container_name: crm-zookeeper
+    hostname: zookeeper
+    ports:
+      - "${ZOOKEEPER_HOST_PORT:-2181}:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+    healthcheck:
+      # Lệnh "srvr" của giao thức four-letter-word: ZooKeeper trả về trạng thái máy chủ.
+      test: ["CMD-SHELL", "echo srvr | nc -w 2 localhost 2181 | grep -q Mode"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks: [crm]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.9.0
+    container_name: crm-kafka
+    hostname: kafka
+    ports:
+      - "${KAFKA_HOST_PORT:-29092}:29092"   # dành cho máy chủ (host)
+    environment:
+      KAFKA_BROKER_ID: 1
+      # Bầu chọn controller và lưu metadata do ZooKeeper đảm nhiệm, không phải quorum nội bộ.
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ZOOKEEPER_CONNECTION_TIMEOUT_MS: 18000
+
+      # --- HAI LISTENER: cái bẫy kinh điển ở mục 4.3 ---
+      # INTERNAL cho các container trong mạng Docker (kafka:9092)
+      # EXTERNAL cho máy chủ (localhost:29092)
+      # Khai báo thiếu một trong hai thì kết nối được từ trong nhưng không từ ngoài,
+      # hoặc ngược lại. Đây là lỗi kết nối khó đoán nhất của dự án.
+      #
+      # Ở chế độ ZooKeeper KHÔNG có listener CONTROLLER — controller được ZooKeeper bầu.
+      # Nhờ vậy tránh được luôn lỗi "advertised.listeners cannot use 0.0.0.0" mà chế độ
+      # KRaft gộp broker+controller hay gặp.
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+
+      # --- Môi trường phát triển: một broker nên mọi thứ = 1 ---
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_NUM_PARTITIONS: 3
+      # Bật tạo topic tự động ở dev, nhưng vẫn khai báo tường minh bằng
+      # scripts/create-topics.sh để tái lập được (mục 4.3)
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
+    networks: [crm]
+
+  # ─────────────────────────── TRACK A ───────────────────────────
+
+  eureka-server:
+    build: ./eureka-server
+    container_name: crm-eureka
     ports:
       - "8761:8761"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8761/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [crm]
 
-  api-gateway:
-    build:
-      context: ./backend-java/api-gateway
-    container_name: aicrm-api-gateway
+  gateway:
+    build: ./gateway
+    container_name: crm-gateway
     ports:
       - "8080:8080"
-    depends_on:
-      - discovery-server
     environment:
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
+      <<: *eureka-env
+      REDIS_HOST: redis
+      JWK_SET_URI: http://java-core:8081/.well-known/jwks.json
+    depends_on:
+      redis:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [crm]
 
-  main-backend-service:
-    build:
-      context: ./backend-java/main-backend-service
-    container_name: aicrm-main-backend-service
+  java-core:
+    build: ./java-core
+    container_name: crm-java-core
     ports:
       - "8081:8081"
-    depends_on:
-      - postgres
-      - discovery-server
-      - ai-service-python
     environment:
-      SERVER_PORT: 8081
+      <<: *eureka-env
       SPRING_PROFILES_ACTIVE: dev
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: aicrm_db
-      DB_USERNAME: aicrm_user
-      DB_PASSWORD: aicrm_password
-      AI_SERVICE_URL: http://ai-service-python:8000
-      MCP_TOOL_SERVICE_URL: http://mcp-tool-service:8082
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
-
-  mcp-tool-service:
-    build:
-      context: ./backend-java/mcp-tool-service
-    container_name: aicrm-mcp-tool-service
-    ports:
-      - "8082:8082"
+      DB_NAME: ${DB_NAME:-thesis_crm}
+      # ADR-0001: runtime dùng tài khoản KHÔNG phải chủ bảng — chủ bảng bypass RLS
+      DB_USERNAME: ${DB_USERNAME:-crm_app}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      DB_MIGRATION_USER: ${DB_MIGRATION_USER:-crm_owner}
+      DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:-changeme}
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP: kafka:9092
     depends_on:
-      - discovery-server
-      - main-backend-service
-    environment:
-      SERVER_PORT: 8082
-      MAIN_BACKEND_SERVICE_URL: http://main-backend-service:8081
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    networks: [crm]
 
-  ai-service-python:
-    build:
-      context: ./ai-service-python/langgraph-rag-service
-    container_name: aicrm-ai-service-python
-    ports:
-      - "8000:8000"
-    depends_on:
-      - qdrant
-    environment:
-      QDRANT_URL: http://qdrant:6333
-      QDRANT_COLLECTION: document_chunks
-      MCP_TOOL_SERVICE_URL: http://mcp-tool-service:8082
-      BACKEND_SERVICE_URL: http://main-backend-service:8081
-      OPENAI_API_KEY: your_openai_api_key
-      GEMINI_API_KEY: your_gemini_api_key
-
-  frontend-react:
-    build:
-      context: ./frontend-react/aicrm-frontend
-    container_name: aicrm-frontend-react
+  web-dashboard:
+    build: ./web-dashboard
+    container_name: crm-web-dashboard
     ports:
       - "5173:5173"
-    depends_on:
-      - api-gateway
     environment:
-      VITE_API_BASE_URL: http://localhost:8080
+      VITE_GATEWAY_URL: http://localhost:8080
+      VITE_WS_URL: ws://localhost:8080/ws
+    depends_on:
+      - gateway
+    networks: [crm]
+
+  web-widget:
+    build: ./web-widget
+    container_name: crm-web-widget
+    ports:
+      - "5174:5174"
+    depends_on:
+      - gateway
+    networks: [crm]
+
+  # ─────────────────────────── TRACK B ───────────────────────────
+
+  ai-service:
+    build: ./ai-service
+    container_name: crm-ai-service
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *eureka-env
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-thesis_crm}
+      DB_USERNAME: ${AI_DB_USERNAME:-ai_app}
+      DB_PASSWORD: ${AI_DB_PASSWORD:-changeme}
+      KAFKA_BOOTSTRAP: kafka:9092
+      # ADR-0002: bề mặt DUY NHẤT để chạm dữ liệu nghiệp vụ
+      JAVA_CORE_URL: http://java-core:8081
+      # mcp-server-mock ở REPOSITORY RIÊNG, chạy ngoài compose này (ADR-0005)
+      MCP_SERVER_URL: ${MCP_SERVER_URL:-http://host.docker.internal:9000}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_TEMPERATURE: "0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    networks: [crm]
+
+  # ────────────────── QUAN SÁT (profile riêng) ──────────────────
+  # Tách sau profile để `docker compose up` mặc định không nặng thêm.
+  # Ba bảng điều khiển là đủ: sức khỏe hệ thống, đường ống AI, chỉ số nghiệp vụ (mục 4.5).
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: crm-prometheus
+    profiles: [observability]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks: [crm]
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: crm-grafana
+    profiles: [observability]
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks: [crm]
+
+networks:
+  crm:
+    driver: bridge
 
 volumes:
   postgres_data:
-  qdrant_data:
+  redis_data:
+  zookeeper_data:
+  zookeeper_log:
+  kafka_data:
+  prometheus_data:
+  grafana_data:

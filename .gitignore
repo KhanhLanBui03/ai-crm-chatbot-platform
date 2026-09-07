@@ -12,24 +12,50 @@
 **/*.py[cod]
 **/*$py.class
 **/.pytest_cache/
+**/.ruff_cache/
 **/venv/
+**/.venv/
 **/env/
-**/.env
+**/*.egg-info/
 
-# Node.js / React
+# Node.js / Vite
 **/node_modules/
 **/dist/
-**/.env.local
-**/.env.development.local
-**/.env.test.local
-**/.env.production.local
+**/.vite/
+# `tsc -b` sinh ra để chạy tăng dần — máy nào cũng khác nhau, commit vào là xung đột vô ích
+**/tsconfig.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# IDEs & System
+# Biến môi trường — .env.example thì COMMIT, .env thì không
+**/.env
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+
+# Kết quả sinh tự động — chép sang docs/report/ nếu cần giữ
+ai-service/eval/reports/*
+!ai-service/eval/reports/.gitkeep
+loadtest/results/
+
+# Mô hình và cache mô hình — nặng, tải lại được
+**/.cache/huggingface/
+**/models/
+*.safetensors
+*.onnx
+
+# Dữ liệu pilot — KHÔNG BAO GIỜ commit dữ liệu chưa ẩn danh hóa
+# (Nghị định 13/2023/NĐ-CP, bề mặt T8 trong docs/threat-model.md)
+data/raw/
+data/pilot/
+**/*.pii.*
+
+# IDE và hệ điều hành
 .idea/
 .vscode/
+*.iml
 *.suo
 *.ntvs*
 *.njsproj

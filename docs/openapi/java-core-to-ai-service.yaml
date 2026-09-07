@@ -1,0 +1,86 @@
+# Giao ước: ai-service GỌI java-core
+# Track A viết đặc tả, Track B rà soát. Hạn chốt: 07/09 (kế hoạch mục 1.3).
+#
+# Đây là bề mặt DUY NHẤT ai-service được phép chạm vào dữ liệu nghiệp vụ (ADR-0002).
+# ai-service không kết nối trực tiếp tới các schema platform/engagement/sales/analytics.
+openapi: 3.1.0
+info:
+  title: java-core internal API (dành cho ai-service)
+  version: 0.1.0-draft
+  description: |
+    ai-service gọi được gì để đọc hội thoại, ghi lead, ghi tương tác AI.
+    TODO: chốt trước 07/09.
+servers:
+  - url: http://java-core:8081
+    description: nội bộ mạng Docker
+  - url: http://gateway:8080
+    description: qua gateway (lb://java-core)
+
+paths:
+  # --- Đọc hội thoại (engagement) ---
+  /internal/conversations/{conversationId}:
+    get:
+      summary: Đọc một hội thoại kèm lịch sử tin nhắn
+      # TODO: parameters, responses
+  /internal/conversations/{conversationId}/messages:
+    get:
+      summary: Đọc tin nhắn của hội thoại, có phân trang
+      # TODO
+  /internal/conversations/{conversationId}/summary:
+    patch:
+      summary: Ghi bản tóm tắt có cấu trúc — UC026 bước 4
+      description: |
+        Bốn phần của UC026 bước 3 cộng phiên bản mô hình và lý do kích hoạt, ghi vào
+        `engagement.conversations` (`summary_data`, `summary_trigger`,
+        `summary_model_version`, `summarized_at`, `summary`) — xem migration V114.
+
+        `summary_model_version` BẮT BUỘC: hậu điều kiện UC026 đòi nó, và java-core
+        không đọc nhờ được `ai.ai_interactions.model_version` (crm_app không có USAGE
+        trên schema `ai`, V111). `ck_conv_summary_complete` từ chối bản ghi thiếu nó.
+      # TODO: body — {trigger, mainNeed, providedInfo, unresolvedIssues, nextSteps,
+      #       modelVersion, summaryText}
+
+  # --- Ghi lead / điểm lead (sales) ---
+  # Track B ghi qua API này, KHÔNG ghi thẳng vào schema sales (mục 9)
+  /internal/leads:
+    post:
+      summary: Tạo lead từ tín hiệu do AI trích xuất
+      # TODO
+  /internal/leads/{leadId}/score:
+    put:
+      summary: Ghi điểm lead — sales.LEAD_SCORES (score, model_version, features)
+      # TODO
+
+  # --- Ghi tương tác AI (ai) ---
+  #
+  # ĐÃ GỠ 25/08/2026: POST /internal/ai-interactions — "ghi một lượt gọi AI vào
+  # ai.AI_INTERACTIONS". Endpoint này không hiện thực được và không cần thiết:
+  #   · ai.ai_interactions thuộc schema của Track B, ai-service GHI THẲNG.
+  #   · crm_app không có USAGE trên schema ai (V111), nên java-core không thể ghi hộ
+  #     kể cả khi muốn.
+  # Số liệu chi phí/token/độ trễ đi sang Track A bằng ĐƯỜNG KHÁC, đã có: sự kiện
+  # crm.ai-interaction.v1 → consumer analytics-cg → analytics.metrics_daily (V113).
+  #
+  # Cùng loại nhầm lẫn với G1 trong docs/traceability-uc-db-api-screen.md: giao cho
+  # một service phục vụ dữ liệu nằm sau ranh giới quyền của service kia.
+
+components:
+  securitySchemes:
+    internalJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT RS256 nội bộ; mọi request bắt buộc mang tenant context.
+  parameters:
+    TenantId:
+      name: X-Tenant-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    TraceId:
+      name: X-Trace-Id
+      in: header
+      required: true
+      schema: { type: string }
+security:
+  - internalJwt: []

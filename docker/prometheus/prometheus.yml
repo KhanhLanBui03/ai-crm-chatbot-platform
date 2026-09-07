@@ -1,0 +1,31 @@
+# Thu thập số liệu từ Micrometer (Java) và prometheus-client (Python) — kế hoạch mục 4.5.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["gateway:8080"]
+
+  - job_name: java-core
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["java-core:8081"]
+
+  - job_name: eureka-server
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["eureka-server:8761"]
+
+  - job_name: ai-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["ai-service:8000"]
+
+# Chỉ số tối thiểu cần có (mục 4.5):
+#   - độ trễ theo từng chặng
+#   - số lượt gọi mô hình ngôn ngữ
+#   - tỉ lệ lỗi tool
+#   - độ trễ tiêu thụ Kafka

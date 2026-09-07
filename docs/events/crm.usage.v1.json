@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thesis-crm-ai/events/crm.usage.v1.json",
+  "title": "crm.usage.v1",
+  "description": "Đo lường mức sử dụng theo hạn mức gói. Producer: java-core (platform).",
+  "type": "object",
+  "required": ["event_id", "event_version", "event_type", "tenant_id", "occurred_at", "payload"],
+  "properties": {
+    "event_id": { "type": "integer", "description": "outbox_events.id — dùng để chống xử lý trùng" },
+    "event_version": { "type": "integer", "const": 1 },
+    "event_type": { "type": "string", "enum": ["ConversationConsumed", "TokensConsumed"] },
+    "tenant_id": { "type": "string", "format": "uuid", "description": "khóa phân vùng Kafka" },
+    "aggregate_id": { "type": "string", "format": "uuid" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "payload": {
+      "type": "object",
+      "description": "TODO: điền khi chốt giao ước (hạn 14/09)"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #3259d1; text-decoration: none; }
+    a:hover { color: #24409a; }
+    .goc {
+      --background:#ffffff; --foreground:#0a0a0a; --card:#ffffff;
+      --primary:#3259d1; --primary-foreground:#fafafa;
+      --secondary:#f5f5f5; --secondary-foreground:#171717;
+      --muted:#f5f5f5; --muted-foreground:#737373;
+      --destructive:#e7000b; --success:#007e46; --warning:#be7200;
+      --border:#e5e5e5; --input:#e5e5e5; --vien-the:rgba(10,10,10,0.10);
+      font-family:'Geist','Geist Variable',system-ui,-apple-system,'Segoe UI',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    .goc.toi {
+      --background:#0a0a0a; --foreground:#fafafa; --card:#171717;
+      --primary:#7ba1fc; --primary-foreground:#0b152d;
+      --secondary:#262626; --secondary-foreground:#fafafa;
+      --muted:#262626; --muted-foreground:#a1a1a1;
+      --destructive:#ff6467; --success:#3bb974; --warning:#efa831;
+      --border:rgba(255,255,255,0.10); --input:rgba(255,255,255,0.15); --vien-the:rgba(250,250,250,0.10);
+    }
+    .nut { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 10px;
+           border-radius:10px; border:1px solid transparent; font-size:14px; font-weight:500; white-space:nowrap; }
+    .o-nhap { height:32px; border-radius:10px; border:1px solid var(--input); background:var(--background);
+              display:flex; align-items:center; gap:8px; padding:0 10px; font-size:14px; }
+    .nhan { font-size:14px; font-weight:500; }
+  </style>
+</helmet>
+
+<div class="goc {{lopCheDo}}" style="width: 1440px; height: 900px; display: flex; background: var(--background); color: var(--foreground); overflow: hidden;">
+
+  <!-- Bảng thương hiệu — nền phẳng pha màu chủ đạo, không dùng chuyển sắc -->
+  <div style="width: 560px; flex-shrink: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 48px; background: color-mix(in oklch, var(--primary), var(--background) 94%); border-right: 1px solid var(--border); box-sizing: border-box;">
+
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--primary); color: var(--primary-foreground); display: flex; align-items: center; justify-content: center;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 9.9 9.9 3 12l6.9 2.1L12 21l2.1-6.9L21 12l-6.9-2.1z"/></svg>
+      </div>
+      <span style="font-size: 16px; font-weight: 600;">CRM AI</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 24px;">
+      <h1 style="margin: 0; font-size: 34px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.2; text-wrap: pretty;">Trả lời khách hàng suốt ngày đêm, và biến câu hỏi thành cơ hội bán hàng.</h1>
+      <p style="margin: 0; font-size: 15px; color: var(--muted-foreground); line-height: 1.6; max-width: 420px; text-wrap: pretty;">Tác tử AI trả lời dựa trên tài liệu của chính doanh nghiệp bạn, chuyển giao cho nhân viên khi gặp việc ngoài khả năng, và tự chấm điểm khách hàng tiềm năng.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 10px; font-size: 14px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M20 6 9 17l-5-5"/></svg>
+        <span>Web Widget, Zalo OA và Messenger trong một hộp thư</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; font-size: 14px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M20 6 9 17l-5-5"/></svg>
+        <span>Dữ liệu mỗi doanh nghiệp cô lập ở tầng cơ sở dữ liệu</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; font-size: 14px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M20 6 9 17l-5-5"/></svg>
+        <span>Tuân thủ Nghị định 13/2023/NĐ-CP về dữ liệu cá nhân</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Biểu mẫu -->
+  <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center; padding: 48px; box-sizing: border-box;">
+    <div style="width: 384px; display: flex; flex-direction: column; gap: 24px;">
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <h2 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em;">Đăng nhập</h2>
+        <p style="margin: 0; font-size: 14px; color: var(--muted-foreground);">Chưa có tài khoản? <a href="#">Đăng ký doanh nghiệp</a></p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label class="nhan">Email công việc</label>
+          <div class="o-nhap"><span>an.pham@cattuong.vn</span></div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between;">
+            <label class="nhan">Mật khẩu</label>
+            <a href="#" style="font-size: 13px;">Quên mật khẩu?</a>
+          </div>
+          <!-- Trạng thái sai mật khẩu — UC002 khoá tài khoản sau 5 lần trong 15 phút -->
+          <div class="o-nhap" style="border-color: var(--destructive); box-shadow: 0 0 0 3px color-mix(in oklch, var(--destructive), transparent 80%);">
+            <span style="flex-grow: 1; letter-spacing: 0.15em;">••••••••••</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted-foreground);"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+          <span style="font-size: 12px; color: var(--destructive); line-height: 1.5;">Email hoặc mật khẩu không đúng. Còn <strong>2 lần thử</strong> trước khi tài khoản bị khoá 15 phút.</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="width: 16px; height: 16px; border-radius: 5px; background: var(--primary); color: var(--primary-foreground); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </span>
+          <span style="font-size: 14px;">Ghi nhớ đăng nhập trên thiết bị này</span>
+        </div>
+
+        <span class="nut" style="height: 36px; background: var(--primary); color: var(--primary-foreground); width: 100%;">Đăng nhập</span>
+      </div>
+
+      <p style="margin: 0; font-size: 12px; color: var(--muted-foreground); line-height: 1.6;">Phiên đăng nhập ghi lại địa chỉ IP và trình duyệt để bạn tự thu hồi được ở mục Bảo mật.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"cheDo":{"editor":"enum","options":["sáng","tối"],"default":"sáng","section":"Hiển thị"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { lopCheDo: (this.props.cheDo ?? 'sáng') === 'tối' ? 'toi' : '' };
+  }
+}
+</script>
+</body>
+</html>
