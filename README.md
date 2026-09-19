@@ -108,7 +108,8 @@ Mỗi quyết định một file trong [`docs/adr/`](docs/adr/) — nguồn tr�
 | [0007](docs/adr/0007-pgvector-thay-vector-db-rieng.md) | pgvector trong cùng cụm PostgreSQL |
 | [0008](docs/adr/0008-web-dashboard-react-vite-thay-nextjs.md) | web-dashboard React + Vite (lệch so với kế hoạch) |
 | [0009](docs/adr/0009-kafka-che-do-zookeeper-thay-kraft.md) | Kafka chế độ ZooKeeper (lệch so với kế hoạch) |
-| [0010](docs/adr/0010-ai-service-app-src-layout.md) | ai-service `app/` src-layout (lệch so với kế hoạch) |
+| [0010](docs/adr/0010-ai-service-app-src-layout.md) | ~~ai-service `app/` src-layout~~ — **thay bởi 0015** |
+| [0015](docs/adr/0015-cau-truc-src-hai-tang-theo-master-plan-v8.md) | Cấu trúc `src/` + tách tầng suy luận `inference/` (Master Plan v8.0) |
 
 ---
 
@@ -158,21 +159,32 @@ Sau khi chốt, mỗi bên tự dựng bản giả lập của bên kia và làm
 ├── web-widget/             Vite
 ├── loadtest/               k6
 │
-│   ── TRACK B ──
-└── ai-service/             app/ src-layout (ADR-0010)
-    ├── app/
-    │   ├── api/            bề mặt HTTP có phiên bản
-    │   ├── core/           config · logging · metrics · eureka
-    │   ├── db/  schemas/  repositories/
-    │   ├── domain/         orchestrator · rag · mcp_client · scoring · clustering
-    │   ├── integrations/   java_core · llm · kafka
-    │   └── workers/        consumer nền
-    ├── migration/          Flyway, dải V2xx
-    └── eval/
-        ├── golden_set.jsonl      150 câu — tài sản giá trị nhất
-        ├── adversarial.jsonl     60-80 kịch bản tấn công
-        ├── configs/              mỗi cấu hình thí nghiệm một file
-        └── reports/              CSV và HTML sinh tự động
+│   ── TRACK B ── kiến trúc hai tầng, Master Plan §3.9.2 (ADR-0015)
+├── ai-service/             TẦNG ORCHESTRATION — KHÔNG có ML runtime
+│   ├── src/
+│   │   ├── entrypoint.py   RUN_MODE=api|worker · ghim workers=1
+│   │   ├── api/            FastAPI — bề mặt HTTP có phiên bản
+│   │   ├── worker/         Kafka consumer — giữ riêng package
+│   │   └── ai/
+│   │       ├── service.py  FACADE DUY NHẤT   schemas.py  hợp đồng §2.5
+│   │       ├── rag/ orchestrator/ mcp_client/ extraction/ guardrails/
+│   │       ├── inference/  client gọi sang tầng suy luận
+│   │       ├── scoring/ clustering/ db/ events/ telemetry/
+│   │       └── integrations/   java_core · llm
+│   ├── requirements/       base · dev  (sạch torch/onnxruntime)
+│   ├── migration/          Flyway, dải V2xx
+│   └── tests/{unit, integration, eval}
+│       └── eval/           golden_set · adversarial · configs · reports
+│
+├── inference/              TẦNG SUY LUẬN — nơi DUY NHẤT có onnxruntime
+│   ├── src/{entrypoint, session, bench_cpu}.py
+│   ├── src/roles/          embed · rerank · classify
+│   └── compose.inference.yml    chạy ở môi trường (C) Cloud CPU
+│
+├── notebooks/              R&D Kaggle — torch, sklearn, xgboost ở đây
+├── artifacts/              MODEL_REGISTRY.md · DATA_HASHES.txt
+├── data/                   tập test đóng băng — KHÔNG sửa để cải thiện điểm
+└── reports/eval/           báo cáo đo chỉ số
 
 mcp-server-mock/            REPOSITORY RIÊNG — cố ý tách để chứng minh
                             nó là hệ thống ngoài, không thuộc CRM

@@ -1,0 +1,85 @@
+# ai-service — TẦNG ORCHESTRATION. Python 3.11.
+#
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  KHÔNG BAO GIỜ thêm vào tệp này:                                             ║
+# ║     onnxruntime · torch · xgboost                                            ║
+# ║     transformers · sentence-transformers · FlagEmbedding                     ║
+# ║                                                                              ║
+# ║  Cổng chặn CI (§1.6 — chỉ số nghiệm thu, kế hoạch Ngày 4):                    ║
+# ║     docker run --rm ai-service:ci pip list --format=freeze \                  ║
+# ║       | grep -Eiq "^(onnxruntime|torch|xgboost)"     → phải RỖNG              ║
+# ║                                                                              ║
+# ║  Model chạy ở tầng suy luận → inference/requirements/base.txt                 ║
+# ║  Thư viện huấn luyện → notebooks/requirements.txt                             ║
+# ║                                                                              ║
+# ║  Lý do không phải "cho gọn": đẩy model ra ngoài mà vẫn để onnxruntime ở đây   ║
+# ║  là trả toàn bộ chi phí kiến trúc mà không nhận được lợi ích nào (§3.2).      ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+#
+# VỀ scikit-learn — đọc trước khi định gỡ
+# ----------------------------------------
+# `pyvi` kéo theo `scikit-learn` + `sklearn-crfsuite` làm phụ thuộc gián tiếp. Đây là
+# CÓ CHỦ Ý, không phải sót:
+#
+#   §4.6 — "pyvi... là thư viện tách từ THUẦN PYTHON, không phải model neural, nên nó
+#          nằm trong ai-api cùng với guardrails. Đây không phải ngoại lệ của §3.2:
+#          quy tắc là 'ai-api không nạp model ONNX', không phải 'ai-api không có
+#          logic ngôn ngữ nào'."
+#
+# `src/ai/rag/tsquery.py` cần `ViTokenizer.tokenize` để dựng phrase query `<->`. Gỡ pyvi
+# nghĩa là đẩy tách từ sang tầng suy luận, cộng một lượt gọi mạng vào MỌI truy vấn.
+#
+# Đoạn code ở §3.2 grep thêm `scikit-learn`, mâu thuẫn với chính §4.6. Ba nguồn khác
+# (§1.6, xlsx Ngày 4, sheet Chỉ số nghiệm thu) đều chỉ grep 3 gói — lấy theo bản 3 gói.
+# Ghi ở ADR-0015.
+#
+# LUẬT VẪN GIỮ: không được `import sklearn` trong `src/` để suy luận. sklearn ở đây chỉ
+# tồn tại như phụ thuộc của bộ tách từ, không phải công cụ mô hình hoá.
+#
+# ⚠️ Dung lượng image hiện tại 776 MB, vượt ngưỡng < 400 MB của §3.2.3 (scipy 122 +
+#    pymupdf 63 + sklearn 59 + numpy 71 + babel 33). Việc tối ưu giao cho Ngày 6
+#    ("Đệm + Ổn định hoá"), chưa làm ở bước dựng khung. Xem ADR-0015 mục Đánh đổi.
+#
+# Chưa ghim phiên bản chính xác ở bước dựng khung; ghim khi bắt đầu code và ghi vào
+# báo cáo để đảm bảo tính tái lập.
+
+# --- Web ---
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pydantic>=2.9
+pydantic-settings>=2.6
+httpx>=0.27
+python-dotenv>=1.0
+
+# --- Điều phối (LangGraph) ---
+langgraph>=0.2.50
+langchain-core>=0.3
+langchain>=0.3
+
+# --- Dữ liệu: pgvector trong cùng cụm PostgreSQL (ADR-0007) ---
+psycopg[binary,pool]>=3.2
+pgvector>=0.3.6
+sqlalchemy>=2.0
+
+# --- Redis: semantic cache. KHOÁ BẮT BUỘC CÓ tenant_id (§4.9) ---
+redis>=5.2
+
+# --- Kafka (§2.6) ---
+aiokafka>=0.12
+
+# --- Service discovery: FastAPI không tự đăng ký Eureka ---
+py-eureka-client>=0.11
+
+# --- Nạp tài liệu: trích xuất văn bản. THUẦN PYTHON, không phải ML ---
+pymupdf>=1.24
+python-docx>=1.1
+trafilatura>=1.12
+
+# --- Tách từ tiếng Việt cho BM25 và guardrails. THUẦN PYTHON ---
+# Đọc khối "VỀ scikit-learn" ở đầu tệp trước khi định gỡ pyvi.
+pyvi>=0.1.1
+unidecode>=1.3          # bỏ dấu trong build_tsquery (§4.6)
+
+# --- Quan sát hệ thống ---
+prometheus-client>=0.21
+python-json-logger>=2.0

@@ -36,13 +36,20 @@ yarn-error.log*
 **/.env.production.local
 
 # Kết quả sinh tự động — chép sang docs/report/ nếu cần giữ
-ai-service/eval/reports/*
-!ai-service/eval/reports/.gitkeep
+ai-service/tests/eval/reports/*
+!ai-service/tests/eval/reports/.gitkeep
+reports/eval/*
+!reports/eval/.gitkeep
 loadtest/results/
 
 # Mô hình và cache mô hình — nặng, tải lại được
+#
+# KHÔNG dùng `**/models/`: nó nuốt luôn package Python `src/ai/db/models/` (ORM model),
+# khiến file nguồn biến mất khỏi Git mà không báo gì. Chỉ chặn đúng chỗ CHỨA artifact.
 **/.cache/huggingface/
-**/models/
+artifacts/models/
+inference/models/
+notebooks/models/
 *.safetensors
 *.onnx
 

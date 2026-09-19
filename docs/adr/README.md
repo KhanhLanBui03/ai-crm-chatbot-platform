@@ -24,10 +24,11 @@ Mỗi quyết định kiến trúc một file. Nguồn trực tiếp cho **chư�
 | 0007 | pgvector trong cùng cụm PostgreSQL thay vì vector DB riêng | KH mục 4.2 |
 | 0008 | web-dashboard dùng React + Vite thay vì Next.js 15 | Lệch so với KH |
 | 0009 | Kafka chạy ở chế độ ZooKeeper thay vì KRaft | Lệch so với KH |
-| 0010 | ai-service dùng `app/` src-layout, capability vào `app/domain/` | Lệch so với KH |
+| 0010 | ~~ai-service dùng `app/` src-layout~~ — **thay bởi 0015** | Lệch so với KH |
 | 0011 | shadcn/ui trên Tailwind v4; 21 màn vẽ chi tiết + 37 màn từ 6 mẫu lặp | Lệch so với KH |
 | 0012 | Redux Toolkit + RTK Query quản lý toàn bộ state của web-dashboard | Lệch so với KH |
 | 0013 | WebSocket cho hộp thư thời gian thực, xác thực bằng khung `AUTH` | KH mục 4.3 |
 | 0014 | java-core là mặt tiền duy nhất của dashboard, kể cả với dữ liệu Track B | Rà soát truy vết |
+| 0015 | Cấu trúc `src/` + tách tầng suy luận `inference/` theo Master Plan v8.0 | Thay ADR-0010 |
 
 `KH` = tài liệu `Ke-hoach-do-an-Chatbot-AI-CRM-v2-nhom-2-nguoi.docx`.

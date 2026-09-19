@@ -233,12 +233,21 @@ services:
       - "8000:8000"
     environment:
       <<: *eureka-env
+      # Một image, hai vai trò (§3.9.1). Đây là bản API; muốn chạy consumer Kafka thì
+      # thêm một service nữa dùng CÙNG image với RUN_MODE=worker.
+      RUN_MODE: api
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: ${DB_NAME:-thesis_crm}
       DB_USERNAME: ${AI_DB_USERNAME:-ai_app}
       DB_PASSWORD: ${AI_DB_PASSWORD:-changeme}
       KAFKA_BOOTSTRAP: kafka:9092
+      # Tầng suy luận chạy ở môi trường (C), NGOÀI compose này (§3.6.2).
+      # AI_MODE=mock để stack local chạy được khi chưa bật (C) — §3.4.1.
+      AI_MODE: ${AI_MODE:-mock}
+      EMBED_URL: ${EMBED_URL:-}
+      RERANK_URL: ${RERANK_URL:-}
+      CLASSIFY_URL: ${CLASSIFY_URL:-}
       # ADR-0002: bề mặt DUY NHẤT để chạm dữ liệu nghiệp vụ
       JAVA_CORE_URL: http://java-core:8081
       # mcp-server-mock ở REPOSITORY RIÊNG, chạy ngoài compose này (ADR-0005)

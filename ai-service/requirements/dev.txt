@@ -1,0 +1,17 @@
+# ai-service — phụ thuộc chỉ dùng khi phát triển và kiểm thử.
+# KHÔNG cài vào image production: Dockerfile chỉ COPY và cài base.txt.
+-r base.txt
+
+# --- Kiểm thử ---
+pytest>=8.3
+pytest-asyncio>=0.24
+pytest-cov>=6.0
+testcontainers[postgres,kafka]>=4.8   # test_rls.py và test_contract.py cần DB + Kafka thật
+
+# --- Chất lượng mã ---
+ruff>=0.8
+
+# --- Khung đánh giá (chạy tests/eval/) ---
+# Dùng thư viện có sẵn cho Recall/MRR/nDCG thay vì tự cài đặt công thức
+ranx>=0.3.20
+pyyaml>=6.0

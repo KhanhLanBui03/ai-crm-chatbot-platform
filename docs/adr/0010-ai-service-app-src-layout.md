@@ -1,9 +1,18 @@
 # ADR-0010 — ai-service dùng `app/` src-layout, capability nằm trong `app/domain/`
 
-- **Trạng thái:** Đề xuất
+- **Trạng thái:** ⛔ **Đã bị thay thế bởi [ADR-0015](0015-cau-truc-src-hai-tang-theo-master-plan-v8.md)** (19/09/2026)
 - **Ngày:** 2026-08-20
 - **Làn sở hữu:** Track B
 - **Quan hệ:** thi hành [ADR-0002](0002-ai-service-khong-truy-cap-db-truc-tiep.md) ở mức cấu trúc mã nguồn
+
+> **Không còn hiệu lực.** Master Plan v8.0 (06/09/2026) tách kiến trúc làm hai tầng —
+> `ai-service` thành tầng orchestration không có ML runtime, model chuyển sang `inference/` —
+> và §3.9.2 đưa ra cây thư mục dùng `src/`. ADR-0015 ghi lại quyết định thay thế.
+>
+> **Giữ file này lại có chủ đích**, không xoá: lập luận bên dưới vẫn đúng với thông tin có ở
+> thời điểm 20/08, và mục *Đánh đổi* đã tự viết sẵn đường lùi — *"chỉ cần nâng `app/domain/*`
+> lên gốc và sửa `pyproject.toml` với `Dockerfile`. Không đụng logic."* Đó chính xác là việc
+> đã làm, với chi phí đúng như dự đoán: 40 file `git mv`, 9 dòng import, 0 dòng logic.
 
 ## Bối cảnh
 

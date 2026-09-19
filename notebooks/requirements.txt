@@ -1,0 +1,37 @@
+# notebooks/ — R&D trên Kaggle (GPU T4 16GB). KHÔNG cài vào bất kỳ image nào.
+#
+# Đây là nơi nhận các thư viện HUẤN LUYỆN đã gỡ khỏi ai-service/requirements.txt
+# khi tái cấu trúc theo §3.9.2. Chúng chỉ chạy trên Kaggle, không bao giờ ở runtime.
+#
+#     huấn luyện  →  export .onnx  →  parity test  →  S3  →  image ai-inference
+#     (ở đây)                          (cổng chặn)          (chỉ onnxruntime)
+#
+# Ghép cặp .ipynb ↔ .py bằng jupytext để notebook diff được trong Git (§3.9.2).
+
+# --- Ghép cặp notebook để review được ---
+jupytext>=1.16
+
+# --- Huấn luyện encoder và reranker ---
+torch>=2.5
+transformers>=4.46
+sentence-transformers>=3.3
+FlagEmbedding>=1.3
+
+# --- Lead scoring UC030 + phân cụm chủ đề UC038 ---
+scikit-learn>=1.6
+xgboost>=2.1
+pandas>=2.2
+numpy>=2.1
+
+# --- Export và lượng tử hoá ONNX ---
+onnx>=1.17
+onnxruntime>=1.20          # để chạy parity test fp32 vs INT8 ngay trong notebook
+skl2onnx>=1.17
+onnxmltools>=1.12
+
+# --- Giải thích mô hình: 3 mã lý do của UC030 ---
+shap>=0.46
+
+# --- Đánh giá và biểu đồ cho báo cáo ---
+ranx>=0.3.20
+matplotlib>=3.9

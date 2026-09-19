@@ -1,0 +1,3 @@
+# Nguồn để sinh dev.txt bằng pip-compile:
+#     pip-compile --output-file=dev.txt dev.in
+-r base.in
