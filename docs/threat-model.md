@@ -47,5 +47,5 @@ Xem kế hoạch mục 9.2.
 ## 5. Liên hệ với thí nghiệm E9
 
 E9 đo **Attack Success Rate** theo từng nhóm tấn công, bật lần lượt từng lớp phòng thủ.
-Bộ kịch bản: `ai-service/eval/adversarial.jsonl` (60–80 kịch bản).
+Bộ kịch bản: `ai-service/tests/eval/adversarial.jsonl` (60–80 kịch bản).
 **Chạy trên môi trường cô lập với dữ liệu giả** (kế hoạch mục 8.1).

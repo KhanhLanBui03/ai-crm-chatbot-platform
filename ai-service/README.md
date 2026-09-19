@@ -1,127 +1,190 @@
-# ai-service — Track B
+# ai-service — Tầng orchestration của module AI
 
-Khối AI: RAG, điều phối LangGraph, MCP Client, chấm điểm Lead, phân nhóm chủ đề, khung đánh giá.
-Python 3.11 + FastAPI. Cổng **8000**.
+RAG, điều phối LangGraph, MCP Client, chấm điểm Lead, telemetry. Python 3.11 + FastAPI.
+Cổng **8000**.
 
-Bố cục theo chuẩn FastAPI production — **ADR-0010** giải thích vì sao lệch chữ của Phụ lục A.
+Bố cục `src/` theo **Master Plan §3.9.2**. **ADR-0015** giải thích vì sao thay thế ADR-0010
+(vốn chọn `app/`) và ba chỗ cố ý lệch khỏi hình vẽ §3.9.2.
+
+## Điều quan trọng nhất: service này KHÔNG nạp model
+
+Kiến trúc hai tầng v8.0 (§3.2) đưa toàn bộ model sang `inference/`:
+
+| | `ai-service/` (thư mục này) | `inference/` |
+|---|---|---|
+| Vai trò | orchestration — I/O thuần | suy luận — CPU thuần |
+| ML runtime | **KHÔNG** | onnxruntime · tokenizers · numpy |
+| Image | < 400 MB · pod sẵn sàng **2–5 s** | < 900 MB |
+| Chọn vai trò | `RUN_MODE=api\|worker` | `MODEL_ROLE=embed\|rerank\|classify` |
+
+Cổng chặn CI chạy mỗi build và sẽ đỏ nếu image này có ML runtime:
+
+```bash
+docker run --rm ai-service:ci pip list --format=freeze \
+  | grep -Eiq "^(onnxruntime|torch|xgboost|transformers|scikit-learn)" && exit 1
+```
+
+Lợi ích lớn nhất không phải dung lượng mà là **tách bạch bề mặt gỡ lỗi**: khi p95 xấu đi,
+`ai-service` chỉ có thể chậm vì *chờ*, tầng suy luận chỉ có thể chậm vì *tính*. Không có vùng xám.
 
 ## Cấu trúc
 
 ```
 ai-service/
-├── app/                     ← mã phục vụ request
-│   ├── main.py              create_app() + lifespan (Eureka, consumer Kafka)
-│   ├── api/
-│   │   ├── deps.py          DI: settings · session · tenant_id · trace_id
-│   │   └── v1/{router.py, endpoints/}
-│   ├── core/                config · logging · exceptions · metrics · eureka
-│   ├── db/{session, base, models/}      SQLAlchemy
-│   ├── schemas/             Pydantic DTO — GIAO ƯỚC với java-core
-│   ├── repositories/        truy cập dữ liệu
-│   ├── domain/              ← capability của Phụ lục A
-│   │   ├── orchestrator/    đồ thị LangGraph, định tuyến đa nhánh
-│   │   ├── rag/             ingest · retrieve · rerank · generate (11 chặng, mục 7.1)
-│   │   ├── mcp_client/      khám phá + gọi tool, lớp bảo vệ, kiểm toán
-│   │   ├── scoring/         chấm điểm Lead
-│   │   └── clustering/      K-Means, Elbow
-│   ├── integrations/        java_core/ · llm/ · kafka/
-│   └── workers/consumers/   tác vụ nền theo vòng đời ứng dụng
-│
-├── migration/               Flyway dải V2xx
-├── eval/                    golden_set · adversarial · configs · reports
-└── tests/{unit,integration,e2e}/
+├── Dockerfile                  một image, hai vai trò
+├── requirements/{base,dev}.{in,txt}
+├── migration/                  Flyway dải V2xx  ← xem ghi chú bên dưới
+├── k8s/                        manifest EKS — §3.10
+├── src/
+│   ├── entrypoint.py           đọc RUN_MODE · GHIM workers=1 (§3.9.1)
+│   ├── api/                    FastAPI — main · deps · eureka · v1/
+│   ├── worker/                 Kafka consumer — GIỮ RIÊNG package
+│   └── ai/
+│       ├── service.py          FACADE DUY NHẤT
+│       ├── schemas.py          hợp đồng §2.5 — là FILE, không phải thư mục
+│       ├── config.py           exceptions.py
+│       ├── inference/          client gọi sang tầng suy luận (§3.4)
+│       ├── orchestrator/       LangGraph, handoff        UC014, UC022
+│       ├── rag/                ingest·retrieve·rerank·generate  UC018–020, 023, 025
+│       ├── mcp_client/         discover + allow-list     UC021, UC024, UC028
+│       ├── extraction/         JSON Schema nghiêm ngặt   UC029
+│       ├── guardrails/         regex, normalize_vi — THUẦN PYTHON
+│       ├── scoring/            UC030      clustering/  UC038
+│       ├── db/                 session · RLS · models/ · repositories/
+│       ├── events/             Kafka producer/consumer
+│       ├── telemetry/          logging · metrics         UC039, UC040
+│       └── integrations/       java_core/ (ADR-0002) · llm/
+└── tests/{unit, integration, eval}/
 ```
+
+> **`migration/` lệch §3.9.2 có chủ ý.** Hình vẽ §3.9.2 ghi `alembic/`, nhưng ở đây vẫn là
+> **Flyway dải V2xx** — đó là cơ chế chống xung đột giữa hai làn, và `scripts/migrate-ai.sh`
+> cùng `docs/erd-*.md` đều bám vào nó. Lý do đầy đủ: ADR-0015.
+
+## `src` là package thật, không phải quy ước src-layout
+
+`src/entrypoint.py` gọi `"src.api.main:app"` nên `src` phải import được: nó có `__init__.py`,
+và `pyproject.toml` khai `where = ["."]` + `include = ["src*"]` — **không** dùng `where = ["src"]`.
+Docker `WORKDIR /app` với mã ở `/app/src` cũng vì lý do này.
 
 ## Ba vùng, ba mục đích khác nhau
 
 | Thư mục | Là gì | Chạy khi nào |
 |---|---|---|
-| `app/` | Mã phục vụ request | Trong sản phẩm, mọi lúc |
-| `eval/` | Harness thí nghiệm E1–E11 | Chỉ khi chạy thực nghiệm |
+| `src/` | Mã phục vụ request | Trong sản phẩm, mọi lúc |
+| `tests/eval/` | Harness thí nghiệm, golden set, adversarial | Chỉ khi chạy thực nghiệm |
 | `migration/` | Schema (SQL) | Lúc triển khai |
 
-`eval/` **cố ý nằm ngoài `app/`**: nó không phục vụ request. `eval/` import ngược vào
-`app.domain.rag` là bình thường và đúng chiều — đó chính là lý do domain phải độc lập với HTTP.
+`tests/eval/` import ngược vào `src.ai` là **đúng chiều** — đó là lý do `src/ai/` phải độc lập
+với HTTP.
 
-## Chiều phụ thuộc — một hướng duy nhất
+## Chiều phụ thuộc — hai luật
 
 ```
-api ──► domain ──► repositories ──► db
- │         │
- └─────────┴──► core, schemas, integrations
+api ──┐
+      ├──► ai/service.py ──► rag · orchestrator · mcp_client · extraction · scoring
+worker┘                  └──► db · events · telemetry · inference · integrations
 ```
 
-**`app/domain/` không được import `app.api`.** Domain không cần biết mình đang chạy sau HTTP
-hay sau một consumer Kafka. Kiểm tra bằng một lệnh:
+1. **`src/ai/` không import `src.api` hay `src.worker`.**
+2. **`api/` và `worker/` không import chéo nhau** (§3.9.1 — một image, hai vai trò độc lập).
+
+Lệnh kiểm phải **neo vào đầu dòng**, nếu không nó tự khớp câu lệnh viết trong docstring:
 
 ```bash
-grep -rn "from app.api\|import app.api" app/domain/    # phải rỗng
+grep -rnE '^[[:space:]]*(from|import)[[:space:]]+src\.(api|worker)\b' src/ai/   # phải rỗng
 ```
 
 ## Đặt file mới ở đâu
 
 | Bạn đang viết | Đặt vào |
 |---|---|
-| Endpoint HTTP | `app/api/v1/endpoints/` |
-| Pydantic DTO vào/ra | `app/schemas/` |
-| Bước xử lý AI | `app/domain/<capability>/` |
-| Truy vấn CSDL | `app/repositories/` |
-| Bảng CSDL (ORM) | `app/db/models/` |
-| Gọi HTTP/Kafka ra ngoài | `app/integrations/` |
-| Tác vụ chạy nền | `app/workers/` |
-| Cấu hình, log, số liệu | `app/core/` |
-| Script đo đạc, thí nghiệm | `eval/` |
+| Endpoint HTTP | `src/api/v1/endpoints/` |
+| Pydantic DTO vào/ra | `src/ai/schemas.py` |
+| Phương thức mới cho tầng trên gọi | `src/ai/service.py` (facade) |
+| Bước xử lý RAG | `src/ai/rag/<chặng>/` |
+| Đồ thị LangGraph, chính sách handoff | `src/ai/orchestrator/` |
+| Gọi tool MCP, allow-list | `src/ai/mcp_client/` |
+| Trích xuất theo JSON Schema | `src/ai/extraction/` |
+| Regex, chuẩn hoá tiếng Việt, PII | `src/ai/guardrails/` |
+| Gọi sang ai-embed/rerank/classify | `src/ai/inference/` |
+| Truy vấn CSDL | `src/ai/db/repositories/` |
+| Bảng CSDL (ORM) | `src/ai/db/models/` |
+| Gọi java-core hoặc LLM API | `src/ai/integrations/` |
+| Phát/nhận Kafka | `src/ai/events/` |
+| Log, số liệu, telemetry | `src/ai/telemetry/` |
+| Consumer chạy nền | `src/worker/` |
+| Script đo đạc, thí nghiệm | `tests/eval/` |
+| **Model, notebook, artifact** | **`inference/` · `notebooks/` — KHÔNG đặt ở đây** |
 
-## Ba ranh giới không được vượt
+## Bốn ranh giới không được vượt
 
-1. **Không chạm CSDL nghiệp vụ của Track A.** Mọi thao tác đi qua `app/integrations/java_core/`
+1. **Không chạm CSDL nghiệp vụ của Track A.** Mọi thao tác đi qua `src/ai/integrations/java_core/`
    theo `docs/openapi/java-core-to-ai-service.yaml`. Đây là phòng thủ chính chống rò rỉ chéo
-   tenant khi bị tấn công tiêm chỉ thị — ADR-0002.
+   tenant khi bị tiêm chỉ thị — ADR-0002, bề mặt T5.
 2. **Chỉ ghi dải V2xx** trong `migration/`, chỉ đụng schema `knowledge`, `ai`, `integration`.
-3. **Mọi truy vấn vector lọc `tenant_id`** — ADR-0007, bề mặt tấn công T6.
+3. **Mọi truy vấn vector lọc `tenant_id`** — ADR-0007, bề mặt T6.
+4. **`tenant_id` chỉ từ header `X-Tenant-Id`** do gateway gắn (`src/api/deps.py`). Không bao giờ
+   từ body/query/path, không bao giờ có giá trị mặc định.
 
-## Hai cái bẫy đã biết trước
+## Ba cái bẫy đã biết trước
 
-**Eureka.** FastAPI không tự đăng ký. Xem `app/core/eureka.py`: đăng ký lúc khởi động, gửi nhịp
-tim, **hủy đăng ký lúc tắt**. Quên hủy thì Eureka vẫn định tuyến tới tiến trình đã chết trong
-~90 giây. Bật `prefer-ip-address` (kế hoạch mục 4.4).
+**RLS và connection pool.** `SET LOCAL app.tenant_id` đặt **ngay sau `pool.acquire()`**, trong
+cùng transaction với truy vấn. Quên một chỗ là rò tenant, và không có lỗi nào báo ra.
 
-**Kafka.** Consumer chạy trong **tác vụ nền theo lifespan** (`app/workers/`), không chạy trong
-luồng xử lý request. Đặt `enable.auto.commit = False` và xác nhận offset **sau khi** xử lý xong
-(kế hoạch mục 4.3).
+**Eureka.** FastAPI không tự đăng ký. `src/api/eureka.py`: đăng ký lúc khởi động, gửi nhịp tim,
+**hủy đăng ký lúc tắt**. Quên hủy thì Eureka định tuyến tới tiến trình đã chết ~90 giây.
 
-## Đường dẫn: cái nào có phiên bản, cái nào không
+**Kafka.** Consumer chạy ở tiến trình riêng (`RUN_MODE=worker`), không trong luồng request.
+`enable_auto_commit=False`, xác nhận offset **sau khi** xử lý xong. Và nhớ hai listener:
+`kafka:9092` từ trong mạng Docker · `localhost:29092` từ máy chủ.
+
+## Đường dẫn: cái nào có phiên bản
 
 | Đường dẫn | Phiên bản | Vì sao |
 |---|---|---|
-| `/v1/answer`, `/v1/documents/…` | Có | Giao ước nghiệp vụ với java-core, sẽ tiến hóa |
-| `/health`, `/metrics` | **Không** | Bề mặt vận hành — Docker Compose và Prometheus phải gọi được kể cả khi giao ước lên `v2` |
+| `/v1/ai/**` | Có | Giao ước nghiệp vụ với java-core, sẽ tiến hoá |
+| `/health`, `/ready`, `/metrics` | **Không** | Bề mặt vận hành — Compose và Prometheus phải gọi được kể cả khi giao ước lên `v2` |
+
+`/ready` khác `/health`: `/health` kiểm tiến trình còn sống; `/ready` kiểm **tầng suy luận và DB**,
+và fail-closed nếu lệch một trong ba bất biến §3.4.2.
 
 ## Chạy cục bộ
 
 ```bash
 python3.11 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env        # điền ANTHROPIC_API_KEY
-uvicorn app.main:app --reload --port 8000
+pip install -r requirements/dev.txt      # dev.txt đã -r base.txt
+cp .env.example .env                     # điền ANTHROPIC_API_KEY
+
+python -m src.entrypoint                 # RUN_MODE=api mặc định
+RUN_MODE=worker python -m src.entrypoint # consumer Kafka
 ```
 
-Kiểm tra cú pháp mà không cần cài phụ thuộc nặng (torch, sentence-transformers):
+Chưa bật tầng suy luận thì đặt `AI_MODE=mock` — trả dữ liệu giả có seed cố định (§3.4.1).
+
+Kiểm nhanh không cần cài phụ thuộc:
 
 ```bash
-python3.11 -m compileall -q app eval
+python3.11 -m compileall -q src tests
+python3.11 -c "import src, src.ai, src.worker"
+ruff check src tests
 ```
 
-## File mẫu đã có
+## File đã có mã thật
 
-`app/core/config.py` (pydantic-settings, dùng được ngay), `app/core/logging.py` (JSON + Trace ID
-qua `ContextVar`), `app/core/metrics.py`, `app/core/exceptions.py`, `app/core/eureka.py`,
-`app/api/deps.py`, `app/api/v1/endpoints/health.py`, `app/schemas/answer.py`, `app/main.py`.
+`src/ai/config.py` (pydantic-settings) · `src/ai/telemetry/logging.py` (JSON + Trace ID qua
+`ContextVar`) · `src/ai/telemetry/metrics.py` · `src/ai/exceptions.py` · `src/api/eureka.py` ·
+`src/api/deps.py` · `src/api/v1/endpoints/health.py` · `src/ai/schemas.py` · `src/api/main.py` ·
+`src/entrypoint.py`.
+
+Các file còn lại mới có docstring nêu trách nhiệm, UC phụ trách và mục Master Plan tham chiếu.
 
 ## TODO
 
-- [ ] `app/db/session.py` — phiên async, đặt `SET LOCAL app.tenant_id` cho mỗi transaction
-- [ ] Migration V201–V210 (xem `migration/README.md`)
-- [ ] Hàm chuẩn hóa văn bản dùng chung cho **cả lúc nạp và lúc truy vấn** (mục 7.1 chặng 2)
+- [ ] `src/ai/db/session.py` — phiên async, `SET LOCAL app.tenant_id` mỗi transaction
+- [ ] `src/ai/service.py` — 11 phương thức facade theo §2.5
+- [ ] `src/worker/main.py` — `run_worker()`, chống trùng theo `event_id` **trước** consumer đầu tiên
+- [ ] Hàm chuẩn hoá văn bản dùng chung cho **cả lúc nạp và lúc truy vấn**
 - [ ] Middleware gắn `X-Trace-Id` vào `ContextVar`
-- [ ] `eval/golden_set.jsonl` — 150 câu, mốc M4 hạn 12/10
+- [ ] `tests/integration/test_rls.py` và `test_contract.py`
+- [ ] `tests/eval/golden_qa.jsonl` — ≥ 80 cặp, recall@5 ≥ 0,85

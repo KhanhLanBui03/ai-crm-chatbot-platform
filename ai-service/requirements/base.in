@@ -1,0 +1,8 @@
+# Nguồn để sinh base.txt bằng pip-compile:
+#     pip-compile --output-file=base.txt base.in
+#
+# Hiện base.txt đang được duy trì bằng tay và ghim bằng `>=`. Khi bắt đầu code thật thì
+# chuyển sang pip-compile để có bản ghim chính xác (hash) phục vụ tính tái lập của báo cáo.
+#
+# CẤM: onnxruntime · torch · xgboost · scikit-learn · transformers · sentence-transformers
+# Xem khối cảnh báo đầu base.txt và cổng chặn CI §3.2.

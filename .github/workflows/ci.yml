@@ -1,0 +1,128 @@
+# CI module AI — cổng chặn chạy mỗi build.
+# Deliverable của kế hoạch 49 ngày, Ngày 4: "đưa cổng chặn ML runtime vào .github/workflows/ci.yml".
+#
+# Master Plan §3.2: "Cổng chặn CI này là điều kiện để §3.2 có hiệu lực. Đẩy model ra ngoài mà
+# vẫn để onnxruntime trong requirements/base.txt thì bạn trả toàn bộ chi phí kiến trúc và
+# không nhận được lợi ích nào. Đưa vào workflow ngay Tuần 1, đừng để nó thành việc phải nhớ."
+
+name: ci-module-ai
+
+on:
+  push:
+    paths: ["ai-service/**", "inference/**", ".github/workflows/ci.yml"]
+  pull_request:
+    paths: ["ai-service/**", "inference/**", ".github/workflows/ci.yml"]
+
+jobs:
+  ai-service:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cú pháp và chiều phụ thuộc
+        working-directory: ai-service
+        run: |
+          python -m compileall -q src tests
+          python -c "import src, src.ai, src.worker"
+
+          # Hai luật §3.9.1. Lệnh PHẢI neo vào đầu dòng — nếu không nó tự khớp
+          # chính câu lệnh grep viết trong docstring và báo vi phạm giả.
+          set -e
+          check() {  # check <thu muc> <regex> <mo ta>
+            if grep -rnE "$2" "$1"; then
+              echo "FAIL: $3"; exit 1
+            fi
+          }
+          check src/ai/    '^[[:space:]]*(from|import)[[:space:]]+src\.(api|worker)\b' \
+                           "src/ai/ không được import src.api hoặc src.worker"
+          check src/api/    '^[[:space:]]*(from|import)[[:space:]]+src\.worker\b' \
+                           "api/ không được import worker/"
+          check src/worker/ '^[[:space:]]*(from|import)[[:space:]]+src\.api\b' \
+                           "worker/ không được import api/"
+          echo "OK: chiều phụ thuộc đúng"
+
+      - name: ruff
+        working-directory: ai-service
+        run: pipx run ruff check src tests
+
+      - name: Build image
+        run: docker build -t ai-service:ci ai-service/
+
+      # ── CỔNG CHẶN §3.2 / §1.6 ────────────────────────────────────────────────
+      #
+      # Grep đúng BA gói: onnxruntime | torch | xgboost.
+      #
+      # KHÔNG thêm scikit-learn vào danh sách này. `pyvi` kéo nó theo làm phụ thuộc
+      # gián tiếp, và §4.6 nói rõ pyvi thuộc về ai-service:
+      #
+      #   "pyvi... là thư viện tách từ THUẦN PYTHON, không phải model neural, nên nó
+      #    nằm trong ai-api cùng với guardrails. Đây không phải ngoại lệ của §3.2:
+      #    quy tắc là 'ai-api không nạp model ONNX', không phải 'ai-api không có
+      #    logic ngôn ngữ nào'."
+      #
+      # Đoạn code ở §3.2 grep 6 gói (có scikit-learn), mâu thuẫn với chính §4.6.
+      # Ba nguồn khác — §1.6, kế hoạch Ngày 4, sheet Chỉ số nghiệm thu — đều grep
+      # 3 gói. Lấy theo bản 3 gói. Lý do đầy đủ: ADR-0015 mục 4.
+      - name: ai-service phải sạch ML runtime
+        run: |
+          if docker run --rm ai-service:ci pip list --format=freeze \
+               | grep -Eiq "^(onnxruntime|torch|xgboost)"; then
+            echo "FAIL: ai-service còn ML runtime — xem MASTER PLAN §3.2 và ADR-0015"
+            docker run --rm ai-service:ci pip list --format=freeze \
+              | grep -Ei "^(onnxruntime|torch|xgboost)"
+            exit 1
+          fi
+          echo "OK: ai-service thuần orchestration"
+
+      # LUẬT ĐI KÈM: sklearn được phép tồn tại như phụ thuộc gián tiếp của pyvi,
+      # nhưng KHÔNG được dùng để suy luận trong mã nguồn. Mô hình hoá thuộc về
+      # notebooks/ (huấn luyện) và inference/ (phục vụ).
+      - name: Không import sklearn trong mã nguồn
+        working-directory: ai-service
+        run: |
+          if grep -rnE '^[[:space:]]*(from|import)[[:space:]]+sklearn\b' src/; then
+            echo "FAIL: sklearn chỉ là phụ thuộc của pyvi, không dùng để suy luận (ADR-0015)"
+            exit 1
+          fi
+          echo "OK: không có import sklearn"
+
+      - name: Dung lượng image
+        run: |
+          SIZE=$(docker image inspect ai-service:ci --format '{{.Size}}')
+          MB=$((SIZE / 1024 / 1024))
+          echo "ai-service:ci = ${MB} MB (ngưỡng §3.2.3: < 400 MB)"
+          # Chưa fail build: nợ đã ghi ở ADR-0015 mục Đánh đổi 6, giao cho Ngày 6.
+          # Đổi thành `exit 1` sau khi tách layer worker.
+          [ "$MB" -lt 400 ] || echo "::warning::vượt ngưỡng 400 MB — xem ADR-0015"
+
+  inference:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cú pháp
+        working-directory: inference
+        run: python -m compileall -q src
+
+      - name: Build image
+        run: docker build -t ai-inference:ci inference/
+
+      # Tầng suy luận ĐƯỢC PHÉP có onnxruntime, nhưng KHÔNG được có torch:
+      # ở đây chỉ chạy artifact .onnx đã export. torch là thư viện huấn luyện,
+      # nó thuộc notebooks/requirements.txt. Kéo torch vào đây là +2 GB image
+      # cho một việc image này không làm.
+      - name: ai-inference không được có torch
+        run: |
+          if docker run --rm ai-inference:ci pip list --format=freeze \
+               | grep -Eiq "^(torch|sentence-transformers|flagembedding)"; then
+            echo "FAIL: tầng suy luận chỉ chạy ONNX, không huấn luyện"
+            exit 1
+          fi
+          echo "OK: ai-inference chỉ có onnxruntime"

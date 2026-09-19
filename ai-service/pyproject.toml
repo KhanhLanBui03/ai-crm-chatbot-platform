@@ -1,25 +1,38 @@
 [project]
 name = "ai-service"
 version = "0.1.0"
-description = "Khối AI: RAG, LangGraph, MCP, chấm điểm Lead, phân nhóm chủ đề, khung đánh giá. Track B."
+description = "Tầng orchestration của khối AI: RAG, LangGraph, MCP, telemetry. KHÔNG có ML runtime."
 requires-python = ">=3.11"
-dynamic = ["dependencies"]
+dynamic = ["dependencies", "optional-dependencies"]
 
 [tool.setuptools.dynamic]
-dependencies = { file = ["requirements.txt"] }
+dependencies = { file = ["requirements/base.txt"] }
+optional-dependencies.dev = { file = ["requirements/dev.txt"] }
 
-# app/  = mã phục vụ request
-# eval/ = harness thí nghiệm, import ngược vào app.* nhưng KHÔNG thuộc ứng dụng
+# `src` là MỘT PACKAGE THẬT, không phải quy ước src-layout.
+#
+# Đây là điểm dễ nhầm nhất của cây §3.9.2: thư mục tên `src/` thường được hiểu là
+# "thư mục chứa mã nguồn, không phải package" và cấu hình bằng `where = ["src"]`.
+# Ở đây thì ngược lại — `src/entrypoint.py` (§3.9.1) gọi thẳng "src.api.main:app",
+# nên `src` phải import được như một package. Nó có `__init__.py` và được khai ở
+# `include` dưới đây, KHÔNG dùng `where`.
 [tool.setuptools.packages.find]
-include = ["app*", "eval*"]
+where = ["."]
+include = ["src*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# Chạy pytest từ thư mục ai-service/ thì `src` nằm sẵn trên sys.path.
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+src = ["."]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]

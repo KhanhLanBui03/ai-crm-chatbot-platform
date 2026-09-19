@@ -1,0 +1,32 @@
+# inference — TẦNG SUY LUẬN. Python 3.11.
+#
+# Đây là nơi DUY NHẤT trong repo được phép có ML runtime.
+#
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  CÓ:     onnxruntime · tokenizers · numpy                                    ║
+# ║  KHÔNG:  torch · sentence-transformers · FlagEmbedding · xgboost             ║
+# ║                                                                              ║
+# ║  Vì sao không torch: ở đây chỉ CHẠY artifact .onnx đã export sẵn từ Kaggle.   ║
+# ║  torch là thư viện huấn luyện, nó thuộc notebooks/requirements.txt.           ║
+# ║  Kéo torch vào đây là +2 GB image cho một việc image này không làm.           ║
+# ║                                                                              ║
+# ║  Ngưỡng: image ai-inference < 900 MB.                                        ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+#
+# Ngoại lệ đã dự phòng (§5.2): nếu skl2onnx không đạt parity 99,9% với char_wb có
+# dấu thì giữ scikit-learn TRONG IMAGE NÀY (không phải ai-service) và dùng joblib.
+# Timebox 48 giờ, ghi ADR, đóng vấn đề.
+
+# --- Web ---
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pydantic>=2.9
+
+# --- Suy luận ---
+onnxruntime>=1.20
+tokenizers>=0.21
+numpy>=2.1
+
+# --- Quan sát hệ thống ---
+prometheus-client>=0.21
+python-json-logger>=2.0

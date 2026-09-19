@@ -1,0 +1,88 @@
+# inference/compose.inference.yml — chạy trên môi trường (C) Ephemeral Cloud CPU.
+# Master Plan §3.6.2.
+#
+#     docker compose -f inference/compose.inference.yml up -d
+#
+# BA CỔNG (§3.9.3 — ma trận địa chỉ kết nối, "nguồn lỗi số một"):
+#     ai-embed     8081
+#     ai-rerank    8082
+#     ai-classify  8083
+#
+# ⚠️ CẤU HÌNH TÀI NGUYÊN Ở ĐÂY PHẢI KHỚP ĐÚNG POD TƯƠNG ỨNG TRÊN EKS.
+#    Không khớp thì benchmark Tuần 3 không dự báo được gì cho Tuần 7 — đó là toàn bộ
+#    lý do tồn tại của môi trường (C).
+#
+# ⚠️ cpus và OMP_NUM_THREADS phải BẰNG NHAU. Lệch thì /ready trả 503 (bất biến 3, §3.4.2).
+#
+# Cấp vCPU dưới đây là GIÁ TRỊ TẠM cho tới khi chốt ở Ngày 21 dựa trên bảng benchmark
+# §5.6. Đừng coi đây là con số đã quyết.
+
+name: ai-inference
+
+x-inference-common: &inference-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: ai-inference:dev
+  restart: unless-stopped
+  environment: &inference-env
+    MODEL_S3_BUCKET: ${MODEL_S3_BUCKET:-}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  ai-embed:
+    <<: *inference-common
+    container_name: ai-embed
+    ports:
+      - "8081:8080"
+    environment:
+      <<: *inference-env
+      MODEL_ROLE: embed
+      OMP_NUM_THREADS: "4"        # PHẢI bằng cpus bên dưới
+    deploy:
+      resources:
+        limits: { cpus: "4", memory: 8G }
+        reservations: { cpus: "4", memory: 8G }   # requests == limits → QoS Guaranteed
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 18                 # cho phép ~180s tải model từ S3
+
+  ai-rerank:
+    <<: *inference-common
+    container_name: ai-rerank
+    ports:
+      - "8082:8080"
+    environment:
+      <<: *inference-env
+      MODEL_ROLE: rerank
+      OMP_NUM_THREADS: "2"
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 4G }
+        reservations: { cpus: "2", memory: 4G }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+
+  ai-classify:
+    <<: *inference-common
+    container_name: ai-classify
+    ports:
+      - "8083:8080"
+    environment:
+      <<: *inference-env
+      MODEL_ROLE: classify
+      OMP_NUM_THREADS: "2"
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 4G }
+        reservations: { cpus: "2", memory: 4G }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
