@@ -18,11 +18,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from src.api.v1.endpoints import health
-from src.api.v1.router import api_router
-from src.api import eureka
 from src.ai.config import get_settings
 from src.ai.telemetry.logging import setup_logging
+from src.api import eureka
+from src.api.v1.endpoints import health
+from src.api.v1.router import api_router
 
 logger = logging.getLogger(__name__)
 
