@@ -7,6 +7,38 @@ Tiếng Việt. Ngày theo định dạng DD/MM/YYYY.
 
 ---
 
+## 19/09/2026 (2) — Chốt tên role và chỗ đặt nhãn Lead (ADR-0016)
+
+### `ai_app` là tên chính thức của role runtime
+
+Master Plan §4.2/§4.3 gọi nó là `ai_service` — **tên đó sai**. Repo đã nhất quán `ai_app` ở
+`init-db.sql:26`, `V206`, `docker-compose.yml:239`, và cùng cách đặt tên với `crm_app` của
+Track A. Viết theo Master Plan sẽ nổ `role "ai_service" does not exist` **lúc chạy container**,
+không nổ lúc build — nên nó lọt qua CI.
+
+### Nhãn huấn luyện UC030 đi vào `sales.lead_scores`, KHÔNG tạo `ai.lead_features`
+
+Master Plan §5.10.2 mô tả bảng `ai.lead_features`; bảng đó **chưa từng được tạo** (đã rà
+V201–V209). Rà tiếp thì thấy `sales.lead_scores` (Track A, V113) đã phủ `features` · `score` ·
+`model_version` · `top_factors` · `confidence` — chỉ thiếu `rule_score` · `outcome` · `outcome_at`.
+
+Tạo bảng mới sẽ nhân đôi 7 cột, trong đó có `features` — ảnh chụp đặc trưng mà toàn bộ giá trị
+nằm ở chỗ **có đúng một bản**. Nên: đề nghị Track A thêm 3 cột vào bảng đã có.
+📄 `docs/contracts/de-xuat-track-a-lead-scores-outcome.md` — **đã soạn, chưa gửi**.
+
+Vòng phản hồi: java-core phát `crm.deal.closed` → ai-worker consume → gọi
+`PATCH /api/v1/lead-scores/{id}/outcome`. Track B **không ghi thẳng** schema `sales` (ADR-0002).
+
+### Hai việc điều hành
+
+- **Lịch: 7 tuần / 49 ngày, 2 người.** Master Plan ghi 3 người; thực tế 2. Ngày 7 dự kiến
+  "buổi 3 người gõ tay 250–300 câu hỏi" — kéo dài buổi hoặc giảm chỉ tiêu, nhưng **không xuống
+  dưới 250 mẫu**.
+- **Topic Kafka: hoãn có chủ đích**, chốt ở Ngày 12 khi viết producer/consumer đầu tiên.
+  Lưu ý `crm.deal.closed` chưa có trong cả hai bộ tên.
+
+---
+
 ## 19/09/2026 — Tái cấu trúc theo Master Plan §3.9.2
 
 ### Đổi cấu trúc (ADR-0015, thay thế ADR-0010)
@@ -51,5 +83,4 @@ Tiếng Việt. Ngày theo định dạng DD/MM/YYYY.
   giao cho Ngày 6. ADR-0015 mục Đánh đổi 6.
 - Chưa chuyển sang Alembic dù §3.9.2 ghi vậy — giữ Flyway V2xx vì đó là cơ chế chống xung đột
   hai làn.
-- **Chưa chốt:** bộ tên topic Kafka (8 theo §2.6 vs 5 `crm.*.v1` trong repo) · tên role runtime
-  (`ai_service` vs `ai_app`) · bảng `ai.lead_features` chưa có migration nào tạo.
+- **Chưa chốt:** bộ tên topic Kafka (8 theo §2.6 vs 5 `crm.*.v1` trong repo) — xem mục dưới.

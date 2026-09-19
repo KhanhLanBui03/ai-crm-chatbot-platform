@@ -110,6 +110,7 @@ Mỗi quyết định một file trong [`docs/adr/`](docs/adr/) — nguồn tr�
 | [0009](docs/adr/0009-kafka-che-do-zookeeper-thay-kraft.md) | Kafka chế độ ZooKeeper (lệch so với kế hoạch) |
 | [0010](docs/adr/0010-ai-service-app-src-layout.md) | ~~ai-service `app/` src-layout~~ — **thay bởi 0015** |
 | [0015](docs/adr/0015-cau-truc-src-hai-tang-theo-master-plan-v8.md) | Cấu trúc `src/` + tách tầng suy luận `inference/` (Master Plan v8.0) |
+| [0016](docs/adr/0016-ten-role-runtime-va-cho-dat-nhan-ket-qua-lead.md) | Role runtime `ai_app`; nhãn kết quả Lead vào `sales.lead_scores` |
 
 ---
 

@@ -137,16 +137,30 @@ Không ghi `Co-Authored-By: Claude` hay `Generated with Claude Code` vào commit
 | Cột · kiểu · khoá của bảng | `docs/erd-mermaid.md` |
 | Quy ước code Python chi tiết | `.claude/rules/ai-service.md` |
 
-## Mâu thuẫn tài liệu chưa chốt — hỏi, đừng tự quyết
+## Mâu thuẫn tài liệu — trạng thái
 
-| # | Vấn đề | Hai nguồn |
+**Đã chốt, đừng mở lại:**
+
+| Vấn đề | Chốt | Nguồn |
 |---|---|---|
-| 1 | Bộ tên topic Kafka | 8 topic (§2.6) vs 5 `crm.*.v1` (`create-topics.sh`, `docs/events/`) |
-| 2 | Tên role runtime | `ai_service` (Master Plan §4.2) vs `ai_app` (repo, `docker-compose.yml:239`) |
-| 3 | Bảng `ai.lead_features` | Kế hoạch cần (Ngày 3, 29); **không migration nào tạo** |
-| 4 | Lịch và nhân sự | 7 tuần / 3 người (Master Plan) vs 19 tuần / 2 người (`.claude/CLAUDE.md`) |
+| Số chiều vector | **1024** (không phải 768 như §4.2) | ADR-0015 |
+| Schema kho tri thức | **`knowledge.knowledge_*`** (không phải `ai.chunks`) | ADR-0015 |
+| Cổng chặn CI | **3 gói** `onnxruntime\|torch\|xgboost` (không phải 6) | ADR-0015 |
+| Công cụ migration | **Flyway V2xx** (không phải Alembic) | ADR-0015 |
+| Tên role runtime | **`ai_app`** (Master Plan §4.2 ghi `ai_service` — sai) | ADR-0016 |
+| Nhãn huấn luyện UC030 | **`sales.lead_scores` + 3 cột**, KHÔNG tạo `ai.lead_features` | ADR-0016 |
+| Lịch và nhân sự | **7 tuần / 49 ngày · 2 người** (Master Plan ghi 3 người) | — |
 
-Đã chốt ở **ADR-0015**: vector **1024** chiều · schema `knowledge.*` · cổng chặn CI **3 gói** ·
-giữ Flyway V2xx thay vì Alembic.
+**Còn treo — hỏi, đừng tự quyết:**
+
+| Vấn đề | Trạng thái |
+|---|---|
+| **Bộ tên topic Kafka** — 8 (§2.6) vs 5 `crm.*.v1` (repo) | **Hoãn có chủ đích.** Chốt khi viết producer/consumer đầu tiên (Ngày 12), lúc đó mới biết payload thật cần gì. `crm.deal.closed` chưa có trong cả hai bộ |
+| **Track A thêm 3 cột `sales.lead_scores`** | Đã soạn đề xuất, **chưa gửi**: `docs/contracts/de-xuat-track-a-lead-scores-outcome.md` |
+
+Với 2 người thay vì 3: Ngày 7 dự kiến *"buổi 3 người gõ tay 250–300 câu hỏi"* — kéo dài buổi
+đó hoặc giảm chỉ tiêu và ghi rõ trong báo cáo, nhưng **không xuống dưới 250 mẫu**. Đó là điều
+kiện cần của toàn bộ Chương 5: không có tập test người thật thì ba nhánh đối chứng §5.9 đang
+so trên một bài toán giả.
 
 Luật nào không truy được về `docs/` thì ghi `[CẦN XÁC NHẬN]` và hỏi — đừng đoán.
