@@ -21,8 +21,12 @@ Cổng chặn CI chạy mỗi build và sẽ đỏ nếu image này có ML runti
 
 ```bash
 docker run --rm ai-service:ci pip list --format=freeze \
-  | grep -Eiq "^(onnxruntime|torch|xgboost|transformers|scikit-learn)" && exit 1
+  | grep -Eiq "^(onnxruntime|torch|xgboost)" && exit 1
 ```
+
+Đúng **ba gói** (ADR-0015 mục 4). `scikit-learn` có trong image như phụ thuộc gián tiếp của
+`pyvi` và được chấp nhận có chủ đích — thêm nó vào cổng là làm đỏ mọi build. Luật đi kèm:
+cấm `import sklearn` trong `src/`, CI kiểm bằng một bước grep riêng.
 
 Lợi ích lớn nhất không phải dung lượng mà là **tách bạch bề mặt gỡ lỗi**: khi p95 xấu đi,
 `ai-service` chỉ có thể chậm vì *chờ*, tầng suy luận chỉ có thể chậm vì *tính*. Không có vùng xám.
