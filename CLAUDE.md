@@ -65,7 +65,7 @@ duy nhất. Hook `.claude/hooks/guard_paths.py` chặn ghi ngoài phạm vi.
 | `inference-engineer` | xây | `inference/` | — (sở hữu cổng SLO) |
 | `rag-engineer` | xây | `ai-service/src/ai/{rag,db}/` `migration/` `tests/` | UC018–020, 023, 025, 041 |
 | `agent-orchestrator` | xây | `src/ai/{orchestrator,extraction,guardrails,inference}/` `service.py` `tests/` | UC014, 026, 027, 029 |
-| `integration-engineer` | xây | `src/{api,worker}/` `src/ai/{schemas.py,mcp_client,events,telemetry}/` `tests/` `docs/contracts/` | UC006, 031, 039, 040 — ~~021, 024, 028~~ đã hoãn |
+| `integration-engineer` | xây | `src/{api,worker}/` `src/ai/{schemas.py,events,telemetry}/` `tests/` `docs/contracts/` | UC006, 031, 039, 040 — ~~021, 024, 028~~ đã hoãn |
 | `platform-engineer` | xây | `*/Dockerfile` `*/k8s/` `*/requirements/` `.github/` `scripts/` | — (sở hữu hạ tầng) |
 | `eval-gatekeeper` | gác cổng | **chỉ** `reports/eval/` | — (bảng chỉ số nghiệm thu) |
 | `security-reviewer` | gác cổng | **không ghi được** | — (T1–T8) |

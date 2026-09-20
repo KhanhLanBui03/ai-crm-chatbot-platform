@@ -50,7 +50,7 @@ ai-service/
 │       ├── inference/          client gọi sang tầng suy luận (§3.4)
 │       ├── orchestrator/       LangGraph, handoff        UC014, UC022
 │       ├── rag/                ingest·retrieve·rerank·generate  UC018–020, 023, 025
-│       ├── mcp_client/         discover + allow-list     UC021, UC024, UC028
+│       ├── mcp_client/         (TRỐNG — ngoài phạm vi)   ~~UC021, UC024, UC028~~
 │       ├── extraction/         JSON Schema nghiêm ngặt   UC029
 │       ├── guardrails/         regex, normalize_vi — THUẦN PYTHON
 │       ├── scoring/            UC030      clustering/  UC038
@@ -108,7 +108,7 @@ grep -rnE '^[[:space:]]*(from|import)[[:space:]]+src\.(api|worker)\b' src/ai/   
 | Phương thức mới cho tầng trên gọi | `src/ai/service.py` (facade) |
 | Bước xử lý RAG | `src/ai/rag/<chặng>/` |
 | Đồ thị LangGraph, chính sách handoff | `src/ai/orchestrator/` |
-| Gọi tool MCP, allow-list | `src/ai/mcp_client/` |
+| ~~Gọi tool MCP, allow-list~~ | `src/ai/mcp_client/` — **ngoài phạm vi 21 ngày**, đừng viết vào |
 | Trích xuất theo JSON Schema | `src/ai/extraction/` |
 | Regex, chuẩn hoá tiếng Việt, PII | `src/ai/guardrails/` |
 | Gọi sang ai-embed/rerank/classify | `src/ai/inference/` |
