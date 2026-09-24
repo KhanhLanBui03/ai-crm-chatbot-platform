@@ -192,8 +192,11 @@ vì ngày sau đã đầy.
       đều xanh giả.*
 - [ ] 🖐 **`tests/integration/test_rls.py` — ĐỦ BA CA, tự gõ:**
       **(a)** tenant A đọc chunk của B → trả **RỖNG**.
-      **(b)** `pool.acquire()` mà **KHÔNG** `SET LOCAL app.tenant_id` → cũng trả **RỖNG**
-      (fail-closed, **không phải** trả tất cả).
+      **(b)** `pool.acquire()` mà **KHÔNG** `SET LOCAL app.tenant_id` → ném **SQLSTATE 42501**,
+      không phải trả rỗng. *(Sửa 24/09: dòng cũ ghi "trả RỖNG" là sai so với repo —
+      `ai.current_tenant()` ở [V201:42-53] cố ý `RAISE EXCEPTION ... ERRCODE = '42501'`, lý do
+      ghi ngay trong comment: "Trả NULL để lặng lẽ ra rỗng còn tệ hơn: danh sách rỗng trông y
+      hệt 'chưa có dữ liệu'". Vẫn là fail-closed, chỉ khác ở chỗ nó **ồn ào** thay vì im lặng.)*
       **(c)** `SELECT current_user` → trả **`ai_app`**, không phải `crm_owner`.
 - [ ] 🤖 Thêm job test RLS vào `.github/workflows/ci.yml` dùng testcontainers — *verify: job
       chạy trên PR, và cố tình làm hỏng ca (b) thì CI phải **đỏ**. Job xanh mà không bao giờ đỏ
@@ -235,11 +238,15 @@ chỉ chọn model + export, dời đo parity sang sáng Ngày 3.
 
 **Việc — phần [PRODUCTION]:**
 
-- [ ] 🖐 **`src/ai/db/session.py` — tự gõ.** Pool `asyncpg`; `SET LOCAL app.tenant_id` đặt
+- [ ] 🖐 **`src/ai/db/session.py` — tự gõ.** Pool **psycopg3 async**; `SET LOCAL app.tenant_id` đặt
       **NGAY SAU `pool.acquire()`** và trong **CÙNG transaction** với truy vấn. Kết nối bằng
       role `ai_app`.
       *Đây là bẫy connection pool: `SET` không có `LOCAL` sẽ dính lại trên kết nối và rò sang
       request của tenant khác.*
+      *(Sửa 24/09: dòng cũ ghi `asyncpg` là sai so với repo — `requirements/base.txt:59` đã có
+      `psycopg[binary,pool]>=3.2` + `pgvector>=0.3.6`, và image đang nợ 776/400 MB nên không thêm
+      driver thứ hai chỉ để khớp một dòng chữ. Không cần ADR mới: đây là xác nhận theo repo, không
+      phải đổi công nghệ. `tests/conftest.py` đã dựng trên psycopg3.)*
 - [ ] 🤖 Repository cho `knowledge_documents` và `knowledge_chunks` — *verify: **mọi** truy vấn
       vector lọc `tenant_id` **ngay trong câu SQL**, không lọc ở Python (ADR-0007, bề mặt T6).
       Soi từng hàm; AI rất hay sinh ra `WHERE` thiếu `tenant_id` rồi lọc lại ở tầng Python.*
