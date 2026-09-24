@@ -59,7 +59,10 @@ langchain>=0.3
 # --- Dữ liệu: pgvector trong cùng cụm PostgreSQL (ADR-0007) ---
 psycopg[binary,pool]>=3.2
 pgvector>=0.3.6
-sqlalchemy>=2.0
+# Extra [asyncio] keo theo greenlet — BAT BUOC cho AsyncSession/AsyncEngine.
+# Thieu no thi import van chay, chi den luc await cau lenh dau tien moi no
+# "the greenlet library is required" — tuc la gay o runtime chu khong gay o build.
+sqlalchemy[asyncio]>=2.0
 
 # --- Redis: semantic cache. KHOÁ BẮT BUỘC CÓ tenant_id (§4.9) ---
 redis>=5.2
