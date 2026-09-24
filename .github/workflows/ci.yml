@@ -126,3 +126,32 @@ jobs:
             exit 1
           fi
           echo "OK: ai-inference chỉ có onnxruntime"
+
+  # Cổng chặn Ngày 1. Chỉ số §1.6 "rò rỉ dữ liệu giữa tenant = 0" không chứng minh được
+  # bằng cách đọc code: phải chạy trên một Postgres thật, nối bằng role ai_app (role CHỊU
+  # RLS — crm_owner có rolbypassrls = t nên nối bằng nó là xanh giả), rồi thấy tận mắt
+  # tenant A không đọc được dòng của tenant B.
+  #
+  # Không khai `services: postgres` mà dùng testcontainers, vì tests/conftest.py đã dựng
+  # container và nạp đủ dải V201–V209. Một đường chạy duy nhất cho local lẫn CI thì không
+  # bao giờ có chuyện "local xanh, CI đỏ". Runner ubuntu-latest có sẵn Docker daemon.
+  rls-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: ai-service/requirements/dev.txt
+
+      - name: Cài phụ thuộc phát triển
+        working-directory: ai-service
+        run: pip install -r requirements/dev.txt
+
+      # Job này phải ĐỎ ĐƯỢC. Cách kiểm: cố tình làm hỏng ca (b) của test_rls.py rồi đẩy
+      # nhánh nháp — job xanh mà không bao giờ đỏ được là job vô dụng.
+      - name: Test cách ly tenant (RLS)
+        working-directory: ai-service
+        run: pytest tests/integration/test_rls.py -v
