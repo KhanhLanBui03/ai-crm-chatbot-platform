@@ -31,5 +31,7 @@ Mỗi quyết định kiến trúc một file. Nguồn trực tiếp cho **chư�
 | 0014 | java-core là mặt tiền duy nhất của dashboard, kể cả với dữ liệu Track B | Rà soát truy vết |
 | 0015 | Cấu trúc `src/` + tách tầng suy luận `inference/` theo Master Plan v8.0 | Thay ADR-0010 |
 | 0016 | Role runtime tên `ai_app`; nhãn kết quả Lead vào `sales.lead_scores` | Lệch Master Plan |
+| 0017 | _(để dành — 4 quyết định hợp đồng của Dev B, chưa viết)_ | |
+| 0018 | Cổng parity INT8 trượt: hoãn phán quyết, phân xử bằng Recall@5 ở Ngày 7 | Đo thực nghiệm |
 
 `KH` = tài liệu `Ke-hoach-do-an-Chatbot-AI-CRM-v2-nhom-2-nguoi.docx`.

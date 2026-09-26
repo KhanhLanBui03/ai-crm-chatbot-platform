@@ -12,7 +12,19 @@ Không có Model Card thì artifact không được coi là đã bàn giao (§6.
 
 | model_id | Vai trò | Service | UC | Cấp vCPU | sha256 | parity | p95 đo thật | Trạng thái |
 |---|---|---|---|---|---|---|---|---|
-| _(chưa có)_ | encoder | `ai-embed` | UC019, UC023 | M hoặc L | | ≥ 0,995 | ngân sách 120 ms | Chưa bắt đầu |
+| `bge-m3-int8` | encoder | `ai-embed` | UC019, UC023 | chốt Ngày 15 | `71e2aa91…2723510` (.onnx)<br>`65925f1e…3f2703` (.onnx.data) | **0,98476 — TRƯỢT** | ⚠️ chưa đo | 🔴 Hoãn phán quyết tới Ngày 7 — [ADR-0018](../docs/adr/0018-cong-parity-int8-truot-phan-xu-bang-recall.md) |
+| `bge-m3-fp32` | encoder (đối chứng) | — | — | — | `ff81fec3…415fa5f` (.onnx)<br>`303112e4…d8e1f0` (.data) | — (mốc gốc) | ⚠️ chưa đo | Giữ tới hết Ngày 7 làm đối chứng |
+
+> **Cột `p95 đo thật` cố ý để trống tới Ngày 15.** Đã đo thử trên Kaggle nhưng **con số không
+> tái lập**: cùng một notebook, hai lượt chạy cho `fp32 124,5 / 63,8 ms` và `76,5 / 37,2 ms`
+> — chênh 1,6 lần, vì máy batch sạch hơn máy của phiên tương tác. Ghi con số đó vào cột này là
+> ghi một p95 không kiểm chứng được.
+>
+> Thứ **giữ nguyên** giữa hai lượt là **tỉ lệ fp32/INT8 ≈ 2,05 lần** — đó mới là kết luận dùng
+> được: INT8 tăng tốc gấp đôi. p95 tuyệt đối đo ở Ngày 15 trên đúng cấu hình triển khai.
+>
+> Đối chiếu: 4 `sha256` ở trên **trùng khít** giữa hai lượt chạy độc lập ⇒ artifact tái lập
+> được từng byte, chỉ có phép đo thời gian là không.
 | _(chưa có)_ | cross-encoder | `ai-rerank` | UC023 | S hoặc M | | — | ngân sách 300 ms | Chưa bắt đầu |
 | _(chưa có)_ | intent router | `ai-classify` | UC022 | S | | — | ngân sách 60 ms | Chưa bắt đầu |
 | _(chưa có)_ | lead scorer | `ai-classify` | UC030 | S | | < 1e-4 | < 1.000 ms | Chưa bắt đầu |
@@ -40,7 +52,11 @@ và mất nhiều ngày truy nguyên.
 
 | model | Đòn bẩy §5.4.1 đã thử | p95 đo được | ADR |
 |---|---|---|---|
-| | | | |
+| `bge-m3-int8-matmul` | lượng tử hoá **chỉ `MatMul`**, giữ bảng nhúng fp32 — thí nghiệm kiểm chứng giả thuyết "bảng nhúng là nguyên nhân" | parity `mean` 0,98503 vs 0,98476 của bản đầy đủ ⇒ **không cải thiện**; kích thước 1 298 MB vs 541 MB | [ADR-0018](../docs/adr/0018-cong-parity-int8-truot-phan-xu-bang-recall.md) |
+
+Dòng trên là một **giả thuyết bị bác bỏ**, không phải model bị loại vì chậm — nhưng vẫn
+ghi ở đây, vì biết một hướng *không* dẫn tới đâu cũng là kết quả, và nó ngăn người sau
+(kể cả chính mình ở Ngày 7) thử lại đúng hướng đó.
 
 Mỗi model bị loại phải có ADR ghi rõ **đã thử đòn bẩy nào trong 5 đòn bẩy §5.4.1** và
 số đo tương ứng. Một dòng "quá chậm" không kèm bảng số là **KHÔNG ĐỦ** để loại một

@@ -502,7 +502,18 @@ fine-tune) · số cặp huấn luyện khai thác được + tỉ lệ hard neg
       mất nghĩa).*
 - [ ] 🖐 **CỔNG PARITY:** cosine fp32 vs INT8 trên **500 câu** phải **≥ 0,995**.
       ⚠️ *Bản fine-tune có phân bố trọng số đã dịch nên INT8 có thể lệch nhiều hơn bản gốc.*
-      🚫 **Không đạt → DỪNG, giữ bản pretrained, ghi ADR.**
+      🚫 ~~**Không đạt → DỪNG, giữ bản pretrained, ghi ADR.**~~
+      **Sửa 26/09 — đường lùi này ĐÃ VÔ HIỆU:** bản pretrained **cũng trượt** cổng đó ở Ngày 2
+      (`mean` 0,98476 · `min` 0,96692, xem [ADR-0018](../docs/adr/0018-cong-parity-int8-truot-phan-xu-bang-recall.md)).
+      "Giữ bản pretrained" là lùi về chỗ cũng đang hỏng. Đường lùi thật: giữ pretrained **fp32**
+      làm nhánh đối chứng, và quyết định ship bằng **Recall@5**, không bằng cổng parity.
+- [ ] 🖐 **Đo Recall@5 fp32 vs INT8 trên bộ vàng** — đây là phép thử phân xử của ADR-0018, làm
+      **cùng lượt** với phép so fine-tune ↔ pretrained ngay dưới, dùng chung paired bootstrap.
+      Chỉ cần nhúng lại **tập chunk của bộ vàng** (84 cặp ⇒ vài trăm chunk, vài phút), **không**
+      phải reindex toàn kho.
+      **Tiêu chí:** KTC 95% của hiệu Recall@5 chứa 0 → ngưỡng cosine 0,995 đặt chặt quá so với
+      model này, giữ INT8 và ghi rõ kèm bằng chứng. Không chứa 0 và nghiêng về fp32 → sai số
+      lượng tử hoá có hại thật, chuyển sang lượng tử hoá tĩnh có hiệu chuẩn hoặc đổi encoder.
 - [ ] 🤖 `MODEL_CARD_embedding` v2 — *verify: có sha256, dữ liệu huấn luyện, tập giữ lại.*
 - [ ] 🤖 Script reindex — đổi `embedding_model` rồi nhúng lại **TOÀN BỘ** chunk, chạy nền
       ~15–30 phút máy — *verify: chạy nền thật, không block; bản API đầy đủ làm ở Ngày 11.*

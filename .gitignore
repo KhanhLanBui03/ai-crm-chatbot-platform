@@ -52,6 +52,17 @@ inference/models/
 notebooks/models/
 *.safetensors
 *.onnx
+# External data cua ONNX: model > 2 GB bi tach trong so ra file rieng, va chung
+# KHONG mang duoi .onnx. Do that (bge-m3, 26/09): quantize_dynamic sinh
+# "bge-m3-int8.onnx.data" (541 MB), con onnx.save_model sinh "bge-m3-fp32.data"
+# (2,16 GB) — ca hai deu lot qua "*.onnx" o dong tren.
+#
+# Bo export TorchScript con te hon: no rai 171 file dat ten theo TEN TENSOR, khong
+# duoi gi ca. Khong pattern nao bat het duoc — nen luat that la: MOI artifact model
+# nam trong artifacts/models/ (da chan o tren), khong bao gio o goc repo.
+*.onnx.data
+*.onnx_data
+*.data
 
 # Dữ liệu pilot — KHÔNG BAO GIỜ commit dữ liệu chưa ẩn danh hóa
 # (Nghị định 13/2023/NĐ-CP, bề mặt T8 trong docs/threat-model.md)
