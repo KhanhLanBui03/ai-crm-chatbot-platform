@@ -34,7 +34,7 @@ bash scripts/migrate-ai.sh validate   # kiểm checksum
 `alembic` có trong `requirements.txt` nhưng **không dùng**: lược đồ do Flyway quản để hai làn
 chung một quy ước đánh số.
 
-## Đã có — 10 file, 6 bảng
+## Đã có — 11 file, 7 bảng
 
 Nguồn: `docs/erd-ai-crm.md`. Sửa lược đồ thì sửa ERD trước, migration sau.
 
@@ -50,6 +50,7 @@ Nguồn: `docs/erd-ai-crm.md`. Sửa lược đồ thì sửa ERD trước, migr
 | V208 | `ai_interactions.safety_flag` + cấu trúc bắt buộc cho `mcp_servers.tool_schema_cache` | — (chỉ `ALTER`) |
 | V209 | Điểm bám nguồn, cờ dùng đệm, độ trễ kiểm duyệt, mô tả tài liệu — UC018 · UC023 · UC028 | — (4 cột + COMMENT của `tool_schema_cache`) |
 | V210 | Extension `unaccent` · hàm **IMMUTABLE** `knowledge.f_unaccent()` · `content_segmented` thành cột **GENERATED** — UC019 | — (thay 1 cột + GIN) |
+| V211 | `attempt_count` · `ingest_step` · `ingest_started_at` · chống trùng sự kiện · hàm **`SECURITY DEFINER`** `knowledge.tim_job_ket()` cho bộ quét job kẹt — UC019, ADR-0021 | `ai.processed_events` (có RLS) |
 
 `ai_interactions` và `ai_feedback` là hai bảng đắt giá nhất về mặt điểm số. Không có
 `ai_interactions` thì không tính được chi phí mỗi hội thoại, không phân tích được độ trễ theo
