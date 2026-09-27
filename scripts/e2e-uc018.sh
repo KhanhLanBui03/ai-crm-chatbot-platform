@@ -4,7 +4,11 @@
 #   scripts/e2e-uc018.sh up     # dựng Postgres + RustFS + Kafka, chạy ai-service và java-core
 #   scripts/e2e-uc018.sh run    # đóng vai người dùng tải tệp, rồi soi từng trường ở CSDL, S3, Kafka
 #   scripts/e2e-uc018.sh soi    # chạy LẠI riêng phần soi dữ liệu (kiểm ngược: phá dữ liệu rồi soi)
+#   scripts/e2e-uc018.sh nap    # UC019 (Ngày 5): bật ai-worker, nạp mọi tài liệu `run` đã tải, đo
+#                               # tài liệu 100 trang + 3.000 đoạn, DLQ, dựng HNSW, \di
 #   scripts/e2e-uc018.sh down   # dừng tiến trình, xoá container — không để lại gì
+#
+# Sau `nap`, `soi` sẽ ĐỎ ở các mục trạng thái PENDING — đúng: tài liệu đã được nạp tiếp.
 #
 # Giữa `run` và `down`: chụp ảnh key có tenant_id ở giao diện RustFS http://localhost:59011
 # (đăng nhập kb-e2e / kb-e2e-secret → bucket kb-tai-lieu).
@@ -63,6 +67,8 @@ cmd_up() {
     cho "Kafka" 90 docker exec "$KAFKA" kafka-topics --bootstrap-server localhost:9092 --list
     docker exec "$KAFKA" kafka-topics --bootstrap-server localhost:9092 --create \
         --topic crm.kb.document.uploaded --partitions 3 --replication-factor 1 >/dev/null
+    docker exec "$KAFKA" kafka-topics --bootstrap-server localhost:9092 --create \
+        --topic ai.dlq --partitions 3 --replication-factor 1 >/dev/null
 
     echo "Dựng ai-service (:$AI_PORT)…"
     # `exec` trong subshell: tiến trình nền CHÍNH LÀ python, nên $! là PID của ai-service. Viết
@@ -152,8 +158,68 @@ cmd_soi() {
         "$ROOT/ai-service/.venv/bin/python" "$ROOT/scripts/e2e_uc018.py" --chi-soi
 }
 
+cmd_nap() {
+    # Chạy lại `nap` thì tắt worker cũ trước — hai worker cùng group sẽ chia nhau partition.
+    [[ -f "$STATE/ai-worker.pid" ]] && kill "$(cat "$STATE/ai-worker.pid")" 2>/dev/null && sleep 3
+    echo "Dựng ai-worker (RUN_MODE=worker, AI_MODE=mock, Kafka localhost:$KAFKA_PORT)…"
+    # Từ MÁY CHỦ nên Kafka là cổng EXTERNAL (localhost:…), không phải tên container — bẫy hai listener.
+    (cd "$ROOT/ai-service" && exec env RUN_MODE=worker DB_HOST=localhost DB_PORT="$PG_PORT" \
+        DB_USERNAME=ai_app DB_PASSWORD=changeme KAFKA_BOOTSTRAP="localhost:$KAFKA_PORT" \
+        S3_ENDPOINT="localhost:$S3_PORT" S3_SECURE=false S3_BUCKET="$BUCKET" \
+        S3_ACCESS_KEY="$S3_KEY" S3_SECRET_KEY="$S3_SECRET" AI_MODE=mock \
+        .venv/bin/python -m src.entrypoint) >"$STATE/ai-worker.log" 2>&1 &
+    echo $! >"$STATE/ai-worker.pid"
+
+    local loi=0
+    E2E_JAVA_CORE_URL="http://localhost:$CORE_PORT" DEV_JWT_DIR="$STATE/jwt" \
+        E2E_AI_URL="http://localhost:$AI_PORT" E2E_KAFKA="localhost:$KAFKA_PORT" \
+        E2E_DB_DSN="postgresql://crm_owner:changeme@localhost:$PG_PORT/thesis_crm" \
+        E2E_WORKER_PID="$(cat "$STATE/ai-worker.pid")" E2E_STATE="$STATE" \
+        "$ROOT/ai-service/.venv/bin/python" "$ROOT/scripts/e2e_uc019.py" || loi=1
+
+    echo
+    echo "Bản tin trong ai.dlq (header | khoá | giá trị):"
+    echo
+    echo '```'
+    # timeout-ms rộng: console consumer (JVM) cần vài giây để vào group rồi mới đọc được gì.
+    docker exec "$KAFKA" kafka-console-consumer --bootstrap-server localhost:9092 \
+        --topic ai.dlq --from-beginning --max-messages 1 --timeout-ms 30000 \
+        --property print.headers=true --property print.key=true --property key.separator=' | ' \
+        2>/dev/null | sed -e 's/,dlq\./\ndlq./g' -e 's/,X-Trace-Id/\nX-Trace-Id/g' || loi=1
+    echo '```'
+    echo
+    echo "Offset đã xác nhận của ingestion-cg (LAG phải bằng 0):"
+    echo
+    echo '```'
+    docker exec "$KAFKA" kafka-consumer-groups --bootstrap-server localhost:9092 \
+        --describe --group ingestion-cg 2>/dev/null
+    echo '```'
+
+    echo
+    echo "### HNSW — chạy create_hnsw_index.sql LẦN ĐẦU, sau khi đã có đoạn thật"
+    echo
+    echo '```'
+    psql_e2e < "$ROOT/ai-service/scripts/create_hnsw_index.sql"
+    docker exec "$PG" psql -U crm_owner -d thesis_crm -c '\di+ knowledge.*'
+    docker exec "$PG" psql -U crm_owner -d thesis_crm -c "SELECT indexdef FROM pg_indexes
+        WHERE indexname = 'ix_chunk_embedding'"
+    # Kế hoạch truy vấn vector có lọc tenant (ADR-0007). Kho vài nghìn đoạn thì bộ tối ưu có thể
+    # vẫn chọn quét tuần tự — in cả hai để thấy chỉ mục DÙNG ĐƯỢC, không ép.
+    local v
+    v="$(docker exec "$PG" psql -U crm_owner -d thesis_crm -tAc \
+        "SELECT embedding FROM knowledge.knowledge_chunks LIMIT 1")"
+    docker exec "$PG" psql -U crm_owner -d thesis_crm -c "EXPLAIN (COSTS OFF)
+        SELECT id FROM knowledge.knowledge_chunks WHERE tenant_id = '$TENANT_A'
+         ORDER BY embedding <=> '$v' LIMIT 8" \
+        -c "SET enable_seqscan = off" -c "EXPLAIN (COSTS OFF)
+        SELECT id FROM knowledge.knowledge_chunks WHERE tenant_id = '$TENANT_A'
+         ORDER BY embedding <=> '$v' LIMIT 8"
+    echo '```'
+    return $loi
+}
+
 cmd_down() {
-    for p in java-core ai-service; do
+    for p in java-core ai-service ai-worker; do
         [[ -f "$STATE/$p.pid" ]] && kill "$(cat "$STATE/$p.pid")" 2>/dev/null || true
     done
     docker rm -f "$PG" "$S3" "$KAFKA" "$ZK" >/dev/null 2>&1 || true
@@ -166,6 +232,7 @@ case "${1:-}" in
     up) cmd_up ;;
     run) cmd_run ;;
     soi) cmd_soi ;;
+    nap) cmd_nap ;;
     down) cmd_down ;;
-    *) sed -n '2,14p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,18p' "$0" >&2; exit 2 ;;
 esac

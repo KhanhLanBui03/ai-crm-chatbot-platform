@@ -35,5 +35,6 @@ Mỗi quyết định kiến trúc một file. Nguồn trực tiếp cho **chư�
 | 0018 | Cổng parity INT8 trượt: hoãn phán quyết, phân xử bằng Recall@5 ở Ngày 7 | Đo thực nghiệm |
 | 0019 | Tệp tài liệu gốc lưu ở object storage S3 (RustFS ở dev, AWS S3 trên cloud) | Thiết kế UC018 |
 | 0020 | Hạn mức tài liệu tính theo lượng đang có (số lượng + dung lượng), không theo lượt tải | Chốt của nhóm 27/09 |
+| 0021 | Nạp tài liệu commit theo chặng; chống trùng ở `ai.processed_events`; bộ quét job kẹt qua hàm `SECURITY DEFINER`; DLQ chỉ cho sự kiện chưa thành trạng thái | Thiết kế UC019 Ngày 5 |
 
 `KH` = tài liệu `Ke-hoach-do-an-Chatbot-AI-CRM-v2-nhom-2-nguoi.docx`.

@@ -421,21 +421,42 @@ lượng (không phải ~500 — ranh giới heading là ranh giới đoạn, xe
 
 - [ ] 🤖 `/v1/embed/batch` — lô **32 đoạn** — *verify: không gom toàn bộ vector vào RAM; một tài
       liệu 3.000 đoạn phải chạy được mà RSS không phình.*
+      *(27/09: `src/ai/rag/ingest/nhung.py` + client `src/ai/inference/{clients,remote}.py`. ai-embed
+      CHƯA có ⇒ `AI_MODE=mock` (seed cố định, nhãn `mock-hash-1024`). `tracemalloc` 3.000 đoạn: đỉnh
+      **2,2 MB** (gom hết: 100,4 MB). e2e 3.840 đoạn: RSS đỉnh worker +38 MB so với tài liệu 413 đoạn.)*
 - [ ] 🖐 Semaphore giới hạn **ĐÚNG 1 job nạp đồng thời** (dùng chung hàng đợi với UC020 ở N11).
+      *(27/09: Claude viết theo yêu cầu — `XuLyTaiLieu._mot_job` ở `src/worker/consumers/tai_lieu.py`,
+      dùng chung cho luồng Kafka và bộ quét; nhả trong lúc chờ thử lại. Tick khi bạn tự giải thích lại.)*
 - [ ] 🖐 **Worker thật thay cho `NotImplementedError`** (`src/worker/main.py:38`) — tự gõ phần
       cốt lõi: `enable_auto_commit=False`, `max_poll_interval_ms=600000`, **xác nhận offset SAU
       khi xử lý thành công**.
       *Auto-commit đánh dấu xử lý xong TRƯỚC khi thực sự xong; một lần pod chết là mất sự kiện.*
+      *(27/09: Claude viết theo yêu cầu — `src/worker/main.py` (`Worker._tao_consumer`,
+      `_xu_ly_mot`, `chay`). Kiểm ngược: xác nhận offset trước khi xử lý ⇒ test khởi động lại đỏ.)*
 - [ ] 🖐 Chống trùng bằng `INSERT ... ON CONFLICT DO NOTHING` vào `processed_events` — **0 dòng
       ảnh hưởng thì bỏ qua sự kiện**. *Giao nhận ít nhất một lần: nhận trùng là chắc chắn, không
       phải rủi ro.*
+      *(27/09: bảng là **`ai.processed_events`** (V211), KHÔNG phải `analytics.` — `ai_app` không có
+      USAGE trên schema của Track A (ADR-0021). `processed_event_repository.ghi_nhan`, ghi CÙNG
+      transaction với bước nhận việc trong `service.nap_tai_lieu`. Tick khi bạn tự giải thích lại.)*
 - [ ] 🤖 Chuyển tài liệu sang `READY` + `chunk_count` + `indexed_at`; lỗi vĩnh viễn đẩy sang
       **DLQ** — *verify: phân biệt lỗi tạm thời (retry) và lỗi vĩnh viễn (DLQ); đừng đẩy hết vào DLQ.*
+      *(27/09: `service.nap_tai_lieu`. DLQ `ai.dlq` chỉ cho sự kiện KHÔNG thành trạng thái tài liệu
+      (sai lược đồ, CSDL chết 3 lần); `PARSE_*` → `FAILED` trên SCR033, không DLQ; S3/ai-embed chết
+      → `PENDING`, thử lại 5 s/30 s, 3 lượt → `FAILED INGEST_RETRY_EXHAUSTED`. ADR-0021 quyết định 4–5.)*
 - [ ] 🤖 Endpoint trả **6 bước tiến độ** của job.
+      *(27/09: `GET /v1/ai/kb/ingestion-jobs/{job_id}` — `service.tien_do_nap` + `rag/ingest/tien_do.py`;
+      DTO bám `CongViecNap`. Hợp đồng ai-service → java-core còn TODO.)*
 - [ ] 🖐 **Chạy `create_hnsw_index.sql` LẦN ĐẦU** — sau khi đã có chunk thật.
       `m=16`, `ef_construction=64`, `CONCURRENTLY`.
+      *(27/09: chạy trên CSDL e2e sau 4.488 đoạn thật — `scripts/e2e-uc018.sh nap`; `\di+` thấy
+      `ix_chunk_embedding` hnsw 6,8 MB, EXPLAIN tự chọn Index Scan. **CSDL dev chưa**: chưa lên V211,
+      chưa có đoạn nào.)*
 - [ ] 🖐 Test: ép lỗi lược đồ để kiểm chứng DLQ · **restart worker giữa chừng**, job phải hoàn
       tất hoặc được nhận lại **nguyên vẹn**.
+      *(27/09: Claude viết theo yêu cầu — `tests/integration/test_worker_kafka.py` (Kafka thật: DLQ,
+      SIGTERM giữa chừng, chết cứng giữa chừng) + `test_nap_tai_lieu.py` (thẻ sở hữu, bộ quét).
+      `pytest tests` **291 passed**; kiểm ngược 7/7 đỏ đúng chỗ.)*
 
 **File sẽ đụng:** `src/worker/main.py` · `src/worker/consumers/` · `src/ai/rag/ingest/` ·
 `inference/src/roles/embed.py`
@@ -457,6 +478,10 @@ HNSW tồn tại · DLQ hoạt động · restart worker không mất job.
 
 **Minh chứng báo cáo:** thời gian nạp tài liệu 100 trang (đo thật) · throughput đoạn/giây ·
 ảnh chụp sự kiện nằm trong DLQ · biểu đồ 6 bước tiến độ · `\di` xác nhận HNSW.
+*27/09: `docs/report/uc019-ngay5-2026-09-27.md` (e2e java-core → Kafka → worker, `AI_MODE=mock`):
+44 tài liệu thật nạp xong trong 6,3 s · PDF 100 trang **19,4 s**, 413 đoạn, 21 đoạn/giây (97% là
+`find_tables` của PDF dày bảng — nợ) · MD 3.840 đoạn 5,2 s, 742 đoạn/giây · bản tin DLQ kèm header
+`dlq.*` · 2 biểu đồ 6 bước + CSV · `\di+` HNSW. Thời gian KHÔNG gồm nhúng thật — đo lại Ngày 7.*
 
 ---
 
