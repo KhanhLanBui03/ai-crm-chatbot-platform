@@ -99,7 +99,8 @@ chưa cài đặt. Nhưng chúng **compile được**: `mvn -f java-core/pom.xml
 
 - **Schema:** `platform`, `engagement`, `sales`, `analytics`
 - **Flyway:** dải **V1xx** — `src/main/resources/db/migration/` (xem README ở đó)
-- **Kafka:** sản xuất `crm.conversation.v1`, `crm.lead.v1`, `crm.usage.v1`, `crm.document.v1`
+- **Kafka:** sản xuất `crm.kb.document.uploaded` (UC018, ADR-0017), `crm.conversation.v1`, `crm.lead.v1`,
+  `crm.usage.v1` — ba topic sau chờ chốt bộ tên (Master Plan §2.6 hay `crm.*.v1`)
 
 ## Hai tài khoản CSDL — không được nhầm
 

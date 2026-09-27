@@ -62,7 +62,7 @@ cmd_up() {
     for f in "$ROOT"/ai-service/migration/V2*.sql; do psql_e2e < "$f" >/dev/null; done
     cho "Kafka" 90 docker exec "$KAFKA" kafka-topics --bootstrap-server localhost:9092 --list
     docker exec "$KAFKA" kafka-topics --bootstrap-server localhost:9092 --create \
-        --topic crm.document.v1 --partitions 3 --replication-factor 1 >/dev/null
+        --topic crm.kb.document.uploaded --partitions 3 --replication-factor 1 >/dev/null
 
     echo "Dựng ai-service (:$AI_PORT)…"
     # `exec` trong subshell: tiến trình nền CHÍNH LÀ python, nên $! là PID của ai-service. Viết
@@ -129,14 +129,14 @@ cmd_run() {
     curl -fsS --aws-sigv4 "aws:amz:us-east-1:s3" --user "$S3_KEY:$S3_SECRET" \
         "http://localhost:$S3_PORT/$BUCKET?list-type=2&max-keys=1000" \
         | grep -o "<Key>[^<]*</Key>" | sed 's/<[^>]*>//g' | cut -d/ -f1 | sort | uniq -c
-    echo "Kafka crm.document.v1 — số bản tin theo (khoá, phân vùng):"
+    echo "Kafka crm.kb.document.uploaded — số bản tin theo (khoá, phân vùng):"
     docker exec "$KAFKA" kafka-console-consumer --bootstrap-server localhost:9092 \
-        --topic crm.document.v1 --from-beginning --timeout-ms 10000 \
+        --topic crm.kb.document.uploaded --from-beginning --timeout-ms 10000 \
         --property print.key=true --property print.partition=true --property key.separator='|' 2>/dev/null \
         | awk -F'|' '{print $2, $1}' | sort | uniq -c
     echo "Một bản tin mẫu (header | khoá | giá trị):"
     docker exec "$KAFKA" kafka-console-consumer --bootstrap-server localhost:9092 \
-        --topic crm.document.v1 --from-beginning --max-messages 1 --timeout-ms 10000 \
+        --topic crm.kb.document.uploaded --from-beginning --max-messages 1 --timeout-ms 10000 \
         --property print.headers=true --property print.key=true --property key.separator=' | ' 2>/dev/null
     echo '```'
     echo

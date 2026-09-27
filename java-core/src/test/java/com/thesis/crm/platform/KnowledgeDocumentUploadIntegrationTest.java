@@ -264,7 +264,7 @@ class KnowledgeDocumentUploadIntegrationTest {
                 .containsEntry("aggregate_type", "document")
                 .containsEntry("aggregate_id", documentId.toString())
                 .containsEntry("event_type", "DocumentUploaded")
-                .containsEntry("topic", "crm.document.v1");
+                .containsEntry("topic", "crm.kb.document.uploaded");
         JsonNode payload = json.readTree((String) e.get("payload"));
         assertThat(payload.path("document_id").asText()).isEqualTo(documentId.toString());
         assertThat(payload.path("version").asInt()).isEqualTo(1);

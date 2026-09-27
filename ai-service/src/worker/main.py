@@ -22,9 +22,9 @@ BỐN LUẬT KHÔNG ĐƯỢC BỎ — mỗi luật ứng với một cách hỏn
 
 Lỗi vĩnh viễn đẩy sang ``ai.dlq`` (giữ 30 ngày), không retry vô hạn.
 
-[CẦN XÁC NHẬN] Bộ tên topic: §2.6 khai 7 topic nghiệp vụ + ``ai.dlq``; còn
-``scripts/create-topics.sh`` và ``docs/events/*.json`` trong repo vẫn ở bộ 5 topic
-``crm.*.v1`` cũ. Chốt một bộ trước khi viết producer/consumer thật.
+Đã chốt 27/09/2026: ``crm.kb.document.uploaded`` (ADR-0017 quyết định 4) — java-core đã phát.
+[CẦN XÁC NHẬN] Các topic còn lại: theo bộ §2.6 (7 topic nghiệp vụ + ``ai.dlq``) hay bộ
+``crm.*.v1`` của ``scripts/create-topics.sh`` và ``docs/events/*.json``.
 """
 
 

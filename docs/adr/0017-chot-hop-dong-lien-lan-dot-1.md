@@ -1,6 +1,6 @@
 # ADR-0017 — Chốt hợp đồng liên làn đợt 1: tên endpoint `/v1/ai/**` và ranh giới UC018
 
-- **Trạng thái:** Đề xuất — quyết định 1–3 đã có code và test chạy theo; quyết định 4–6 **chưa chốt**
+- **Trạng thái:** Đề xuất — quyết định 1–3 đã có code và test chạy theo; quyết định 4 chốt một phần; 5–6 **chưa chốt**
 - **Ngày:** 2026-09-27
 - **Làn sở hữu:** Cả hai
 
@@ -59,8 +59,10 @@ của `crm.document.v1` là java-core.
    ghi `PENDING`. java-core không đọc nội dung tệp; ai-service không ghi schema của Track A.
 3. **`title` 3–255 code point, đếm SAU khi chuẩn hoá NFC và strip**, ở cả hai tầng; giữ
    `varchar(255)`, không viết V210.
-4. **Bộ tên topic Kafka — chưa chốt.** Tạm dùng `crm.document.v1` cho `DocumentUploaded` và ghi nợ.
-   Hạn: trước consumer đầu tiên (UC019, Ngày 4–5).
+4. **Bộ tên topic Kafka — chốt một phần (27/09/2026).** Sự kiện tải tài liệu đi trên
+   **`crm.kb.document.uploaded`** — đúng tên trong đặc tả UC018 và Master Plan §2.6, và là tên
+   `ai-service/src/worker/main.py` đã dự kiến tiêu thụ. Các topic còn lại (theo cả bộ §2.6 hay giữ
+   `crm.*.v1`) **chưa chốt** — hạn: trước producer/consumer tiếp theo.
 5. **Chỗ đặt bộ vàng — chưa chốt.** Hạn: trước Ngày 6.
 6. **Cỡ tập test người thật — chưa chốt.** Chốt ở buổi gõ tay chung với Dev B; ghi lý do nếu là 200.
 
@@ -107,7 +109,7 @@ Hợp đồng chi tiết của UC018 (JSON, bảng mã lỗi, định dạng key
 - **Hợp đồng — phải vá sau khi hai bên xác nhận** (danh sách file:dòng ở hợp đồng UC018 mục 9):
   `ai-service-to-java-core.yaml` đổi sang `/v1/ai/**` và JSON thay multipart; `dashboard-api.yaml`
   tách 413 khỏi 409, `title` 255, thêm `code` vào `ApiResponse` và `documentQuota` vào phản hồi
-  202; `docs/events/crm.document.v1.json` điền payload.
+  202; `docs/events/` thêm `crm.kb.document.uploaded.json` với payload.
 - **Lược đồ:** V116 (Track A) thêm `warned_at`, `blocked_at` vào `platform.usage_records` — đặc
   tả UC018 và UC006 đòi ghi thời điểm chạm 80% / 100%. Đề xuất 3 cột `sales.lead_scores` lùi sang
   V117.

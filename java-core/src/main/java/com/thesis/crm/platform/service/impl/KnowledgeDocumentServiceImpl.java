@@ -51,8 +51,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
      */
     static final List<String> DUOI_NHAN = List.of(".pdf", ".docx", ".txt", ".md", ".markdown", ".html", ".htm");
 
-    /** Ghi nợ: đặc tả gọi {@code crm.kb.document.uploaded}; bộ tên topic chốt ở ADR-0017 quyết định 4. */
-    static final String TOPIC = "crm.document.v1";
+    /** Tên theo đặc tả UC018 và Master Plan §2.6 — chốt 27/09/2026 (ADR-0017 quyết định 4). */
+    static final String TOPIC = "crm.kb.document.uploaded";
     static final String AGGREGATE_TYPE = "document";
     static final String EVENT_TYPE = "DocumentUploaded";
 

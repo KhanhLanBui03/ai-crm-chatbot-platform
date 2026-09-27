@@ -47,7 +47,10 @@ public class OutboxPublisher {
     /** Chờ broker xác nhận từng bản tin. Dài hơn thì một broker chết giữ khoá job phát quá lâu. */
     private static final long CHO_XAC_NHAN_GIAY = 10;
     private static final long LUI_TOI_DA_GIAY = 60;
-    /** {@code crm.document.v1} → phiên bản 1. Quy ước: đổi lược đồ phá tương thích thì tăng hậu tố. */
+    /**
+     * {@code crm.lead.v2} → phiên bản 2. Topic đặt tên theo sự kiện, không có hậu tố
+     * ({@code crm.kb.document.uploaded}, Master Plan §2.6) → phiên bản 1.
+     */
     private static final Pattern HAU_TO_PHIEN_BAN = Pattern.compile("\\.v(\\d+)$");
 
     private final OutboxEventRepository repository;

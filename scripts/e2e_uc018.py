@@ -203,7 +203,7 @@ def _doc_kafka(bootstrap: str, can: int) -> list:
     async def doc():
         # Không group: chỉ đọc để kiểm, không lưu offset — và khỏi chờ Kafka dựng topic
         # __consumer_offsets trên broker mới (log GroupCoordinatorNotAvailable lặp lại).
-        c = AIOKafkaConsumer("crm.document.v1", bootstrap_servers=bootstrap, group_id=None,
+        c = AIOKafkaConsumer("crm.kb.document.uploaded", bootstrap_servers=bootstrap, group_id=None,
                              auto_offset_reset="earliest", enable_auto_commit=False)
         await c.start()
         ds, han = [], time.monotonic() + 20
@@ -313,7 +313,7 @@ def phan_3_soi_du_lieu() -> int:
         ob.setdefault(agg, []).append((tenant, payload, phat, loai, topic))
     sai_ob = [d.ten_tep for d in da_nhan if len(ob.get(d.id, [])) != 1
               or ob[d.id][0][0] != d.tenant or ob[d.id][0][2] is None
-              or ob[d.id][0][3:] != ("DocumentUploaded", "crm.document.v1")
+              or ob[d.id][0][3:] != ("DocumentUploaded", "crm.kb.document.uploaded")
               or ob[d.id][0][1].get("size_bytes") != d.kich_thuoc]
     bk.kiem("Outbox: mỗi tài liệu đúng 1 sự kiện `DocumentUploaded`, đã phát, payload khớp",
             not sai_ob and len(outbox) == len(da_nhan),

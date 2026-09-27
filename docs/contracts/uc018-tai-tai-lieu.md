@@ -343,7 +343,7 @@ tenant được giữ, tenant khác không bị kẹt. Chưa có hàng đợi ch
 | `aggregate_type` | `document` |
 | `aggregate_id` | `document_id` từ ai-service |
 | `event_type` | `DocumentUploaded` |
-| `topic` | `crm.document.v1` — **ghi nợ**: đặc tả gọi `crm.kb.document.uploaded`; bộ tên topic chưa chốt (ADR-0017 quyết định 4) |
+| `topic` | `crm.kb.document.uploaded` — theo đặc tả UC018 và Master Plan §2.6, chốt 27/09/2026 (ADR-0017 quyết định 4) |
 | `headers` | `{"X-Trace-Id": "…"}` — Trace ID đi ở header Kafka, không ở payload |
 | `payload` | bên dưới |
 
@@ -363,8 +363,8 @@ Không có `title`, `file_name`, `file_uri`: consumer `ingestion-cg` (ai-service
 `knowledge_documents` của chính nó theo `document_id`. Sự kiện càng ít dữ liệu người dùng
 nhập thì càng ít thứ phải xoá khi có yêu cầu UC041.
 
-Vỏ sự kiện job phát sẽ dựng (`docs/events/crm.document.v1.json`): `event_id` = `outbox_events.id`,
-`event_version` = 1 (hậu tố `.v1` của topic), `event_type`, `tenant_id`, `aggregate_id`,
+Vỏ sự kiện job phát dựng (khuôn chung của `docs/events/`): `event_id` = `outbox_events.id`,
+`event_version` = 1 (topic đặt tên theo sự kiện, không có hậu tố `.vN`), `event_type`, `tenant_id`, `aggregate_id`,
 `occurred_at` = `created_at` của dòng outbox, `payload` như trên.
 
 ---
@@ -413,7 +413,8 @@ tin của B cùng ở phân vùng 2; header `X-Trace-Id`, không có header `__T
 | `docs/openapi/dashboard-api.yaml` — `HanMucSuDung` | Bốn hạn mức, không có dung lượng | Thêm `storage` (byte) — ADR-0020 |
 | `docs/openapi/dashboard-api.yaml:2974` (`ApiResponse`) | Không có `code` | Thêm `code: string \| null` — đổi **vỏ chung** của mọi endpoint, giao diện rẽ nhánh theo nó |
 | `docs/openapi/ai-service-to-java-core.yaml:74-92` | `POST /v1/documents`, "multipart" | `POST /v1/ai/kb/documents`, JSON mục 2. Giữ ý "java-core kiểm `max_documents` và `STORAGE_MB`" — đúng với ADR-0020 |
-| `docs/events/crm.document.v1.json:15-18` | `payload` là TODO | Lược đồ payload mục 6 |
+| `docs/events/` | Chỉ có `crm.document.v1.json` (payload TODO) | Thêm `crm.kb.document.uploaded.json` với payload mục 6; bảng topic ở `README.md` thêm dòng này (producer java-core, consumer `ingestion-cg`) |
+| `docs/openapi/ai-service-to-java-core.yaml:54` | "…qua topic `crm.document.v1`" | `crm.kb.document.uploaded` |
 | `docs/Dac-ta-UseCase-Module-AI.docx` — UC018 "Tham số và ngưỡng" | "Tiêu đề: 3–300 ký tự" | 3–255 (ADR-0017) |
 | `docs/Dac-ta-UseCase-Module-AI.docx` — UC018 hậu điều kiện | "Mức tiêu thụ tài liệu được cộng vào `usage_records` của chu kỳ hiện tại" | "…cộng vào số tài liệu và dung lượng đang có" (ADR-0020); UC006 bốn hạn mức → năm |
 

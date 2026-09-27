@@ -51,7 +51,7 @@ class OutboxPublisherIntegrationTest {
 
     static final UUID TENANT_A = UUID.fromString("11111111-1111-1111-1111-111111111111");
     static final UUID TENANT_B = UUID.fromString("22222222-2222-2222-2222-222222222222");
-    static final String TOPIC_TAI_LIEU = "crm.document.v1";
+    static final String TOPIC_TAI_LIEU = "crm.kb.document.uploaded";
     static final String TOPIC_LEAD = "crm.lead.v1";
 
     @Container
@@ -133,7 +133,7 @@ class OutboxPublisherIntegrationTest {
         }
         assertThat(thuTu).containsExactlyElementsOf(idA);
 
-        // Vỏ đúng docs/events/crm.document.v1.json.
+        // Vỏ đúng docs/events/README.md + hợp đồng UC018 mục 6.
         ConsumerRecord<String, String> dau = cuaA.get(0);
         JsonNode vo = json.readTree(dau.value());
         assertThat(vo.fieldNames()).toIterable().containsExactly(
@@ -176,6 +176,7 @@ class OutboxPublisherIntegrationTest {
 
     @Test
     void phienBanLayTuHauToTopic() {
+        assertThat(OutboxPublisher.phienBan("crm.kb.document.uploaded")).isEqualTo(1);
         assertThat(OutboxPublisher.phienBan("crm.document.v1")).isEqualTo(1);
         assertThat(OutboxPublisher.phienBan("crm.lead.v12")).isEqualTo(12);
         assertThat(OutboxPublisher.phienBan("khong-co-hau-to")).isEqualTo(1);

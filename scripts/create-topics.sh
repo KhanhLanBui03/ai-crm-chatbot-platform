@@ -17,7 +17,9 @@ TOPICS=(
   "crm.lead.v1"            # producer: java-core   consumers: analytics-cg, notification-cg
   "crm.ai-interaction.v1"  # producer: ai-service  consumers: analytics-cg
   "crm.usage.v1"           # producer: java-core   consumers: billing-cg
-  "crm.document.v1"        # producer: java-core   consumers: ingestion-cg (ai-service)
+  "crm.document.v1"        # DocumentUpdated/Deleted — chờ chốt bộ tên topic (ADR-0017 quyết định 4)
+  # UC018 → UC019. Đặc tả ghi 12 phân vùng; dev dùng chung PARTITIONS như các topic khác.
+  "crm.kb.document.uploaded"  # producer: java-core   consumers: ingestion-cg (ai-service)
 )
 
 echo "Tạo topic trên ${CONTAINER} (${BOOTSTRAP})..."
