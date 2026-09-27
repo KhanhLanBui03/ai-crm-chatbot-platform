@@ -28,6 +28,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Khoá bí mật sinh tại máy (scripts/dev-jwt.sh) — không bao giờ commit, kể cả khoá dev
+.secrets/
+
 # Biến môi trường — .env.example thì COMMIT, .env thì không
 **/.env
 **/.env.local
