@@ -2,7 +2,7 @@
 
 Mọi hàm nhận một ``AsyncSession`` ĐÃ gắn tenant (``src.ai.db.session.get_tenant_session``).
 
-Hai điều cố ý:
+Ba điều cố ý:
 
 - **Không có ``WHERE tenant_id = …``** trong các câu đọc. RLS của V207 lọc thay
   (``.claude/rules/database.md``); tự lọc ở tầng ứng dụng tạo cảm giác an toàn giả và che mất
@@ -11,6 +11,7 @@ Hai điều cố ý:
 - **``tenant_id`` khi INSERT lấy từ ``ai.current_tenant()``**, không nhận làm tham số. Tenant
   của dòng mới vì thế LUÔN là tenant của phiên — không có tham số nào để truyền nhầm, và
   quên đặt tenant thì hàm đó ném 42501 ngay (V201).
+- **Cấp version dưới khoá advisory** — xem ``tinh_version_ke_tiep``.
 """
 
 from uuid import UUID
@@ -18,22 +19,53 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Không gian khoá advisory riêng cho việc cấp version tài liệu (18 = UC018). Dạng hai tham số
+# (int4, int4) tách khỏi khoá của nơi khác trong cùng CSDL — Flyway cũng dùng khoá advisory.
+_KHONG_GIAN_KHOA_VERSION = 18
+
 
 async def tinh_version_ke_tiep(session: AsyncSession, title: str) -> int:
-    """🖐 TỰ GÕ — Ngày 3, mục B. AI không viết thân hàm này.
+    """Version kế tiếp cho ``title`` trong tenant của phiên: ``1`` nếu chưa có, ngược lại
+    ``MAX(version) + 1`` — trùng tiêu đề thì TĂNG version, không ghi đè bản cũ.
 
-    Hợp đồng:
-        Vào: phiên đã gắn tenant · ``title`` đã chuẩn hoá NFC + strip (DTO lo việc đó).
-        Ra:  ``1`` nếu tenant chưa có tài liệu nào mang tiêu đề này, ngược lại
-             ``MAX(version) + 1`` — tức trùng tiêu đề thì TĂNG version, không ghi đè bản cũ.
+    ``title`` phải đã chuẩn hoá NFC + strip (DTO lo), nếu không hai cách gõ cùng một tiêu đề
+    sẽ thành hai chuỗi version riêng.
 
-    Bẫy phải xử lý: hai lượt tải cùng tiêu đề chạy ĐỒNG THỜI đều đọc ra cùng một MAX, cùng
-    INSERT cùng version, và lượt sau đụng ``uq_doc_title_version``. Kết quả phải là version
-    1 và 2, không phải một lượt 202 và một lượt 500.
+    BẪY ĐỒNG THỜI: hai lượt tải cùng tiêu đề cùng đọc một MAX, cùng INSERT một version, lượt
+    sau đụng ``uq_doc_title_version`` thành 500. ``SELECT … FOR UPDATE`` không cứu được: khi
+    tiêu đề chưa có dòng nào thì không có dòng nào để khoá. Nên khoá một CÁI TÊN thay vì một
+    dòng: ``pg_advisory_xact_lock`` trên (tenant, tiêu đề). Lượt thứ hai chờ tới khi lượt đầu
+    commit, rồi mới đọc MAX — lúc đó đã thấy dòng lượt đầu vừa ghi.
 
-    Nhớ: hàm này và ``them_tai_lieu_pending`` chạy trong CÙNG transaction (cùng ``session``).
+    Ba điều kiện để khoá đúng:
+
+    - **Khoá tính bằng ``hashtext`` của Postgres, không bằng ``hash()`` của Python.** ``hash()``
+      của chuỗi bị ngẫu nhiên hoá theo từng tiến trình: hai replica ai-service khoá hai số khác
+      nhau cho cùng một tiêu đề và không chặn được nhau — test một tiến trình không bao giờ lộ.
+    - **Khoá gồm cả tenant** (``ai.current_tenant()``): hai tenant cùng tải "Chính sách đổi trả"
+      không phải chờ nhau. Chưa đặt tenant thì hàm đó ném 42501 ngay (V201).
+    - **Cùng transaction với INSERT** (cùng ``session``): khoá ``_xact_`` nhả lúc commit, tức
+      SAU khi dòng mới đã ghi. Mức cô lập phải là READ COMMITTED (mặc định): mỗi câu lệnh lấy
+      ảnh chụp mới nên câu MAX thấy dòng vừa commit. Ở REPEATABLE READ, ảnh chụp chốt từ câu
+      đầu tiên của transaction và câu MAX sẽ không thấy — khoá thành vô dụng.
+
+    Không có ``WHERE tenant_id`` trong câu MAX: RLS lọc thay (``.claude/rules/database.md``).
     """
-    raise NotImplementedError("🖐 Ngày 3 — tự gõ theo docstring")
+    await session.execute(
+        text(
+            "SELECT pg_advisory_xact_lock("
+            " :khong_gian, hashtext(ai.current_tenant()::text || '/' || :title))"
+        ),
+        {"khong_gian": _KHONG_GIAN_KHOA_VERSION, "title": title},
+    )
+    ket_qua = await session.execute(
+        text(
+            "SELECT COALESCE(MAX(version), 0) + 1"
+            " FROM knowledge.knowledge_documents WHERE title = :title"
+        ),
+        {"title": title},
+    )
+    return ket_qua.scalar_one()
 
 
 async def them_tai_lieu_pending(
