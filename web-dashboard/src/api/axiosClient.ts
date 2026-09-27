@@ -24,8 +24,12 @@ function sinhTraceId(): string {
 }
 
 axiosClient.interceptors.request.use((config) => {
+  const isPublicAuthPath = config.url && (
+    config.url.startsWith('/api/v1/auth/') ||
+    config.url.startsWith('/ai/v1/widget/')
+  )
   const token = layStore()?.getState().auth.accessToken
-  if (token) {
+  if (token && !isPublicAuthPath) {
     config.headers.set('Authorization', `Bearer ${token}`)
   }
   config.headers.set('X-Trace-Id', sinhTraceId())
@@ -78,7 +82,12 @@ axiosClient.interceptors.response.use(
   async (error: AxiosError<ApiResponse<unknown>>) => {
     const yeuCau = error.config as (AxiosRequestConfig & { _daThuLai?: boolean }) | undefined
 
-    if (error.response?.status !== 401 || !yeuCau || yeuCau._daThuLai) {
+    const isPublicAuthPath = yeuCau?.url && (
+      yeuCau.url.startsWith('/api/v1/auth/') ||
+      yeuCau.url.startsWith('/ai/v1/widget/')
+    )
+
+    if (error.response?.status !== 401 || !yeuCau || yeuCau._daThuLai || isPublicAuthPath) {
       return Promise.reject(bocLoi(error))
     }
 

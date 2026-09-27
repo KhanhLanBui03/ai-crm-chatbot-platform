@@ -4702,7 +4702,7 @@ export interface components {
          * @description `platform.roles.code`. ERD chỉ có hai vai trò; doanh nghiệp không tự tạo vai trò mới.
          * @enum {string}
          */
-        MaVaiTro: "TENANT_ADMIN" | "AGENT";
+        MaVaiTro: "TENANT_ADMIN" | "AGENT" | "PLATFORM_ADMIN";
         /** @enum {string} */
         TrangThaiNguoiDung: "PENDING" | "ACTIVE" | "DISABLED";
         /** @enum {string} */
@@ -4848,6 +4848,8 @@ export interface components {
             permissions: string[];
             tenantName: string;
             planName: string;
+            /** @description Phạm vi: TENANT = doanh nghiệp, PLATFORM = quản trị nền tảng */
+            scope?: "TENANT" | "PLATFORM";
         };
         NguoiDung: {
             /** Format: uuid */

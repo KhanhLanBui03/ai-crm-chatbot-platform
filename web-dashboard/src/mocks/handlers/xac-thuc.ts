@@ -18,6 +18,26 @@ export const NGUOI_DUNG_MAU: NguoiDungHienTai = {
   ],
   tenantName: 'Công ty TNHH Cát Tường',
   planName: 'Growth',
+  scope: 'TENANT',
+}
+
+/** Tài khoản quản trị viên nền tảng — scope PLATFORM, không thuộc doanh nghiệp nào. */
+export const ADMIN_NEN_TANG_MAU: NguoiDungHienTai = {
+  id: 'a0000000-0000-4000-8000-000000000099',
+  fullName: 'Quản trị viên Hệ thống',
+  email: 'admin@platform.vn',
+  roleCode: 'PLATFORM_ADMIN',
+  permissions: [
+    'platform.tenants.read',
+    'platform.tenants.write',
+    'platform.plans.read',
+    'platform.plans.write',
+    'platform.ai-usage.read',
+    'platform.audit.read',
+  ],
+  tenantName: 'Nền tảng CRM AI',
+  planName: 'Platform',
+  scope: 'PLATFORM',
 }
 
 /** Thư đã có doanh nghiệp đăng ký — dùng để thử nhánh 409 của SCR001. */
@@ -32,9 +52,43 @@ function slugHoa(ten: string): string {
 }
 
 export const xacThucHandlers = [
-  http.post('/api/v1/auth/login', async () => {
+  http.post('/api/v1/auth/login', async ({ request }) => {
     await delay(400)
-    return HttpResponse.json(ok({ accessToken: 'mau-access-token', nguoiDung: NGUOI_DUNG_MAU }))
+    const than = (await request.json()) as { email?: string; password?: string }
+    const emailNhap = than.email?.trim() || 'an.pham@cattuong.vn'
+    const laAdmin =
+      emailNhap.toLowerCase().includes('admin@platform') ||
+      emailNhap.toLowerCase() === 'admin@platform.local' ||
+      emailNhap.toLowerCase() === 'admin@platform.vn'
+
+    const matKhauLuu = typeof window !== 'undefined' ? localStorage.getItem(`mock_pwd_${emailNhap.toLowerCase()}`) : null
+    if (matKhauLuu && than.password && than.password !== matKhauLuu) {
+      return HttpResponse.json(loi('Email hoặc mật khẩu không chính xác.'), { status: 401 })
+    }
+
+    if (laAdmin) {
+      return HttpResponse.json(
+        ok({
+          accessToken: 'mau-access-token-admin',
+          nguoiDung: {
+            ...ADMIN_NEN_TANG_MAU,
+            email: emailNhap,
+          },
+        }),
+      )
+    }
+
+    // Các email khác → trả tài khoản Tenant Admin mẫu với đúng email đã nhập
+    return HttpResponse.json(
+      ok({
+        accessToken: 'mau-access-token',
+        nguoiDung: {
+          ...NGUOI_DUNG_MAU,
+          email: emailNhap,
+          fullName: emailNhap.split('@')[0] || NGUOI_DUNG_MAU.fullName,
+        },
+      }),
+    )
   }),
 
   http.post('/api/v1/auth/refresh', async () => {
@@ -44,6 +98,18 @@ export const xacThucHandlers = [
 
   http.post('/api/v1/auth/logout', async () => {
     await delay(150)
+    return HttpResponse.json(ok(null))
+  }),
+
+  http.post('/api/v1/auth/send-otp', async ({ request }) => {
+    await delay(350)
+    const than = (await request.json()) as { email?: string; companyName?: string; purpose?: string }
+    if (than.email && THU_DA_DUNG.includes(than.email.toLowerCase()) && than.purpose === 'REGISTER') {
+      return HttpResponse.json(
+        loi('Địa chỉ thư này đã đăng ký một doanh nghiệp. Đăng nhập hoặc dùng thư khác.'),
+        { status: 409 },
+      )
+    }
     return HttpResponse.json(ok(null))
   }),
 
@@ -103,16 +169,38 @@ export const xacThucHandlers = [
     return HttpResponse.json(ok(null), { status: 202 })
   }),
 
-  // SCR005 — đặt lại mật khẩu bằng mã
+  // SCR005 — đặt lại mật khẩu bằng mã OTP hoặc token
   http.post('/api/v1/auth/reset-password', async ({ request }) => {
     await delay(700)
-    const than = (await request.json()) as { token?: string; newPassword?: string }
-    if (!than.token || than.token === 'het-han') {
+    const than = (await request.json()) as {
+      email?: string
+      otpCode?: string
+      token?: string
+      newPassword?: string
+    }
+
+    if (than.token === 'het-han') {
       return HttpResponse.json(
         loi('Mã đặt lại đã hết hạn. Yêu cầu một liên kết mới rồi thử lại.'),
         { status: 410 },
       )
     }
+
+    if (than.otpCode && than.otpCode === '000000') {
+      return HttpResponse.json(loi('Mã OTP không chính xác hoặc đã hết hạn.'), { status: 400 })
+    }
+
+    if (!than.token && !than.otpCode) {
+      return HttpResponse.json(loi('Thiếu mã OTP hoặc mã đặt lại mật khẩu.'), { status: 400 })
+    }
+
+    // Lưu mật khẩu mới vào storage để phiên đăng nhập sau dùng được
+    if (than.email && than.newPassword) {
+      try {
+        localStorage.setItem(`mock_pwd_${than.email.toLowerCase().trim()}`, than.newPassword)
+      } catch {}
+    }
+
     return HttpResponse.json(ok(null))
   }),
 

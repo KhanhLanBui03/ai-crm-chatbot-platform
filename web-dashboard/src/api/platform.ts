@@ -62,7 +62,25 @@ export const platformApi = apiSlice.injectEndpoints({
 
     voHieuHoaNguoiDung: build.mutation<NguoiDung, string>({
       query: (id) => ({ url: `/api/v1/users/${id}/disable`, method: 'POST' }),
-      invalidatesTags: (_kq, _loi, id) => [{ type: 'NguoiDung', id }, CA_NGUOI_DUNG],
+      invalidatesTags: (_kq, _loi, id) => [{ type: 'NguoiDung', id }, CA_NGUOI_DUNG, { type: 'HanMuc', id: 'HIEN-TAI' }],
+    }),
+
+    kichHoatNguoiDung: build.mutation<NguoiDung, string>({
+      query: (id) => ({ url: `/api/v1/users/${id}/enable`, method: 'POST' }),
+      invalidatesTags: (_kq, _loi, id) => [{ type: 'NguoiDung', id }, CA_NGUOI_DUNG, { type: 'HanMuc', id: 'HIEN-TAI' }],
+    }),
+
+    capNhatNguoiDung: build.mutation<
+      NguoiDung,
+      { id: string; fullName?: string; roleCode?: MaVaiTro; status?: TrangThaiNguoiDung }
+    >({
+      query: ({ id, ...body }) => ({ url: `/api/v1/users/${id}`, method: 'PATCH', body }),
+      invalidatesTags: (_kq, _loi, { id }) => [{ type: 'NguoiDung', id }, CA_NGUOI_DUNG],
+    }),
+
+    xoaNguoiDung: build.mutation<void, string>({
+      query: (id) => ({ url: `/api/v1/users/${id}`, method: 'DELETE' }),
+      invalidatesTags: [CA_NGUOI_DUNG, { type: 'HanMuc', id: 'HIEN-TAI' }],
     }),
 
     guiLaiLoiMoi: build.mutation<void, string>({
@@ -138,6 +156,9 @@ export const {
   useDanhSachNguoiDungQuery,
   useMoiNguoiDungMutation,
   useVoHieuHoaNguoiDungMutation,
+  useKichHoatNguoiDungMutation,
+  useCapNhatNguoiDungMutation,
+  useXoaNguoiDungMutation,
   useGuiLaiLoiMoiMutation,
   useDanhSachVaiTroQuery,
   useHoSoDoanhNghiepQuery,

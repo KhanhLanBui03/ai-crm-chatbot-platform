@@ -84,11 +84,14 @@ export function InboxPage() {
               toast.success('Đã đánh dấu hội thoại đã xử lý xong.')
             }}
             onChuyenGiao={datHuongChuyenGiao}
+            onQuayLai={() => datIdDangChon(null)}
           />
           <ContextPanel nguCanh={nguCanh.currentData} dangTai={nguCanh.isFetching} />
         </>
       ) : (
-        <ChuaChonHoiThoai />
+        <div className="hidden md:flex flex-1">
+          <ChuaChonHoiThoai />
+        </div>
       )}
 
       {idDangChon && huongChuyenGiao && (
