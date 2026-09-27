@@ -1,7 +1,7 @@
 # Hợp đồng UC018 — Tải lên tài liệu tri thức
 
 **Trạng thái:** Nháp — chờ hai bên thống nhất rồi mới vá `docs/openapi/` và `docs/events/`
-(mục 9) · **Ngày:** 27/09/2026 · **Căn cứ:** đặc tả UC018 · ADR-0002 · ADR-0003 · ADR-0017 · ADR-0019
+(mục 9) · **Ngày:** 27/09/2026 · **Căn cứ:** đặc tả UC018 · ADR-0002 · ADR-0003 · ADR-0017 · ADR-0019 · ADR-0020
 
 **Nguồn sự thật là code, không phải tài liệu này.** Mọi chi tiết dưới đây chép từ:
 
@@ -32,7 +32,7 @@ dashboard ──multipart──▶ java-core ──PutObject──▶ kho S3 (Ru
                             └──────────────────▶ ai-service ──INSERT PENDING──▶ knowledge.knowledge_documents
                             ◀── 202 {document_id,…} ──┘
                             │
-                            └─ cùng transaction: platform.usage_records (+1) · platform.outbox_events
+                            └─ cùng transaction: usage_records (DOCUMENT +1, STORAGE_MB +byte) · outbox_events
 ```
 
 ---
@@ -67,7 +67,7 @@ rỗng hoặc dài quá 255 code point ⇒ 422. Tên này gửi sang ai-service 
 ### 1.2. Phản hồi 202
 
 Vỏ `ApiResponse` (`common/response/ApiResponse.java`), `data` theo hình `TaiLieu` của
-`dashboard-api.yaml` **cộng hai trường mới** `jobId` và `documentQuota`:
+`dashboard-api.yaml` **cộng ba trường mới** `jobId`, `documentQuota` và `storageQuota`:
 
 ```json
 {
@@ -95,6 +95,13 @@ Vỏ `ApiResponse` (`common/response/ApiResponse.java`), `data` theo hình `TaiL
       "percent": 80.0,
       "warnedAt": "2026-09-27T03:15:22.470Z",
       "blockedAt": null
+    },
+    "storageQuota": {
+      "used": 7340032,
+      "quota": 104857600,
+      "percent": 7.0,
+      "warnedAt": null,
+      "blockedAt": null
     }
   },
   "message": null,
@@ -109,8 +116,9 @@ Vỏ `ApiResponse` (`common/response/ApiResponse.java`), `data` theo hình `TaiL
 - `sourceType`, `mimeType`, `version` lấy từ phản hồi của ai-service (MIME **thật**, không phải
   MIME trình duyệt khai). `sizeBytes`, `fileName`, `language`, `description` do java-core biết.
 - `uploadedByName` luôn `null` ở phản hồi này — người tải chính là người đang xem.
-- `documentQuota` là **trạng thái hạn mức SAU lượt tải này** (mục 5). `warnedAt ≠ null` ⇒ giao
-  diện hiện cảnh báo 80%. `blockedAt ≠ null` ⇒ lượt này là lượt cuối được nhận.
+- `documentQuota` / `storageQuota` là **lượng đang có SAU lượt tải này** so với trần của gói
+  (mục 5): số tài liệu, và dung lượng tính bằng **byte**. `warnedAt ≠ null` ⇒ giao diện hiện
+  cảnh báo 80%. `blockedAt ≠ null` ⇒ đã chạm trần trong chu kỳ.
 
 ### 1.3. Mã lỗi — theo đúng thứ tự java-core kiểm
 
@@ -125,7 +133,8 @@ tiếng Việt cho người dùng, `traceId`. Giao diện rẽ nhánh theo **`co
 | 4 | 422 | `INVALID_METADATA` | Thiếu `file`/`title`; `title` ngoài 3–255; `description` > 500; `language` ∉ {vi, en}; tên tệp rỗng hoặc > 255 | Giữ hộp thoại, đánh dấu trường sai |
 | 5 | 415 | `UNSUPPORTED_FORMAT` | Đuôi không nằm trong danh sách nhận | Luồng phụ 4.1: hiện danh sách đuôi nhận được |
 | 6 | 409 | `SUBSCRIPTION_NOT_ACTIVE` | Không có thuê bao `TRIALING`/`ACTIVE` đang trong chu kỳ `[period_start, period_end)` · **[CẦN XÁC NHẬN]** — đặc tả chưa có mã này | Dẫn sang màn gói dịch vụ |
-| 7 | 409 | `DOCUMENT_QUOTA_EXCEEDED` | `used_value ≥ quota_value` của chỉ số `DOCUMENT` — `data` kèm `documentQuota` | Luồng phụ 6.1: đề nghị gỡ bớt tài liệu hoặc nâng gói |
+| 7 | 409 | `DOCUMENT_QUOTA_EXCEEDED` | Số tài liệu đang có + 1 > `max_documents` — `data` là trạng thái hạn mức | Luồng phụ 6.1: đề nghị gỡ bớt tài liệu hoặc nâng gói |
+| 7b | 409 | `STORAGE_MB_QUOTA_EXCEEDED` | Dung lượng đang có + byte của tệp > `storage_mb` — `data` là trạng thái hạn mức (byte). ADR-0020 | Như trên, kèm số MB đang dùng / trần / tệp này |
 | 8 | 503 | `STORAGE_UNAVAILABLE` | Không ghi được lên kho S3, **hoặc** ai-service không đọc được kho S3 | "Thử lại sau" — không phải lỗi của tệp |
 | 9 | 415 / 413 / 422 | *(chuyển nguyên `code` của ai-service)* | ai-service từ chối nội dung tệp — ca thật: **nội dung không khớp đuôi** (PNG đổi đuôi `.pdf`, ZIP đổi đuôi `.docx`) | Như dòng 5 |
 | 10 | 503 | `AI_SERVICE_UNAVAILABLE` | ai-service không trả lời, quá thời gian chờ, hoặc trả 5xx | "Thử lại sau" |
@@ -262,10 +271,10 @@ Toàn bộ bước 4–8 nằm trong **một** `@Transactional` của `Knowledge
 | 2 | Servlet đọc multipart, giới hạn tệp 20 MiB | 413 |
 | 3 | Bind form + Bean Validation: `title` / `description` / `language` | 422 |
 | 4 | Kiểm lại dung lượng (lớp 2) → tên tệp → **đuôi tệp** | 413 / 422 / 415 |
-| 5 | Tìm thuê bao đang hiệu lực; `SELECT … FOR UPDATE` dòng `usage_records(subscription, DOCUMENT)` (tạo nếu chưa có, `quota_value` chép từ `subscription_plans.max_documents`); `used ≥ quota` ⇒ ghi `blocked_at` nếu còn trống rồi từ chối | 409 |
+| 5 | Tìm thuê bao đang hiệu lực; `SELECT … FOR UPDATE` hai dòng `usage_records` theo thứ tự cố định `DOCUMENT` → `STORAGE_MB` (tạo nếu chưa có — mục 5); `đang có + phần thêm > trần` ⇒ ghi mốc rồi từ chối | 409 |
 | 6 | `PutObject` lên key ở mục 3 | 503 |
 | 7 | Gọi ai-service (mục 2). Khác 202 ⇒ `DeleteObject` rồi trả lỗi theo bảng 2.4 | theo 2.4 |
-| 8 | `used_value + 1`, ghi `warned_at`/`blocked_at` nếu vừa vượt ngưỡng, **ghi `outbox_events`** — cùng transaction | — |
+| 8 | `DOCUMENT + 1`, `STORAGE_MB + byte`, ghi `warned_at`/`blocked_at` nếu vừa vượt ngưỡng, **ghi `outbox_events`** — cùng transaction | — |
 | 9 | Commit, trả 202 | — |
 
 **Khoá dòng hạn mức giữ suốt bước 5–9**, kể cả lúc ghi S3 và chờ ai-service. Đây là chủ ý:
@@ -285,25 +294,38 @@ trong lúc chờ ai-service — chấp nhận được ở quy mô SME, ghi ở 
 
 ---
 
-## 5. Hạn mức — cảnh báo 80%, chặn 100%
+## 5. Hạn mức — lượng ĐANG CÓ, cảnh báo 80%, chặn 100%
 
-Cần **migration V116** (Track A): thêm `warned_at` và `blocked_at` (`timestamptz`, null được)
-vào `platform.usage_records`. Đặc tả UC018 ghi thẳng tên hai cột này, `dashboard-api.yaml`
-(`HanMucSuDung.warnedAt`/`blockedAt`) đã khai từ trước, nhưng V102 chưa có.
+**Hạn mức tài liệu là lượng đang có, không phải lượt tải trong chu kỳ** — nhóm chốt 27/09/2026,
+lập luận và đánh đổi ở ADR-0020. Hai chỉ số, cùng một cách kiểm:
 
-| Mốc | Điều kiện (sau khi cộng lượt này) | Ghi |
+| Chỉ số | Đếm gì | Trần | Đơn vị |
+|---|---|---|---|
+| `DOCUMENT` | Mọi bản ghi tài liệu đang tồn tại — mỗi `version` là một, kể cả bản `FAILED` | `max_documents` | tài liệu |
+| `STORAGE_MB` | Tổng dung lượng tệp gốc đang lưu | `storage_mb × 1 048 576` | **byte** (tên chỉ số giữ theo V102) |
+
+- **Chặn:** `đang có + phần thêm > trần` ⇒ 409. Tệp lấp đúng trần vẫn được nhận.
+- **Sang chu kỳ mới:** dòng hạn mức mới **chép mức đang có** từ chu kỳ gần nhất trước đó; `quota_value`
+  chép từ gói hiện hành. (Hội thoại và token là dòng chảy — chu kỳ mới về 0.)
+- **Lượt bị ai-service từ chối** không được đếm — object đã bị xoá (mục 4 bước 7).
+- **Gỡ tài liệu (UC020) phải trả lại chỗ:** `DOCUMENT − 1`, `STORAGE_MB − file_size_bytes`, cùng
+  transaction với outbox `DocumentDeleted`. Vì vậy phản hồi gỡ của ai-service phải có
+  `file_size_bytes` — ghi vào hợp đồng UC020.
+
+Mốc cần **migration V116** (Track A): `warned_at`, `blocked_at` trên `platform.usage_records` —
+đặc tả UC018 ghi thẳng tên hai cột này, `dashboard-api.yaml` (`HanMucSuDung.warnedAt`/`blockedAt`)
+đã khai từ trước, nhưng V102 chưa có.
+
+| Mốc | Điều kiện | Ghi |
 |---|---|---|
-| Cảnh báo | `used × 100 ≥ quota × 80` và `warned_at` đang trống | `warned_at = now()` |
-| Chạm trần | `used ≥ quota` và `blocked_at` đang trống | `blocked_at = now()` |
-| Từ chối | TRƯỚC khi cộng: `used ≥ quota` | 409; ghi `blocked_at` nếu còn trống (gói bị hạ giữa chừng) — ghi này **được commit** dù trả lỗi |
+| Cảnh báo | Sau khi cộng: `used × 100 ≥ quota × 80` và `warned_at` đang trống | `warned_at = now()` |
+| Chạm trần | Sau khi cộng: `used ≥ quota` và `blocked_at` đang trống | `blocked_at = now()` |
+| Từ chối | Trước khi cộng: `used + phần thêm > quota` | 409; ghi `blocked_at` (và `warned_at`) nếu còn trống — ghi này **được commit** dù trả lỗi. Với dung lượng, lượt bị chặn thường chưa lấp đủ 100% |
 
-Hai mốc ghi **một lần** mỗi chu kỳ, không ghi đè — đó là "thời điểm chạm mốc" UC006 4.1–4.2
-hiển thị. `percent = used × 100 / quota` (quota = 0 ⇒ 100). Gói TRIAL (`max_documents = 20`):
-tài liệu thứ 16 ghi `warned_at`, thứ 20 ghi `blocked_at`, thứ 21 nhận 409.
-
-`used_value` là **bộ đếm lượt tải được nhận trong chu kỳ**, theo đúng câu chữ đặc tả ("mức tiêu
-thụ tài liệu được cộng vào `usage_records` của chu kỳ hiện tại"). Mỗi version mới của cùng tiêu
-đề cũng tính một lượt. **[CẦN XÁC NHẬN]** — xem mục 10 câu 1.
+Mốc ghi **một lần** mỗi chu kỳ, không ghi đè — đó là "thời điểm chạm mốc" UC006 4.1–4.2 hiển thị.
+Mốc có bị xoá khi gỡ bớt tài liệu làm mức dùng tụt xuống hay không: chốt ở UC020.
+`percent = used × 100 / quota` (quota = 0 ⇒ 100). Gói TRIAL (20 tài liệu, 100 MB): tài liệu thứ
+16 ghi `warned_at`, thứ 20 ghi `blocked_at`, thứ 21 nhận 409.
 
 ---
 
@@ -362,16 +384,18 @@ Giao diện thấy lỗi này ở màn tiến độ nạp (SCR033), không phả
 | Ca | Ở đâu | Kết quả |
 |---|---|---|
 | 25/25 tệp mẫu ra đúng mã phía ai-service | `test_upload_documents.py::test_manifest_25_tep_dung_ma_http` | xanh |
-| 401 / 403 / 413 / 422 / 415 / 409 / 503 / 500 phía java-core, key đúng tenant, outbox, 80% / 100%, 6 lượt đồng thời | `KnowledgeDocumentUploadIntegrationTest` — 20 ca (Postgres + RustFS thật, JWT ký thật, ai-service giả lập bằng máy chủ HTTP trong test) | xanh |
+| 401 / 403 / 413 / 422 / 415 / 409 / 503 / 500 phía java-core, key đúng tenant, outbox, 80% / 100%, 6 lượt đồng thời, hết dung lượng theo byte, chu kỳ mới chép mức đang có | `KnowledgeDocumentUploadIntegrationTest` — 22 ca (Postgres + RustFS thật, JWT ký thật, ai-service giả lập bằng máy chủ HTTP trong test) | xanh |
 | Làm sạch tên tệp, đuôi giống `PurePath.suffix` | `KbObjectKeyTest` — 21 ca | xanh |
 | Job phát: khoá = `tenant_id`, cùng tenant cùng phân vùng đúng thứ tự, vỏ sự kiện, header, sự kiện hỏng chỉ chặn tenant của nó | `OutboxPublisherIntegrationTest` — 3 ca (Postgres + Kafka thật) | xanh |
 | **Luồng thật: java-core → RustFS → ai-service → Kafka**, tenant gói STARTER | `scripts/e2e-uc018.sh up && … run` — hạ tầng dùng một lần; báo cáo [`docs/report/uc018-e2e-2026-09-27.md`](../report/uc018-e2e-2026-09-27.md) | **25/25** đúng mã theo `manifest.csv`; "Chính sách đổi trả" ra v1 (DOCX) + v2 (MD) ở hai key khác nhau; 21 dòng `PENDING`, 21 object, 21 sự kiện; hai tệp bị ai-service trả 415 đã bị xoá khỏi kho |
+| **Dữ liệu lưu đầy đủ** — 44 tài liệu (gồm tên tiếng Việt, NFD, có mô tả, tiếng Anh): từng trường `knowledge_documents`, SHA-256 từng object, hạn mức, outbox, Kafka, sẵn sàng cho UC019 | `scripts/e2e-uc018.sh run` phần 3 | **22/22**; kiểm ngược (phá dữ liệu rồi `soi`) đỏ đúng 3 mục |
 | **Ca 409 đầu-cuối**, tenant gói TRIAL (20) | Như trên, 21 lượt tải | lần 16: 202, `warnedAt` có (80%) · lần 20: 202, `blockedAt` có (100%) · lần 21: **409 `DOCUMENT_QUOTA_EXCEEDED`**, không object, không gọi ai-service |
 
 **Kiểm ngược đã chạy:** bỏ `@Lock(PESSIMISTIC_WRITE)` ⇒ 6 lượt đồng thời lúc 19/20 ra 6 × 202
 (test đỏ). Bỏ `noRollbackFor` ở `UsageQuotaServiceImpl` ⇒ lượt hết hạn mức ra 500
 `UnexpectedRollbackException` thay vì 409 (test đỏ). Bỏ chặn-theo-tenant của job phát ⇒ sự kiện
-sau của tenant có sự kiện hỏng bị phát vượt lên (test đỏ).
+sau của tenant có sự kiện hỏng bị phát vượt lên (test đỏ). Tắt chép mức tồn kho sang chu kỳ mới ⇒
+lượt đầu chu kỳ ra tài liệu thứ 1 thay vì thứ 8 (test đỏ).
 
 **Kafka ở lượt chạy thật:** 41/41 sự kiện đã phát; 21 bản tin của tenant A cùng ở phân vùng 0, 20 bản
 tin của B cùng ở phân vùng 2; header `X-Trace-Id`, không có header `__TypeId__`.
@@ -385,21 +409,21 @@ tin của B cùng ở phân vùng 2; header `X-Trace-Id`, không có header `__T
 | `docs/openapi/dashboard-api.yaml:1399` | "Vượt `plans.max_documents` hoặc vượt giới hạn dung lượng mỗi tệp thì 409" | 409 chỉ cho hạn mức; 413 cho dung lượng |
 | `docs/openapi/dashboard-api.yaml:1409` | `title: { maxLength: 300 }` | `minLength: 3, maxLength: 255`; thêm `description.maxLength: 500`, `language.enum: [vi, en]` |
 | `docs/openapi/dashboard-api.yaml:1421-1430` | Chỉ có 202 / 409 / 415 | Thêm 413, 422, 503; tách hai `code` của 409 |
-| `docs/openapi/dashboard-api.yaml:1413-1420` | 202 trả `TaiLieu` | `TaiLieu` + `jobId` + `documentQuota` (`MotHanMuc` + `warnedAt` + `blockedAt`) |
+| `docs/openapi/dashboard-api.yaml:1413-1420` | 202 trả `TaiLieu` | `TaiLieu` + `jobId` + `documentQuota` + `storageQuota` (`MotHanMuc` + `warnedAt` + `blockedAt`) |
+| `docs/openapi/dashboard-api.yaml` — `HanMucSuDung` | Bốn hạn mức, không có dung lượng | Thêm `storage` (byte) — ADR-0020 |
 | `docs/openapi/dashboard-api.yaml:2974` (`ApiResponse`) | Không có `code` | Thêm `code: string \| null` — đổi **vỏ chung** của mọi endpoint, giao diện rẽ nhánh theo nó |
-| `docs/openapi/ai-service-to-java-core.yaml:74-92` | `POST /v1/documents`, "multipart", kiểm cả `STORAGE_MB` | `POST /v1/ai/kb/documents`, JSON mục 2; bỏ `STORAGE_MB` — đặc tả UC018 và UC006 chỉ có `max_documents` |
+| `docs/openapi/ai-service-to-java-core.yaml:74-92` | `POST /v1/documents`, "multipart" | `POST /v1/ai/kb/documents`, JSON mục 2. Giữ ý "java-core kiểm `max_documents` và `STORAGE_MB`" — đúng với ADR-0020 |
 | `docs/events/crm.document.v1.json:15-18` | `payload` là TODO | Lược đồ payload mục 6 |
 | `docs/Dac-ta-UseCase-Module-AI.docx` — UC018 "Tham số và ngưỡng" | "Tiêu đề: 3–300 ký tự" | 3–255 (ADR-0017) |
+| `docs/Dac-ta-UseCase-Module-AI.docx` — UC018 hậu điều kiện | "Mức tiêu thụ tài liệu được cộng vào `usage_records` của chu kỳ hiện tại" | "…cộng vào số tài liệu và dung lượng đang có" (ADR-0020); UC006 bốn hạn mức → năm |
 
 ---
 
 ## 10. Còn treo — [CẦN XÁC NHẬN]
 
-1. **Hạn mức tài liệu là "lượt tải trong chu kỳ" hay "số tài liệu đang có"?** Code theo câu chữ
-   đặc tả: cộng dồn theo chu kỳ, sang chu kỳ mới về 0. Nhưng `max_documents` nghe như một
-   **trần tồn kho** — nếu đúng vậy thì (a) gỡ tài liệu (UC020) phải trừ lại, (b) mở chu kỳ mới
-   phải chép số tài liệu đang có chứ không về 0, (c) đếm tức thời phải hỏi ai-service vì
-   java-core không đọc được `knowledge`. Chốt trước khi làm UC020.
+1. ~~Hạn mức tài liệu là "lượt tải trong chu kỳ" hay "số tài liệu đang có"?~~ **Đã chốt 27/09:
+   lượng đang có, cả số lượng lẫn dung lượng** — ADR-0020, mục 5. Còn treo trong ADR đó: xoá mốc
+   khi mức dùng tụt xuống (UC020) và job đối soát bộ đếm với ai-service.
 2. **Hai mã lỗi mới của java-core:** `SUBSCRIPTION_NOT_ACTIVE` (409) và `AI_SERVICE_UNAVAILABLE`
    (503 — mượn tên từ đặc tả UC041). Cùng ba mã phía ai-service đã đánh dấu ở mục 2.4.
 3. **Sự kiện cảnh báo 80%.** UC006 4.1 nói "kèm ngày **đã gửi** cảnh báo" — tức là có gửi thông

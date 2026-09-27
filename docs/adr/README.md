@@ -34,5 +34,6 @@ Mỗi quyết định kiến trúc một file. Nguồn trực tiếp cho **chư�
 | 0017 | Chốt hợp đồng liên làn đợt 1: endpoint `/v1/ai/**`, ranh giới UC018, `title` ≤ 255 (còn treo: topic, bộ vàng, cỡ tập test) | Mâu thuẫn tài liệu |
 | 0018 | Cổng parity INT8 trượt: hoãn phán quyết, phân xử bằng Recall@5 ở Ngày 7 | Đo thực nghiệm |
 | 0019 | Tệp tài liệu gốc lưu ở object storage S3 (RustFS ở dev, AWS S3 trên cloud) | Thiết kế UC018 |
+| 0020 | Hạn mức tài liệu tính theo lượng đang có (số lượng + dung lượng), không theo lượt tải | Chốt của nhóm 27/09 |
 
 `KH` = tài liệu `Ke-hoach-do-an-Chatbot-AI-CRM-v2-nhom-2-nguoi.docx`.

@@ -94,6 +94,10 @@ class KnowledgeDocumentUploadIntegrationTest {
     static final int MIB = 1024 * 1024;
     /** Gói TRIAL của V102: max_documents = 20. */
     static final int QUOTA_TRIAL = 20;
+    /** Gói TRIAL của V102: storage_mb = 100, lưu theo BYTE (ADR-0020 (c)). */
+    static final long DUNG_LUONG_TRIAL = 100L * MIB;
+    /** Chu kỳ ĐÃ HẾT của tenant B — ca chép mức tồn kho sang chu kỳ mới. */
+    static final UUID SUB_B_CU = UUID.fromString("bbbbbbbb-0000-0000-0000-0000000000c0");
 
     @Container
     static final PostgreSQLContainer<?> PG = new PostgreSQLContainer<>(
@@ -220,6 +224,10 @@ class KnowledgeDocumentUploadIntegrationTest {
         assertThat(data.path("chunkCount").asInt()).isZero();
         assertThat(data.path("documentQuota").path("used").asLong()).isEqualTo(1);
         assertThat(data.path("documentQuota").path("quota").asLong()).isEqualTo(QUOTA_TRIAL);
+        assertThat(data.path("storageQuota").path("used").asLong()).isEqualTo(pdf.length);
+        assertThat(data.path("storageQuota").path("quota").asLong()).isEqualTo(DUNG_LUONG_TRIAL);
+        assertThat(hanMuc(TENANT_A, "STORAGE_MB")).containsEntry("used_value", (long) pdf.length)
+                .containsEntry("quota_value", DUNG_LUONG_TRIAL);
 
         // Kho S3: đúng một object, dưới thư mục của tenant trong JWT, tên đã làm sạch.
         List<String> keys = s3Keys();
@@ -500,6 +508,54 @@ class KnowledgeDocumentUploadIntegrationTest {
         assertThat(hanMuc(TENANT_A)).containsEntry("used_value", (long) QUOTA_TRIAL);
     }
 
+    /**
+     * Dung lượng tính theo BYTE đang có (ADR-0020). Tệp làm VƯỢT trần bị chặn dù mức dùng chưa đủ
+     * 100% — và lần bị chặn đó ghi {@code blocked_at}. Tệp lấp ĐÚNG trần thì vẫn được nhận.
+     */
+    @Test
+    void hetDungLuong409TheoByte() throws Exception {
+        datHanMuc(TENANT_A, SUB_A, "STORAGE_MB", DUNG_LUONG_TRIAL - 10, DUNG_LUONG_TRIAL);
+
+        KetQua vuot = taiLen(tokenAdmin(TENANT_A), "a.txt", "x".repeat(11).getBytes(UTF_8), truong("title", "Vượt 1 byte"));
+        assertThat(vuot.status()).isEqualTo(409);
+        assertThat(vuot.code()).isEqualTo("STORAGE_MB_QUOTA_EXCEEDED");
+        assertThat(vuot.body().path("message").asText()).contains("MB");
+        khongGhiGiCa();
+        Map<String, Object> dungLuong = hanMuc(TENANT_A, "STORAGE_MB");
+        assertThat(dungLuong).containsEntry("used_value", DUNG_LUONG_TRIAL - 10);
+        assertThat(dungLuong.get("warned_at")).isNotNull();
+        assertThat(dungLuong.get("blocked_at")).as("lần bị chặn là chạm trần").isNotNull();
+
+        KetQua vuaKhit = taiLen(tokenAdmin(TENANT_A), "b.txt", "x".repeat(10).getBytes(UTF_8), truong("title", "Vừa khít"));
+        assertThat(vuaKhit.status()).isEqualTo(202);
+        assertThat(vuaKhit.body().at("/data/storageQuota/percent").asDouble()).isEqualTo(100.0);
+        assertThat(hanMuc(TENANT_A, "STORAGE_MB")).containsEntry("used_value", DUNG_LUONG_TRIAL);
+    }
+
+    /**
+     * Hạn mức tài liệu là lượng ĐANG CÓ (ADR-0020 (d)): sang chu kỳ mới, dòng hạn mức mới chép mức
+     * tồn kho của chu kỳ trước chứ không về 0 — 7 tài liệu đang có thì lượt tải đầu chu kỳ là thứ 8.
+     */
+    @Test
+    void chuKyMoiChepMucTonKho() throws Exception {
+        chay("""
+                INSERT INTO platform.tenant_subscriptions (id, tenant_id, plan_id, status, period_start, period_end)
+                SELECT '%s', '%s', p.id, 'EXPIRED', now() - interval '31 days', now() - interval '1 day'
+                  FROM platform.subscription_plans p WHERE p.code = 'TRIAL'
+                ON CONFLICT (id) DO NOTHING
+                """.formatted(SUB_B_CU, TENANT_B));
+        datHanMuc(TENANT_B, SUB_B_CU, "DOCUMENT", 7, QUOTA_TRIAL);
+        datHanMuc(TENANT_B, SUB_B_CU, "STORAGE_MB", 5000, DUNG_LUONG_TRIAL);
+        byte[] tep = "noi dung".getBytes(UTF_8);
+
+        KetQua kq = taiLen(tokenAdmin(TENANT_B), "b.txt", tep, truong("title", "Đầu chu kỳ mới"));
+
+        assertThat(kq.status()).as(kq.body().toString()).isEqualTo(202);
+        assertThat(kq.body().at("/data/documentQuota/used").asLong()).isEqualTo(8);
+        assertThat(kq.body().at("/data/storageQuota/used").asLong()).isEqualTo(5000 + tep.length);
+        assertThat(hanMuc(TENANT_B, "DOCUMENT")).containsEntry("used_value", 8L);
+    }
+
     @Test
     void khongCoThueBao409() throws Exception {
         KetQua kq = taiLen(tokenAdmin(TENANT_C), "a.txt", "x".getBytes(UTF_8), truong("title", "Chưa mua gói"));
@@ -572,8 +628,10 @@ class KnowledgeDocumentUploadIntegrationTest {
     private void daDonSachSauKhiGoiAi() throws SQLException {
         assertThat(s3Keys()).as("object vừa ghi phải bị xoá").isEmpty();
         assertThat(outbox()).isEmpty();
-        Map<String, Object> hanMuc = hanMuc(TENANT_A);
-        assertThat(hanMuc == null ? 0L : hanMuc.get("used_value")).isEqualTo(0L);
+        for (String metric : List.of("DOCUMENT", "STORAGE_MB")) {
+            Map<String, Object> hanMuc = hanMuc(TENANT_A, metric);
+            assertThat(hanMuc == null ? 0L : hanMuc.get("used_value")).as(metric).isEqualTo(0L);
+        }
     }
 
     private KetQua taiLen(String token, String tenTep, byte[] noiDung, Map<String, String> truong) throws Exception {
@@ -645,27 +703,40 @@ class KnowledgeDocumentUploadIntegrationTest {
     }
 
     private static void datHanMuc(UUID tenant, UUID sub, long used, long quota) throws SQLException {
+        datHanMuc(tenant, sub, "DOCUMENT", used, quota);
+    }
+
+    private static void datHanMuc(UUID tenant, UUID sub, String metric, long used, long quota) throws SQLException {
         try (Connection c = chuBang(); PreparedStatement ps = c.prepareStatement("""
                 INSERT INTO platform.usage_records (tenant_id, subscription_id, metric, used_value, quota_value)
-                VALUES (?, ?, 'DOCUMENT', ?, ?)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT (subscription_id, metric) DO UPDATE
                    SET used_value = EXCLUDED.used_value, quota_value = EXCLUDED.quota_value,
                        warned_at = NULL, blocked_at = NULL
                 """)) {
             ps.setObject(1, tenant);
             ps.setObject(2, sub);
-            ps.setLong(3, used);
-            ps.setLong(4, quota);
+            ps.setString(3, metric);
+            ps.setLong(4, used);
+            ps.setLong(5, quota);
             ps.executeUpdate();
         }
     }
 
     private static Map<String, Object> hanMuc(UUID tenant) throws SQLException {
+        return hanMuc(tenant, "DOCUMENT");
+    }
+
+    /** Dòng hạn mức của chu kỳ ĐANG HIỆU LỰC (bỏ qua dòng của chu kỳ cũ). */
+    private static Map<String, Object> hanMuc(UUID tenant, String metric) throws SQLException {
         try (Connection c = chuBang(); PreparedStatement ps = c.prepareStatement("""
-                SELECT used_value, quota_value, warned_at, blocked_at FROM platform.usage_records
-                 WHERE tenant_id = ? AND metric = 'DOCUMENT'
+                SELECT u.used_value, u.quota_value, u.warned_at, u.blocked_at
+                  FROM platform.usage_records u
+                  JOIN platform.tenant_subscriptions s ON s.id = u.subscription_id
+                 WHERE u.tenant_id = ? AND u.metric = ? AND s.period_end > now()
                 """)) {
             ps.setObject(1, tenant);
+            ps.setString(2, metric);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
                     return null;

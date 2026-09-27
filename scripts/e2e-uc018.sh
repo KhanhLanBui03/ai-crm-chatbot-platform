@@ -2,7 +2,8 @@
 # UC018 đầu-cuối trên hạ tầng DÙNG MỘT LẦN — minh chứng cổng ra Ngày 3.
 #
 #   scripts/e2e-uc018.sh up     # dựng Postgres + RustFS + Kafka, chạy ai-service và java-core
-#   scripts/e2e-uc018.sh run    # 25 tệp mẫu + hạn mức qua java-core, rồi soi CSDL, kho S3, Kafka
+#   scripts/e2e-uc018.sh run    # đóng vai người dùng tải tệp, rồi soi từng trường ở CSDL, S3, Kafka
+#   scripts/e2e-uc018.sh soi    # chạy LẠI riêng phần soi dữ liệu (kiểm ngược: phá dữ liệu rồi soi)
 #   scripts/e2e-uc018.sh down   # dừng tiến trình, xoá container — không để lại gì
 #
 # Giữa `run` và `down`: chụp ảnh key có tenant_id ở giao diện RustFS http://localhost:59011
@@ -101,7 +102,12 @@ SQL
 
 cmd_run() {
     local loi=0
+    # Phần 3 của e2e_uc018.py soi CSDL bằng crm_owner (bỏ qua RLS) — góc nhìn kiểm tra, không
+    # phải đường đi của ứng dụng.
     E2E_JAVA_CORE_URL="http://localhost:$CORE_PORT" DEV_JWT_DIR="$STATE/jwt" \
+        E2E_DB_DSN="postgresql://crm_owner:changeme@localhost:$PG_PORT/thesis_crm" \
+        E2E_S3_ENDPOINT="localhost:$S3_PORT" E2E_S3_ACCESS="$S3_KEY" E2E_S3_SECRET="$S3_SECRET" \
+        E2E_BUCKET="$BUCKET" E2E_KAFKA="localhost:$KAFKA_PORT" E2E_STATE="$STATE" \
         "$ROOT/ai-service/.venv/bin/python" "$ROOT/scripts/e2e_uc018.py" || loi=1
 
     # Job phát outbox chạy mỗi 500 ms — chờ nó xả hết trước khi soi Kafka.
@@ -112,9 +118,9 @@ cmd_run() {
     echo
     echo '```'
     docker exec "$PG" psql -U crm_owner -d thesis_crm -c "
-        SELECT t.slug, u.used_value AS used, u.quota_value AS quota,
+        SELECT t.slug, u.metric, u.used_value AS used, u.quota_value AS quota,
                u.warned_at IS NOT NULL AS warned, u.blocked_at IS NOT NULL AS blocked
-          FROM platform.usage_records u JOIN platform.tenants t ON t.id = u.tenant_id ORDER BY 1" \
+          FROM platform.usage_records u JOIN platform.tenants t ON t.id = u.tenant_id ORDER BY 1, 2" \
         -c "SELECT tenant_id, count(*) AS su_kien, count(published_at) AS da_phat
               FROM platform.outbox_events GROUP BY 1 ORDER BY 1" \
         -c "SELECT version, source_type, file_path FROM knowledge.knowledge_documents
@@ -138,6 +144,14 @@ cmd_run() {
     return $loi
 }
 
+cmd_soi() {
+    E2E_JAVA_CORE_URL="http://localhost:$CORE_PORT" DEV_JWT_DIR="$STATE/jwt" \
+        E2E_DB_DSN="postgresql://crm_owner:changeme@localhost:$PG_PORT/thesis_crm" \
+        E2E_S3_ENDPOINT="localhost:$S3_PORT" E2E_S3_ACCESS="$S3_KEY" E2E_S3_SECRET="$S3_SECRET" \
+        E2E_BUCKET="$BUCKET" E2E_KAFKA="localhost:$KAFKA_PORT" E2E_STATE="$STATE" \
+        "$ROOT/ai-service/.venv/bin/python" "$ROOT/scripts/e2e_uc018.py" --chi-soi
+}
+
 cmd_down() {
     for p in java-core ai-service; do
         [[ -f "$STATE/$p.pid" ]] && kill "$(cat "$STATE/$p.pid")" 2>/dev/null || true
@@ -151,6 +165,7 @@ cmd_down() {
 case "${1:-}" in
     up) cmd_up ;;
     run) cmd_run ;;
+    soi) cmd_soi ;;
     down) cmd_down ;;
-    *) sed -n '2,13p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,14p' "$0" >&2; exit 2 ;;
 esac

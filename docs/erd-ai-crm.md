@@ -298,8 +298,8 @@ do RLS trên chính `user_roles` lo.
 | `tenant_id` | uuid | — | — | `tenants` | |
 | `subscription_id` | uuid | — | ✓ | `tenant_subscriptions` | Khoá ngoại phức hợp |
 | `metric` | varchar(30) | — | ✓ | — | `CONVERSATION` · `AI_TOKEN` · `DOCUMENT` · `STORAGE_MB` · `USER` |
-| `used_value` | bigint | — | — | — | Cộng dồn trong chu kỳ |
-| `quota_value` | bigint | — | — | — | **Sao chép** từ gói lúc mở chu kỳ |
+| `used_value` | bigint | — | — | — | Dòng chảy (`CONVERSATION`, `AI_TOKEN`): cộng dồn trong chu kỳ. Tồn kho (`DOCUMENT`, `STORAGE_MB`, `USER`): lượng **đang có**, chép sang chu kỳ sau — ADR-0020. `STORAGE_MB` tính bằng **byte** |
+| `quota_value` | bigint | — | — | — | **Sao chép** từ gói lúc mở chu kỳ. `STORAGE_MB` = `storage_mb × 1048576` byte |
 | `last_calculated_at` | timestamptz | ✓ | — | — | |
 | `warned_at` | timestamptz | ✓ | — | — | **V116.** Lần đầu `used_value` chạm 80% trong chu kỳ — UC006 4.1 |
 | `blocked_at` | timestamptz | ✓ | — | — | **V116.** Lần đầu chạm 100%. `CHECK`: có `blocked_at` thì phải có `warned_at` — UC006 4.2, UC018 409 |

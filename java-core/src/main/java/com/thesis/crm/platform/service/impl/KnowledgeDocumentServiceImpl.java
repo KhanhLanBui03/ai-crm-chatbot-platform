@@ -104,8 +104,10 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                             + String.join(", ", DUOI_NHAN));
         }
 
-        // ── Hạn mức: khoá dòng tới hết transaction ─────────────────────────────────────
-        UsageRecord hanMuc = usageQuotaService.lockForConsumption(UsageMetric.DOCUMENT);
+        // ── Hạn mức tồn kho (ADR-0020): khoá hai dòng tới hết transaction ─────────────
+        // Thứ tự DOCUMENT → STORAGE_MB là cố định ở mọi đường gọi; khoá ngược thứ tự là deadlock.
+        UsageRecord soTaiLieu = usageQuotaService.lockForConsumption(UsageMetric.DOCUMENT, 1);
+        UsageRecord dungLuong = usageQuotaService.lockForConsumption(UsageMetric.STORAGE_MB, file.getSize());
 
         // ── Tác dụng phụ: từ đây mọi đường lỗi phải dọn object vừa ghi ─────────────────
         String key = KbObjectKey.build(tenantId, UUID.randomUUID(), tenTep);
@@ -125,7 +127,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         }
 
         // ── ai-service đã nhận: cộng hạn mức + sự kiện, CÙNG transaction (ADR-0003) ────
-        QuotaUsageResponse hanMucSau = usageQuotaService.consume(hanMuc, 1);
+        QuotaUsageResponse soTaiLieuSau = usageQuotaService.consume(soTaiLieu, 1);
+        QuotaUsageResponse dungLuongSau = usageQuotaService.consume(dungLuong, file.getSize());
         outboxService.append(tenantId, AGGREGATE_TYPE, daNhan.documentId(), EVENT_TYPE, TOPIC,
                 payloadSuKien(daNhan, file.getSize(), request.language(), nguoiTai));
 
@@ -146,7 +149,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 null,
                 null,
                 Instant.now(),
-                hanMucSau);
+                soTaiLieuSau,
+                dungLuongSau);
     }
 
     /**

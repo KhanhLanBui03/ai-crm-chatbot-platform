@@ -12,6 +12,7 @@ import com.thesis.crm.platform.repository.UsageRecordRepository;
 import com.thesis.crm.platform.service.UsageQuotaService;
 import java.time.Instant;
 import java.util.EnumSet;
+import java.util.Locale;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -42,27 +43,28 @@ public class UsageQuotaServiceImpl implements UsageQuotaService {
     }
 
     /**
-     * {@code noRollbackFor}: lúc từ chối có thể vừa ghi {@code blocked_at} (gói bị hạ giữa chu kỳ
-     * nên dòng chưa từng chạm 100% theo quota mới). Không khai thì Spring đánh dấu transaction
-     * chung là rollback-only ngay khi ngoại lệ đi qua đây, dù phía gọi có khai hay không.
+     * {@code noRollbackFor}: lúc từ chối có thể vừa ghi {@code blocked_at} lần đầu (ADR-0020 (e)).
+     * Không khai thì Spring đánh dấu transaction chung là rollback-only ngay khi ngoại lệ đi qua
+     * đây, dù phía gọi có khai hay không — người dùng nhận 500 thay vì 409 (đã kiểm ngược).
      */
     @Override
     @Transactional(propagation = Propagation.MANDATORY, noRollbackFor = QuotaExceededException.class)
-    public UsageRecord lockForConsumption(UsageMetric metric) {
+    public UsageRecord lockForConsumption(UsageMetric metric, long amount) {
         Instant now = Instant.now();
         TenantSubscription thueBao = subscriptions.findEffective(DUOC_TIEU_THU, now).stream()
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(HttpStatus.CONFLICT, "SUBSCRIPTION_NOT_ACTIVE",
                         "Doanh nghiệp chưa có gói dịch vụ đang hiệu lực. Hãy gia hạn hoặc chọn gói."));
 
-        usageRecords.insertIfAbsent(thueBao.getId(), metric.name());
+        usageRecords.insertIfAbsent(thueBao.getId(), metric.name(), metric.isStock());
         UsageRecord dong = usageRecords.findForUpdate(thueBao.getId(), metric)
                 .orElseThrow(() -> new IllegalStateException(
                         "Không đọc lại được dòng hạn mức vừa tạo — RLS hoặc app.tenant_id sai"));
 
-        if (dong.getUsedValue() >= dong.getQuotaValue()) {
-            ghiMocNeuTrong(dong, now);
-            throw new QuotaExceededException(metric, thongDiepHetHanMuc(metric, dong),
+        // Viết dạng trừ để khỏi tràn số khi amount lớn bất thường.
+        if (amount > dong.getQuotaValue() - dong.getUsedValue()) {
+            ghiMocBiChan(dong, now);
+            throw new QuotaExceededException(metric, thongDiepHetHanMuc(metric, dong, amount),
                     QuotaUsageResponse.from(dong));
         }
         return dong;
@@ -94,12 +96,35 @@ public class UsageQuotaServiceImpl implements UsageQuotaService {
         }
     }
 
-    private static String thongDiepHetHanMuc(UsageMetric metric, UsageRecord r) {
+    /**
+     * Lượt bị từ chối vì hạn mức là "chạm trần" (ADR-0020 (e)) dù mức dùng chưa đủ 100% — với dung
+     * lượng, tệp bị chặn thường là tệp làm VƯỢT trần chứ không phải tệp lấp đúng trần. Ghi cả mốc
+     * 80% nếu còn trống để giữ ràng buộc {@code ck_usage_moc_theo_thu_tu}.
+     */
+    private static void ghiMocBiChan(UsageRecord r, Instant now) {
+        if (r.getWarnedAt() == null) {
+            r.setWarnedAt(now);
+        }
+        if (r.getBlockedAt() == null) {
+            r.setBlockedAt(now);
+        }
+    }
+
+    private static String thongDiepHetHanMuc(UsageMetric metric, UsageRecord r, long amount) {
         if (metric == UsageMetric.DOCUMENT) {
-            return "Đã dùng " + r.getUsedValue() + "/" + r.getQuotaValue()
-                    + " tài liệu của gói. Hãy gỡ bớt tài liệu cũ hoặc nâng gói dịch vụ.";
+            return "Đã có " + r.getUsedValue() + "/" + r.getQuotaValue()
+                    + " tài liệu theo gói. Hãy gỡ bớt tài liệu cũ hoặc nâng gói dịch vụ.";
+        }
+        if (metric == UsageMetric.STORAGE_MB) {
+            return "Tài liệu đang chiếm " + mb(r.getUsedValue()) + "/" + mb(r.getQuotaValue())
+                    + " MB theo gói, tệp này thêm " + mb(amount)
+                    + " MB. Hãy gỡ bớt tài liệu cũ hoặc nâng gói dịch vụ.";
         }
         return "Đã chạm hạn mức " + metric.name() + " của gói (" + r.getUsedValue() + "/"
                 + r.getQuotaValue() + ").";
+    }
+
+    private static String mb(long bytes) {
+        return String.format(Locale.forLanguageTag("vi-VN"), "%.1f", bytes / 1048576.0);
     }
 }

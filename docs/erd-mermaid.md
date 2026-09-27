@@ -264,7 +264,7 @@ erDiagram
         uuid        tenant_id          FK
         uuid        subscription_id    FK,UK "FK kép với tenant_id"
         varchar(30) metric             UK    "CONVERSATION/AI_TOKEN/DOCUMENT/STORAGE_MB/USER"
-        bigint      used_value
+        bigint      used_value               "tồn kho hoặc dòng chảy theo metric · STORAGE_MB = byte (ADR-0020)"
         bigint      quota_value              "chụp lại hạn mức tại thời điểm tính"
         timestamptz last_calculated_at
         timestamptz warned_at                "V116 · lần đầu chạm 80% trong chu kỳ"

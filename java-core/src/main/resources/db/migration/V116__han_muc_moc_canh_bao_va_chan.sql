@@ -26,8 +26,18 @@ ALTER TABLE platform.usage_records
 COMMENT ON COLUMN platform.usage_records.warned_at IS
     'Lần đầu used_value chạm 80% quota_value trong chu kỳ. UC006 4.1 — hiển thị kèm thời điểm.';
 COMMENT ON COLUMN platform.usage_records.blocked_at IS
-    'Lần đầu used_value chạm 100% quota_value trong chu kỳ. Từ đây lượt tiêu thụ mới bị từ chối '
-    '(UC018: 409 DOCUMENT_QUOTA_EXCEEDED). UC006 4.2.';
+    'Lần đầu trong chu kỳ used_value chạm 100% quota_value, HOẶC lần đầu một lượt bị từ chối vì '
+    'vượt trần (UC018: 409 *_QUOTA_EXCEEDED) — với dung lượng, tệp bị chặn thường chưa lấp đúng '
+    '100%. UC006 4.2, ADR-0020 (e).';
+
+-- Đơn vị của used_value / quota_value theo chỉ số — ADR-0020. Ghi ở đây vì tên STORAGE_MB (V102)
+-- nói sai đơn vị: lưu MB thì tệp vài KB làm tròn thành 0 hoặc 1 MB, và trừ lại lúc gỡ tài liệu
+-- không bao giờ khớp số đã cộng. V116 chưa chạy trên CSDL lâu dài nào khi thêm đoạn này (27/09).
+COMMENT ON COLUMN platform.usage_records.used_value IS
+    'DOCUMENT, STORAGE_MB, USER: lượng ĐANG CÓ (tồn kho), chép sang chu kỳ sau. CONVERSATION, '
+    'AI_TOKEN: tiêu thụ trong chu kỳ, chu kỳ mới về 0. STORAGE_MB tính bằng BYTE (ADR-0020).';
+COMMENT ON COLUMN platform.usage_records.quota_value IS
+    'Chép từ gói lúc mở chu kỳ, KHÔNG đọc qua plan_id. STORAGE_MB tính bằng BYTE = storage_mb × 1048576.';
 
 -- Không GRANT, không bật RLS, không gắn trigger: ADD COLUMN kế thừa cả ba từ bảng
 -- (V111 GRANT, V112 RLS + trg_touch_updated_at). Bẫy 0 của README chỉ áp cho bảng MỚI.
