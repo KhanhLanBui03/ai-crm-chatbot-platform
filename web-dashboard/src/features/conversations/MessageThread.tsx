@@ -1,5 +1,6 @@
 import { ArrowLeft, Bot, Check, Paperclip, Sparkles, UserPlus } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { format } from 'date-fns'
 
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'

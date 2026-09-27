@@ -186,6 +186,8 @@ services:
       DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:-changeme}
       REDIS_HOST: redis
       KAFKA_BOOTSTRAP: kafka:9092
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy
