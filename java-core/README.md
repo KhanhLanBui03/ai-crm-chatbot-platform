@@ -10,17 +10,18 @@ com.thesis.crm
 ├── JavaCoreApplication.java
 │
 │   ── cắt ngang cả 4 context ──
-├── config/          Jackson · OpenAPI · Async · Kafka · WebClient
-├── security/        JWT RS256 · TenantContextFilter · biến phiên RLS
-├── client/          gọi ai-service — bề mặt DUY NHẤT (ADR-0002)
+├── config/          Jackson · OpenAPI · Async · Kafka · RestClient · S3 · transaction manager
+├── security/        JWT RS256 · TenantContext · biến phiên RLS (TenantAwareJpaTransactionManager)
+├── client/          gọi ra ngoài: ai-service — bề mặt DUY NHẤT (ADR-0002) · kho S3 (ADR-0019)
 ├── common/
 │   ├── enums/       enum dùng chung nhiều context
 │   ├── exception/   ngoại lệ + @RestControllerAdvice
 │   ├── response/    ApiResponse, PageResponse
+│   ├── validation/  ràng buộc Bean Validation tự viết (@CodePointLength)
 │   └── util/
 │
 │   ── 4 bounded context ──
-├── platform/        tenant · user · auth · plan · subscription · usage · audit · outbox
+├── platform/        tenant · user · auth · plan · subscription · usage · audit · outbox · kho tri thức (UC018)
 │   ├── controller/  dto/{request,response}/  entity/  repository/  service/impl/
 │   ├── messaging/   OutboxPublisher
 │   └── scheduler/   @Scheduled 500ms, lô 100 (ADR-0003)
@@ -110,8 +111,17 @@ chưa cài đặt. Nhưng chúng **compile được**: `mvn -f java-core/pom.xml
 ## TODO
 
 - [ ] Migration V101–V112 (xem `db/migration/README.md`)
-- [ ] `security/` — filter đặt `SET LOCAL app.tenant_id` từ JWT cho mỗi transaction
-- [ ] `platform/messaging/OutboxPublisher` + `platform/scheduler/` @Scheduled 500ms, lô 100
+- [x] `security/` — đặt `app.tenant_id` từ JWT cho mỗi transaction. Không làm bằng filter như dự
+      định ban đầu: `SET LOCAL` chỉ sống trong transaction, filter chạy trước khi có transaction —
+      xem javadoc `TenantAwareJpaTransactionManager`
+- [ ] Phát hành JWT (UC002 đăng nhập) + `/.well-known/jwks.json`. Hiện chỉ XÁC MINH token bằng khoá
+      công khai ở `JWT_PUBLIC_KEY_LOCATION`; dev lấy token bằng `scripts/dev-jwt.sh`
+- [x] Ghi outbox trong transaction nghiệp vụ — `platform/service/OutboxService`
+- [x] `platform/messaging/OutboxPublisher` + `platform/scheduler/` @Scheduled 500ms, lô 100 — khoá
+      bản tin `tenant_id`, một job phát duy nhất (khoá advisory), sự kiện hỏng chỉ chặn tenant của nó.
+      Chưa có hàng đợi chết (DLQ)
 - [ ] `analytics/messaging/` — consumer + chống trùng qua `analytics.processed_events`
-- [ ] `common/exception/` — `@RestControllerAdvice` trả `ApiResponse.error(...)` kèm traceId
-- [ ] Log JSON có Trace ID qua MDC — **làm từ Sprint 0**, kế hoạch mục 4.5
+- [x] `common/exception/` — `@RestControllerAdvice` trả `ApiResponse.error(...)` kèm traceId và `code`
+- [ ] Log JSON có Trace ID qua MDC — **làm từ Sprint 0**, kế hoạch mục 4.5. Đã có
+      `security/TraceIdFilter` đưa `X-Trace-Id` vào MDC khoá `trace_id` (không phải `traceId` —
+      Brave ghi đè khoá đó); chưa có encoder JSON

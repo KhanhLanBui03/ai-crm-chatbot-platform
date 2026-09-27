@@ -22,7 +22,7 @@ V1<nn>__<mo_ta_khong_dau>.sql
 
 Không dấu tiếng Việt trong tên file. Nội dung và comment thì viết tiếng Việt bình thường.
 
-## Đã có — 13 file, 26 bảng
+## Đã có — 16 file, 26 bảng
 
 Nguồn: `docs/erd-ai-crm.md`. Sửa lược đồ thì sửa ERD trước, migration sau.
 
@@ -43,6 +43,7 @@ Nguồn: `docs/erd-ai-crm.md`. Sửa lược đồ thì sửa ERD trước, migr
 | V113 | Lịch sử điểm + mô hình đọc + quy tắc phân công — xem `docs/traceability-uc-db-api-screen.md` | `lead_scores` `metrics_daily` (+2 cột trên `tenants`) |
 | V114 | Tóm tắt hội thoại có cấu trúc — UC026 b3-b4 | — (3 cột + 2 `CHECK` trên `conversations`) |
 | V115 | Trần số thẻ theo gói — UC017 9.1 | — (1 cột trên `subscription_plans`) |
+| V116 | Mốc chạm 80% / 100% của hạn mức — UC006, UC018 | — (2 cột + 1 `CHECK` trên `usage_records`) |
 
 Migration chạy tự động khi khởi động java-core (`application.yml` → `spring.flyway`).
 Chạy tay bằng Flyway CLI:

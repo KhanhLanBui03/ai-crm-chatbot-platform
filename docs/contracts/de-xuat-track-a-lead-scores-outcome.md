@@ -29,10 +29,10 @@ không ai biết bản nào phản ánh đúng thứ model đã đọc. Lập lu
 
 ## Migration đề nghị
 
-Dải V1xx, số hiệu do Track A chọn (dự kiến `V116`):
+Dải V1xx, số hiệu do Track A chọn (dự kiến `V117` — `V116` đã dùng cho mốc hạn mức của UC018, 27/09/2026):
 
 ```sql
--- V116__lead_scores_nhan_ket_qua.sql
+-- V117__lead_scores_nhan_ket_qua.sql
 --
 -- Vòng phản hồi cho UC030: biến dữ liệu vận hành thành dữ liệu huấn luyện.
 -- Không có ba cột này thì model chấm điểm không bao giờ học được từ thực tế.
@@ -95,7 +95,7 @@ Quyết định này giữ nguyên ngoại lệ đó, chỉ mở rộng phạm v
 
 | # | Việc | Ghi chú |
 |---|---|---|
-| 1 | Chạy migration V116 ở trên | Số hiệu do Track A chọn |
+| 1 | Chạy migration V117 ở trên | Số hiệu do Track A chọn |
 | 2 | Phát sự kiện `crm.deal.closed` khi deal đóng | Kèm `contact_id`, `lead_id`, `outcome`, `closed_at`, và `event_id` để chống trùng |
 | 3 | Mở endpoint `PATCH /api/v1/lead-scores/{id}/outcome` | Hoặc đề xuất đường khác — Track B theo |
 

@@ -23,6 +23,7 @@
     <properties>
         <java.version>21</java.version>
         <spring-cloud.version>2023.0.3</spring-cloud.version>
+        <awssdk.version>2.44.4</awssdk.version>
     </properties>
 
     <dependencies>
@@ -106,6 +107,36 @@
             <version>8.0</version>
         </dependency>
 
+        <!-- Kho tệp tài liệu gốc — giao thức S3: RustFS ở dev, AWS S3 trên cloud (ADR-0019).
+             SDK chính chủ của AWS thay vì SDK của MinIO: đích production là AWS S3 + IAM role,
+             và không phụ thuộc thư viện của một công ty đã lưu trữ máy chủ mã nguồn mở.
+             Bỏ client Netty: java-core chỉ gọi đồng bộ, client Apache mặc định là đủ. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${awssdk.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- s3 chỉ kéo client Apache ở scope runtime; khai compile để ghim thời gian chờ
+             (config/ObjectStorageConfig). -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>apache-client</artifactId>
+            <version>${awssdk.version}</version>
+            <exclusions>
+                <!-- spring-jcl đã cung cấp đúng API này; để cả hai thì Spring cảnh báo xung đột. -->
+                <exclusion>
+                    <groupId>commons-logging</groupId>
+                    <artifactId>commons-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -127,6 +158,11 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

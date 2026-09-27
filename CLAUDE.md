@@ -87,8 +87,8 @@ cáo mất ý nghĩa. *Chỗ đặt bộ vàng chưa chốt* — `ai-service/tes
 `data/golden_qa.jsonl`; dù nằm ở đâu, đóng băng rồi là cấm sửa.
 
 **Ngoại lệ có chủ đích về `java-core/`:** nhóm 2 người không có ai đóng vai Track A riêng, nên
-việc CRM mà module AI cần (migration **V116**, 5 endpoint `/internal/*`, consumer `analytics-cg`)
-do chính hai người làm. Nhưng **agent vẫn bị chặn cứng** ở đó — phần java-core làm ở phiên
+việc CRM mà module AI cần (migration **V117** — 3 cột `sales.lead_scores`, 5 endpoint
+`/internal/*`, consumer `analytics-cg`) do chính hai người làm. Nhưng **agent vẫn bị chặn cứng** ở đó — phần java-core làm ở phiên
 chính, không giao cho agent AI.
 
 ## Bảy chỉ số nghiệm thu §1.6

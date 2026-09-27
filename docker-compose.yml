@@ -237,6 +237,20 @@ services:
       DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:-changeme}
       REDIS_HOST: redis
       KAFKA_BOOTSTRAP: kafka:9092
+      # Kho tệp S3 (ADR-0019). java-core GHI tệp gốc của UC018, ai-service đọc.
+      S3_ENDPOINT: rustfs:9000
+      S3_SECURE: "false"
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-kb-tai-lieu}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-kb-dev}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-changeme-dev}
+      # Dự phòng khi ai-service chưa tự đăng ký Eureka — LoadBalancer hỏi Eureka trước.
+      AI_SERVICE_URL: http://ai-service:8000
+      # Trống = mọi API nghiệp vụ trả 401 (fail-closed). Dev: chạy scripts/dev-jwt.sh rồi đặt
+      # JWT_PUBLIC_KEY_LOCATION=file:/run/secrets/jwt/dev-public.pem trong .env.
+      JWT_PUBLIC_KEY_LOCATION: ${JWT_PUBLIC_KEY_LOCATION:-}
+    volumes:
+      - ./.secrets/jwt:/run/secrets/jwt:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -244,6 +258,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      rustfs-init:
+        condition: service_completed_successfully
       eureka-server:
         condition: service_healthy
     healthcheck:
