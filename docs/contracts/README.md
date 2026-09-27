@@ -19,6 +19,7 @@ kia trước, không tự sửa cho khớp code của mình."*
 | Đề xuất | Trạng thái |
 |---|---|
 | [Thêm 3 cột `rule_score` · `outcome` · `outcome_at` vào `sales.lead_scores`](de-xuat-track-a-lead-scores-outcome.md) | Đã soạn **19/09/2026**, ⏳ **chưa gửi Track A**. Căn cứ ADR-0016. Ước lượng 2 giờ |
+| [Hợp đồng UC018 — tải lên tài liệu tri thức](uc018-tai-tai-lieu.md) | Soạn **27/09/2026**, code hai phía đã chạy theo (25/25 tệp mẫu + ca 409 đầu-cuối). ⏳ Chờ xác nhận rồi vá `ai-service-to-java-core.yaml`, `dashboard-api.yaml`, `crm.document.v1.json` — danh sách ở mục 9 của file. Căn cứ ADR-0017, ADR-0019 |
 
 ## Đã chốt phía Track B
 
@@ -34,5 +35,5 @@ kia trước, không tự sửa cho khớp code của mình."*
 | # | Vấn đề | Hai nguồn |
 |---|---|---|
 | 1 | **Bộ tên topic Kafka** — *hoãn có chủ đích, chốt ở Ngày 12* | §2.6 khai 8 topic (`crm.kb.document.uploaded`, `crm.conversation.closed`, `ai.kb.document.indexed`, `ai.lead.signal.detected`, `ai.handoff.requested`, `ai.tool_call.audited`, `ai.turn.completed`, `ai.dlq`); `scripts/create-topics.sh` + `docs/events/` vẫn ở 5 topic `crm.*.v1`. `Dac-ta-UseCase-Module-AI.docx` điểm #7 đề xuất theo bộ của kế hoạch. **`crm.deal.closed` chưa có trong cả hai bộ** — cần cho vòng phản hồi UC030 |
-| 2 | **Mã lỗi hạn mức UC018** | `dashboard-api.yaml` gộp "vượt hạn mức" và "vượt dung lượng" vào 409; đặc tả UC đề xuất tách 409 / 413 / 415 |
+| 2 | ~~**Mã lỗi hạn mức UC018**~~ — **đã tách** trong [hợp đồng UC018](uc018-tai-tai-lieu.md) mục 1.3 (413 dung lượng, 409 hạn mức); còn chờ vá `dashboard-api.yaml` | `dashboard-api.yaml` gộp "vượt hạn mức" và "vượt dung lượng" vào 409; đặc tả UC đề xuất tách 409 / 413 / 415 |
 | 3 | **Enum vận chuyển và xác thực MCP** | Hợp đồng khai `HTTP_SSE`/`STREAMABLE_HTTP` + `BEARER`; `V205` khai `HTTP`/`SSE`/`STDIO`, không có `BEARER` |

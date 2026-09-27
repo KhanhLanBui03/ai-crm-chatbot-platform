@@ -306,7 +306,7 @@ chỉ chọn model + export, dời đo parity sang sáng Ngày 3.
       của `src/api/deps.py` (header `X-Tenant-Id`), **không** từ body/query/path.*
 - [ ] 🤖 Kiểm phần mở rộng + dung lượng + hạn mức `max_documents` của gói — *verify: ngưỡng
       **cảnh báo 80%** và **chặn 100%** là hai nhánh khác nhau, không gộp.*
-- [ ] 🤖 Ghi bản ghi `PENDING` — *verify: `title` 3–300 ký tự, `description` ≤ 500,
+- [ ] 🤖 Ghi bản ghi `PENDING` — *verify: `title` 3–255 ký tự (ADR-0017), `description` ≤ 500,
       `language` ∈ {`vi`,`en`}; ràng buộc `ck_doc_failed` của V202 không bị vi phạm.*
 - [ ] 🖐 **Lưu tệp theo đường dẫn CÓ CHỨA `tenant_id`** — cô lập ngay ở tầng kho lưu trữ chứ
       không chỉ ở truy vấn.

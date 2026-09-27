@@ -31,7 +31,7 @@ Mỗi quyết định kiến trúc một file. Nguồn trực tiếp cho **chư�
 | 0014 | java-core là mặt tiền duy nhất của dashboard, kể cả với dữ liệu Track B | Rà soát truy vết |
 | 0015 | Cấu trúc `src/` + tách tầng suy luận `inference/` theo Master Plan v8.0 | Thay ADR-0010 |
 | 0016 | Role runtime tên `ai_app`; nhãn kết quả Lead vào `sales.lead_scores` | Lệch Master Plan |
-| 0017 | _(để dành — 4 quyết định hợp đồng của Dev B, chưa viết)_ | |
+| 0017 | Chốt hợp đồng liên làn đợt 1: endpoint `/v1/ai/**`, ranh giới UC018, `title` ≤ 255 (còn treo: topic, bộ vàng, cỡ tập test) | Mâu thuẫn tài liệu |
 | 0018 | Cổng parity INT8 trượt: hoãn phán quyết, phân xử bằng Recall@5 ở Ngày 7 | Đo thực nghiệm |
 | 0019 | Tệp tài liệu gốc lưu ở object storage S3 (RustFS ở dev, AWS S3 trên cloud) | Thiết kế UC018 |
 
