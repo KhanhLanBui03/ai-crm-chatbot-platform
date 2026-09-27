@@ -67,7 +67,10 @@ export type KetQuaDangNhap = Schemas['KetQuaDangNhap']
 export type DangKyResult = Schemas['DangKyResult']
 export type NguoiDung = Schemas['NguoiDung']
 export type VaiTro = Schemas['VaiTro']
-export type DoanhNghiep = Schemas['DoanhNghiep']
+export type DoanhNghiep = Schemas['DoanhNghiep'] & {
+  contactEmail?: string
+  phone?: string | null
+}
 export type GoiDichVu = Schemas['GoiDichVu']
 export type ThueBao = Schemas['ThueBao']
 export type HanMucSuDung = Schemas['HanMucSuDung']

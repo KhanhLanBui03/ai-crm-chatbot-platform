@@ -51,10 +51,16 @@ const authSlice = createSlice({
     datAccessToken(state, action: PayloadAction<string | null>) {
       state.accessToken = action.payload
     },
+    /** Cập nhật tên doanh nghiệp sau khi đổi ở trang Hồ sơ doanh nghiệp */
+    capNhatTenantName(state, action: PayloadAction<string>) {
+      if (state.nguoiDung) {
+        state.nguoiDung.tenantName = action.payload
+      }
+    },
   },
 })
 
-export const { dangNhap, dangXuat, datAccessToken } = authSlice.actions
+export const { dangNhap, dangXuat, datAccessToken, capNhatTenantName } = authSlice.actions
 export const authReducer = authSlice.reducer
 
 /**
@@ -67,11 +73,31 @@ export const authReducer = authSlice.reducer
 export const luuPhienListener = createListenerMiddleware()
 
 luuPhienListener.startListening({
-  matcher: isAnyOf(dangNhap, dangXuat, datAccessToken),
+  matcher: isAnyOf(dangNhap, dangXuat, datAccessToken, capNhatTenantName),
   effect: (_hanhDong, api) => {
     const { auth } = api.getState() as { auth: TrangThaiAuth }
     if (!auth.accessToken) {
       localStorage.removeItem(KHOA_LUU)
+      // Dọn dẹp sạch sẽ các key auth/token/session cũ, giữ lại tùy chọn giao diện và thông tin ghi nhớ đăng nhập
+      const cacKeyGiuLai = new Set([
+        'crm-ai-che-do',
+        'vite-ui-theme',
+        'lng',
+        'i18nextLng',
+        'auth_ghi_nho_dang_nhap',
+        'auth_ghi_nho_email',
+      ])
+      const cacKeyXoa: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && !cacKeyGiuLai.has(key)) {
+          cacKeyXoa.push(key)
+        }
+      }
+      for (const k of cacKeyXoa) {
+        localStorage.removeItem(k)
+      }
+      sessionStorage.clear()
       return
     }
     localStorage.setItem(KHOA_LUU, JSON.stringify(auth))

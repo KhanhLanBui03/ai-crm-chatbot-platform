@@ -1,0 +1,160 @@
+import { ArrowRight, Bot, Database, FileText, Layers, Network, ShieldCheck, Sparkles, Zap } from 'lucide-react'
+
+const ragSteps = [
+  {
+    step: '01',
+    icon: FileText,
+    title: 'Nạp & Phân Tách Dữ Liệu',
+    description:
+      'Hệ thống tự động đọc các tệp PDF, DOCX, TXT hoặc liên kết website của doanh nghiệp, làm sạch và chia nhỏ thành các đoạn tri thức (chunks) tối ưu.',
+  },
+  {
+    step: '02',
+    icon: Database,
+    title: 'Vector Embeddings & pgvector',
+    description:
+      'Chuyển đổi từng đoạn văn bản thành vector ngữ nghĩa đa chiều và lưu trữ trực tiếp vào PostgreSQL pgvector với cơ chế bảo mật cô lập tenant.',
+  },
+  {
+    step: '03',
+    icon: Network,
+    title: 'Truy Xuất Ngữ Nghĩa Chính Xác',
+    description:
+      'Khi khách hàng đặt câu hỏi, thuật toán Cosine Similarity tìm kiếm tức thì các đoạn tài liệu có độ liên quan cao nhất trong chưa đầy 0.1s.',
+  },
+  {
+    step: '04',
+    icon: Bot,
+    title: 'Sinh Phản Hồi & Trích Dẫn Nguồn',
+    description:
+      'Mô hình ngôn ngữ lớn (LLM) tổng hợp câu trả lời tự nhiên, chính xác 100% theo tài liệu của công ty kèm trích dẫn số trang, không bịa đặt.',
+  },
+]
+
+const aiCapabilities = [
+  {
+    icon: Sparkles,
+    title: 'Zero Hallucination (Không bịa đặt)',
+    description: 'AI chỉ trả lời dựa trên kho tri thức đã nạp, luôn kèm dẫn chứng số trang hoặc link tài liệu.',
+  },
+  {
+    icon: Layers,
+    title: 'Tác tử Tự động (MCP Tool Calling)',
+    description: 'Tự động kiểm tra trạng thái đơn hàng, tra cứu tồn kho và tạo lịch hẹn qua API chuẩn hóa.',
+  },
+  {
+    icon: Zap,
+    title: 'Phân tích Cảm xúc Khách hàng',
+    description: 'Đo lường sắc thái hài lòng, tức giận hoặc khẩn cấp để gắn cờ ưu tiên chăm sóc.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Chuyển giao Nhân viên (Human Handoff)',
+    description: 'Chuyển mượt mà sang nhân viên tư vấn trực tiếp khi khách hàng yêu cầu hoặc vấn đề phức tạp.',
+  },
+]
+
+export function AiSolutionSection() {
+  return (
+    <section id="ai-rag" className="py-24 bg-muted/20 border-y border-border/60 relative overflow-hidden">
+      {/* Ambient background glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-primary/10 blur-[140px] rounded-full pointer-events-none -z-10" />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Section Header */}
+        <div className="flex flex-col items-center text-center max-w-3xl mx-auto mb-16">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-3 border border-primary/20">
+            <Sparkles className="size-3.5" />
+            <span>Công Nghệ AI Tiên Tiến</span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
+            Giải Pháp AI Đa Tác Tử & <br className="hidden sm:inline" />
+            <span className="text-primary">Kiến Trúc RAG Độc Quyền</span>
+          </h2>
+          <p className="mt-4 text-base text-muted-foreground leading-relaxed">
+            Biến toàn bộ tài liệu nội bộ, chính sách và cẩm nang sản phẩm của công ty bạn thành một chuyên viên tư vấn AI thông minh, làm việc miệt mài 24/7.
+          </p>
+        </div>
+
+        {/* 4-Step RAG Workflow Pipeline */}
+        <div className="mb-20">
+          <h3 className="text-center text-xs font-bold text-muted-foreground uppercase tracking-widest mb-8">
+            Quy trình Xử lý Tri thức RAG Khép kín
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative">
+            {ragSteps.map((item, idx) => {
+              const Icon = item.icon
+              return (
+                <div
+                  key={idx}
+                  className="relative rounded-2xl border border-border/80 bg-card p-6 flex flex-col justify-between shadow-xs hover:shadow-lg transition-all duration-300 hover:border-primary/40 group"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="size-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold group-hover:scale-105 transition-transform">
+                        <Icon className="size-5.5" />
+                      </div>
+                      <span className="text-2xl font-extrabold font-mono text-muted-foreground/40 group-hover:text-primary transition-colors">
+                        {item.step}
+                      </span>
+                    </div>
+                    <h4 className="text-base font-bold text-foreground mb-2 group-hover:text-primary transition-colors">
+                      {item.title}
+                    </h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {item.description}
+                    </p>
+                  </div>
+
+                  {idx < ragSteps.length - 1 && (
+                    <div className="hidden lg:block absolute -right-3 top-1/2 -translate-y-1/2 z-10 text-muted-foreground/40">
+                      <ArrowRight className="size-5" />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Advanced Capabilities 2x2 Grid */}
+        <div className="rounded-3xl border border-border bg-card p-8 sm:p-12 shadow-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-8 mb-8 border-b border-border/70">
+            <div>
+              <h3 className="text-xl sm:text-2xl font-bold text-foreground">
+                Đặc Quyền Vượt Trội Của Trợ Lý AI
+              </h3>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                Được tinh chỉnh chuyên biệt cho nghiệp vụ Bán hàng và Chăm sóc Khách hàng đa ngành nghề.
+              </p>
+            </div>
+            <span className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Sẵn sàng triển khai
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {aiCapabilities.map((cap, idx) => {
+              const Icon = cap.icon
+              return (
+                <div key={idx} className="flex items-start gap-4">
+                  <div className="size-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-1">
+                    <Icon className="size-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-foreground mb-1">{cap.title}</h4>
+                    <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                      {cap.description}
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}

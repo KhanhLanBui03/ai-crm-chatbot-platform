@@ -1,18 +1,36 @@
+import { useState } from 'react'
 import {
   BarChart3,
   BookOpen,
+  Building2,
   ChevronDown,
   Inbox,
   LayoutDashboard,
+  LogOut,
   ScrollText,
   Settings,
   ShieldCheck,
   Sparkles,
   TrendingUp,
+  User,
   Users,
 } from 'lucide-react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 
+import { useDangXuatMutation } from '@/api/auth'
+import { dangXuat } from '@/app/store/authSlice'
+import { useAppDispatch, useAppSelector } from '@/app/store/hooks'
+import { useDanhSachGoiCongCuQuery } from '@/api/ai-agent'
+import { XacNhanDangXuatDialog } from '@/components/layout/XacNhanDangXuatDialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Progress } from '@/components/ui/progress'
 import {
   Sidebar,
@@ -30,8 +48,6 @@ import {
   SidebarMenuSubItem,
   SidebarSeparator,
 } from '@/components/ui/sidebar'
-import { useAppSelector } from '@/app/store/hooks'
-import { useDanhSachGoiCongCuQuery } from '@/api/ai-agent'
 import { chuCaiDau, vietTatDoanhNghiep } from '@/utils/ten'
 
 /**
@@ -98,6 +114,23 @@ const MUC_PHAN_TICH = [
 export function AppSidebar() {
   const nguoiDung = useAppSelector((s) => s.auth.nguoiDung)
   const viTri = useLocation()
+  const dieuHuong = useNavigate()
+  const dispatch = useAppDispatch()
+  const [hienXacNhan, datHienXacNhan] = useState(false)
+  const [guiDangXuat, { isLoading: dangDangXuat }] = useDangXuatMutation()
+
+  async function xuLyDangXuat() {
+    try {
+      await guiDangXuat().unwrap()
+    } catch {
+      // Kể cả máy chủ lỗi thì phía client vẫn phải xóa phiên
+    } finally {
+      dispatch(dangXuat())
+      toast.success('Đã đăng xuất thành công')
+      dieuHuong('/dang-nhap', { replace: true })
+    }
+  }
+
   const moBanHang = viTri.pathname.startsWith('/ban-hang')
   const moPhanTich = viTri.pathname.startsWith('/phan-tich')
   const moTriThuc = viTri.pathname.startsWith('/tri-thuc')
@@ -110,13 +143,13 @@ export function AppSidebar() {
     useDanhSachGoiCongCuQuery({ trangThaiDuyet: 'PENDING' }).data?.totalItems ?? 0
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="flex items-center gap-2.5 px-1 py-1">
+        <div className="flex items-center gap-2.5 px-1 py-1 group-data-[collapsible=icon]:justify-center">
           <div className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-md text-sm font-semibold">
             {nguoiDung ? vietTatDoanhNghiep(nguoiDung.tenantName) : '—'}
           </div>
-          <div className="flex min-w-0 flex-col">
+          <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
             <span className="truncate text-sm leading-tight font-semibold">
               {nguoiDung?.tenantName ?? 'Doanh nghiệp'}
             </span>
@@ -263,7 +296,7 @@ export function AppSidebar() {
 
       <SidebarFooter>
         {/* Hạn mức là nhắc thường trực — UC006 chặn trả lời tự động khi chạm trần */}
-        <div className="bg-card ring-foreground/10 flex flex-col gap-2 rounded-lg p-3 ring-1">
+        <div className="bg-card ring-foreground/10 flex flex-col gap-2 rounded-lg p-3 ring-1 group-data-[collapsible=icon]:hidden">
           <div className="flex items-baseline justify-between">
             <span className="text-xs font-medium">Hạn mức hội thoại</span>
             <span className="text-muted-foreground text-xs tabular-nums">1.842/2.000</span>
@@ -272,20 +305,65 @@ export function AppSidebar() {
           <span className="text-warning text-xs">Còn 158 lượt trong chu kỳ này</span>
         </div>
 
-        <div className="flex items-center gap-2 rounded-lg p-2">
-          <div className="bg-secondary text-secondary-foreground flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-medium">
-            {nguoiDung ? chuCaiDau(nguoiDung.fullName) : '—'}
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-[13px] leading-tight font-medium">
-              {nguoiDung?.fullName ?? 'Chưa đăng nhập'}
-            </span>
-            <span className="text-muted-foreground text-xs">
-              {nguoiDung?.roleCode === 'TENANT_ADMIN' ? 'Quản trị viên' : 'Nhân viên'}
-            </span>
-          </div>
-          <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="hover:bg-accent/50 flex w-full items-center gap-2 rounded-lg p-2 text-left transition-colors cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-ring group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-1"
+            >
+              <div className="bg-secondary text-secondary-foreground flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-medium">
+                {nguoiDung ? chuCaiDau(nguoiDung.fullName) : '—'}
+              </div>
+              <div className="flex min-w-0 flex-1 flex-col group-data-[collapsible=icon]:hidden">
+                <span className="truncate text-[13px] leading-tight font-medium">
+                  {nguoiDung?.fullName ?? 'Chưa đăng nhập'}
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  {nguoiDung?.roleCode === 'TENANT_ADMIN' ? 'Quản trị viên' : 'Nhân viên'}
+                </span>
+              </div>
+              <ChevronDown className="text-muted-foreground size-3.5 shrink-0 group-data-[collapsible=icon]:hidden" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="top" className="w-56 mb-1">
+            <DropdownMenuLabel className="flex flex-col gap-0.5">
+              <span className="font-semibold text-foreground text-sm truncate">{nguoiDung?.fullName}</span>
+              <span className="text-xs text-muted-foreground font-normal truncate">{nguoiDung?.email}</span>
+              {nguoiDung?.tenantName && (
+                <span className="text-[11px] text-primary/80 font-medium truncate mt-0.5">{nguoiDung.tenantName}</span>
+              )}
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => dieuHuong('/cai-dat/nguoi-dung')}>
+              <User className="mr-2 size-4" />
+              <span>Hồ sơ cá nhân</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => dieuHuong('/cai-dat/doanh-nghiep')}>
+              <Building2 className="mr-2 size-4" />
+              <span>Hồ sơ doanh nghiệp</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => dieuHuong('/cai-dat')}>
+              <Settings className="mr-2 size-4" />
+              <span>Cài đặt</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => datHienXacNhan(true)}
+              className="cursor-pointer"
+            >
+              <LogOut className="mr-2 size-4" />
+              <span>Đăng xuất</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <XacNhanDangXuatDialog
+          open={hienXacNhan}
+          onOpenChange={datHienXacNhan}
+          onConfirm={xuLyDangXuat}
+          isLoading={dangDangXuat}
+        />
       </SidebarFooter>
     </Sidebar>
   )

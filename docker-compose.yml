@@ -209,8 +209,12 @@ services:
     ports:
       - "5173:5173"
     environment:
-      VITE_GATEWAY_URL: http://localhost:8080
-      VITE_WS_URL: ws://localhost:8080/ws
+      VITE_GATEWAY_URL: http://gateway:8080
+      VITE_WS_URL: ws://gateway:8080/ws
+      VITE_USE_MOCK: "false"
+    volumes:
+      - ./web-dashboard:/app
+      - /app/node_modules
     depends_on:
       - gateway
     networks: [crm]

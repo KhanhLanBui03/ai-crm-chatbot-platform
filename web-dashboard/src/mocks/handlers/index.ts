@@ -1,5 +1,6 @@
 import { xacThucHandlers } from '@/mocks/handlers/xac-thuc'
 import { hopThuHandlers } from '@/mocks/handlers/hop-thu'
+import { adminHandlers } from '@/mocks/handlers/admin'
 import { banHangHandlers } from '@/mocks/handlers/ban-hang'
 import { kenhHandlers } from '@/mocks/handlers/kenh'
 import { khachHangHandlers } from '@/mocks/handlers/khach-hang'
@@ -16,6 +17,7 @@ import { kiemToanHandlers } from '@/mocks/handlers/kiem-toan'
  */
 export const handlers = [
   ...xacThucHandlers,
+  ...adminHandlers,
   ...nenTangHandlers,
   ...kenhHandlers,
   ...hopThuHandlers,
@@ -24,3 +26,4 @@ export const handlers = [
   ...triThucHandlers,
   ...kiemToanHandlers,
 ]
+

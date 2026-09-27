@@ -1,19 +1,40 @@
 import type { SortingState } from '@tanstack/react-table'
-import { formatDistanceToNowStrict } from 'date-fns'
+import { formatDistanceToNowStrict, isValid } from 'date-fns'
 import { vi } from 'date-fns/locale'
-import { AlertTriangle, Mail, UserPlus, Users } from 'lucide-react'
+import {
+  AlertTriangle,
+  Mail,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  UserCheck,
+  UserPlus,
+  Users,
+  UserX,
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import {
   useDanhSachNguoiDungQuery,
   useGuiLaiLoiMoiMutation,
+  useKichHoatNguoiDungMutation,
+  useVoHieuHoaNguoiDungMutation,
+  useXoaNguoiDungMutation,
   type BoLocNguoiDung,
 } from '@/api/platform'
 import { ListPage } from '@/components/layout/ListPage'
 import { Button } from '@/components/ui/button'
 import type { CotBang } from '@/components/ui/data-table'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { StatusChip } from '@/components/ui/status-chip'
+import { EditUserDialog } from '@/features/settings/EditUserDialog'
 import { InviteUserDialog } from '@/features/settings/InviteUserDialog'
 import type { NguoiDung, TrangThaiNguoiDung } from '@/types/schema'
 import { chuCaiDau } from '@/utils/ten'
@@ -27,12 +48,29 @@ const NHAN_TRANG_THAI: Record<
   DISABLED: { nhan: 'Đã vô hiệu hoá', sacThai: 'neutral' },
 }
 
-/** SCR008 — danh sách người dùng. Mẫu M1, cộng hộp thoại mời của SCR009. */
+function dinhDangThoiGian(luc: string | null | undefined): string {
+  if (!luc) return '—'
+  try {
+    const d = new Date(luc)
+    if (!isValid(d)) return '—'
+    return formatDistanceToNowStrict(d, { locale: vi, addSuffix: true })
+  } catch {
+    return '—'
+  }
+}
+
+/** SCR008 — danh sách người dùng. Mẫu M1, cộng hộp thoại mời của SCR009 và chỉnh sửa phân quyền. */
 export function UsersPage() {
   const [boLoc, datBoLoc] = useState<BoLocNguoiDung>({ trang: 0 })
   const [sapXep, datSapXep] = useState<SortingState>([{ id: 'fullName', desc: false }])
-  const [moHopThoai, datMoHopThoai] = useState(false)
+  const [moHopThoaiMoi, datMoHopThoaiMoi] = useState(false)
+  const [nguoiDungChinhSua, datNguoiDungChinhSua] = useState<NguoiDung | null>(null)
+  const [moHopThoaiSua, datMoHopThoaiSua] = useState(false)
+
   const [guiLaiLoiMoi] = useGuiLaiLoiMoiMutation()
+  const [voHieuHoa] = useVoHieuHoaNguoiDungMutation()
+  const [kichHoat] = useKichHoatNguoiDungMutation()
+  const [xoaNguoiDung] = useXoaNguoiDungMutation()
 
   const truyVan = useDanhSachNguoiDungQuery({
     ...boLoc,
@@ -76,7 +114,7 @@ export function UsersPage() {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: ({ row }) => {
-          const t = NHAN_TRANG_THAI[row.original.status]
+          const t = NHAN_TRANG_THAI[row.original.status] ?? { nhan: row.original.status, sacThai: 'neutral' }
           return <StatusChip sacThai={t.sacThai}>{t.nhan}</StatusChip>
         },
       },
@@ -88,8 +126,6 @@ export function UsersPage() {
         cell: ({ row }) => {
           const u = row.original
           const so = u.assignedConversationCount ?? 0
-          // Người đã vô hiệu hoá mà còn hội thoại là hội thoại không ai trả lời. Đây là lý do
-          // ERD giữ cột này trên danh sách thay vì để trong trang chi tiết.
           const boRoi = u.status === 'DISABLED' && so > 0
           return (
             <span
@@ -109,10 +145,9 @@ export function UsersPage() {
         header: 'Đăng nhập gần nhất',
         enableSorting: true,
         cell: ({ row }) => {
-          const luc = row.original.lastLoginAt
           return (
             <span className="text-muted-foreground tabular-nums">
-              {luc ? formatDistanceToNowStrict(new Date(luc), { locale: vi, addSuffix: true }) : '—'}
+              {dinhDangThoiGian(row.original.lastLoginAt)}
             </span>
           )
         },
@@ -120,36 +155,116 @@ export function UsersPage() {
       {
         id: 'thaoTac',
         header: '',
-        cell: ({ row }) =>
-          row.original.status === 'PENDING' ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={async (su) => {
-                su.stopPropagation()
-                await guiLaiLoiMoi(row.original.id).unwrap()
-                toast.success('Đã gửi lại lời mời.')
-              }}
-            >
-              <Mail />
-              Gửi lại lời mời
-            </Button>
-          ) : null,
+        cell: ({ row }) => {
+          const u = row.original
+          return (
+            <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="size-8 p-0">
+                    <MoreHorizontal className="size-4" />
+                    <span className="sr-only">Thao tác</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      datNguoiDungChinhSua(u)
+                      datMoHopThoaiSua(true)
+                    }}
+                  >
+                    <Pencil className="mr-2 size-4" />
+                    Đổi vai trò / Sửa
+                  </DropdownMenuItem>
+
+                  {u.status === 'PENDING' && (
+                    <DropdownMenuItem
+                      onClick={async () => {
+                        try {
+                          await guiLaiLoiMoi(u.id).unwrap()
+                          toast.success('Đã gửi lại thư kích hoạt tài khoản.')
+                        } catch {
+                          toast.error('Gửi lại lời mời thất bại.')
+                        }
+                      }}
+                    >
+                      <Mail className="mr-2 size-4" />
+                      Gửi lại thư kích hoạt
+                    </DropdownMenuItem>
+                  )}
+
+                  {u.status === 'ACTIVE' && (
+                    <DropdownMenuItem
+                      className="text-amber-600 focus:text-amber-600"
+                      onClick={async () => {
+                        try {
+                          await voHieuHoa(u.id).unwrap()
+                          toast.success(`Đã vô hiệu hoá tài khoản ${u.email}`)
+                        } catch {
+                          toast.error('Không thể vô hiệu hoá tài khoản.')
+                        }
+                      }}
+                    >
+                      <UserX className="mr-2 size-4" />
+                      Vô hiệu hoá
+                    </DropdownMenuItem>
+                  )}
+
+                  {u.status === 'DISABLED' && (
+                    <DropdownMenuItem
+                      className="text-emerald-600 focus:text-emerald-600"
+                      onClick={async () => {
+                        try {
+                          await kichHoat(u.id).unwrap()
+                          toast.success(`Đã kích hoạt lại tài khoản ${u.email}`)
+                        } catch {
+                          toast.error('Không thể kích hoạt lại tài khoản.')
+                        }
+                      }}
+                    >
+                      <UserCheck className="mr-2 size-4" />
+                      Kích hoạt lại
+                    </DropdownMenuItem>
+                  )}
+
+                  <DropdownMenuSeparator />
+
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={async () => {
+                      if (window.confirm(`Bạn có chắc muốn xoá thành viên ${u.email} khỏi hệ thống?`)) {
+                        try {
+                          await xoaNguoiDung(u.id).unwrap()
+                          toast.success(`Đã xoá ${u.email} thành công.`)
+                        } catch {
+                          toast.error('Không thể xoá người dùng.')
+                        }
+                      }
+                    }}
+                  >
+                    <Trash2 className="mr-2 size-4" />
+                    Xoá người dùng
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )
+        },
       },
     ],
-    [guiLaiLoiMoi],
+    [guiLaiLoiMoi, voHieuHoa, kichHoat, xoaNguoiDung],
   )
 
   return (
     <>
       <ListPage
         tieuDe="Người dùng"
-        moTa="Người dùng của doanh nghiệp. Số lượng tính vào hạn mức của gói."
+        moTa="Danh sách thành viên của doanh nghiệp. Số lượng tính vào hạn mức người dùng của gói."
         cot={cot}
         trang={truyVan.data}
         dangTai={truyVan.isLoading}
         timKiem={{
-          goiY: 'Tìm theo tên hoặc địa chỉ thư…',
+          goiY: 'Tìm theo tên hoặc địa chỉ email…',
           giaTri: boLoc.tuKhoa ?? '',
           onDoi: (v) => datBoLoc((cu) => ({ ...cu, tuKhoa: v, trang: 0 })),
         }}
@@ -188,16 +303,26 @@ export function UsersPage() {
         thaoTacChinh={{
           nhan: 'Mời người dùng',
           BieuTuong: UserPlus,
-          onClick: () => datMoHopThoai(true),
+          onClick: () => datMoHopThoaiMoi(true),
         }}
         khiChuaCoDuLieu={{
           BieuTuong: Users,
           tieuDe: 'Chưa có người dùng nào ngoài bạn',
-          moTa: 'Mời đồng nghiệp để chia nhau xử lý hộp thư.',
+          moTa: 'Mời đồng nghiệp để cùng xử lý hội thoại và tương tác khách hàng.',
         }}
       />
 
-      <InviteUserDialog mo={moHopThoai} onDoiMo={datMoHopThoai} />
+      <InviteUserDialog mo={moHopThoaiMoi} onDoiMo={datMoHopThoaiMoi} />
+      {nguoiDungChinhSua && (
+        <EditUserDialog
+          nguoiDung={nguoiDungChinhSua}
+          mo={moHopThoaiSua}
+          onDoiMo={(m) => {
+            datMoHopThoaiSua(m)
+            if (!m) datNguoiDungChinhSua(null)
+          }}
+        />
+      )}
     </>
   )
 }

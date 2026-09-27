@@ -23,7 +23,16 @@ import { layStore } from '@/app/store/truyCapStore'
  * người nghe, và báo trạng thái đường truyền vào store.
  */
 
-const URL_WS = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8080/ws'
+const URL_WS = (() => {
+  const envUrl = import.meta.env.VITE_WS_URL
+  if (envUrl && !envUrl.includes('gateway:8080')) return envUrl
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = window.location.hostname || 'localhost'
+    return `${protocol}//${host}:8080/ws`
+  }
+  return 'ws://localhost:8080/ws'
+})()
 
 /** Nhịp tim. Ngắn hơn thời gian nghỉ mà proxy thường cắt (60s) một cách thoải mái. */
 const NHIP_TIM_MS = 25_000
