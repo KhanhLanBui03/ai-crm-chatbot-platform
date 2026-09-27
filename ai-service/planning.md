@@ -297,25 +297,28 @@ chỉ chọn model + export, dời đo parity sang sáng Ngày 3.
 
 **Việc:**
 
-- [ ] 🖐 **Bộ 20 tệp mẫu** PDF/DOCX/TXT/MD/HTML + **5 tệp lỗi** (quá 20 MB, sai MIME, PDF scan
+- [x] 🖐 **Bộ 20 tệp mẫu** PDF/DOCX/TXT/MD/HTML + **5 tệp lỗi** (quá 20 MB, sai MIME, PDF scan
       không trích được text).
       ⚠️ *Đây cũng là nguồn của bộ vàng Ngày 6 — chọn tài liệu có **nội dung nghiệp vụ thật**
       (bảng giá, chính sách bảo hành, quy trình đổi trả), không lấy văn bản ngẫu nhiên.*
       Kiểm kỹ: **không chứa dữ liệu cá nhân** trước khi commit (Nghị định 13).
-- [ ] 🤖 Route `POST` tải lên theo tên đã chốt — *verify: `tenant_id` lấy từ `get_tenant_id`
+- [x] 🤖 Route `POST` tải lên theo tên đã chốt — *verify: `tenant_id` lấy từ `get_tenant_id`
       của `src/api/deps.py` (header `X-Tenant-Id`), **không** từ body/query/path.*
-- [ ] 🤖 Kiểm phần mở rộng + dung lượng + hạn mức `max_documents` của gói — *verify: ngưỡng
+- [x] 🤖 Kiểm phần mở rộng + dung lượng + hạn mức `max_documents` của gói — *verify: ngưỡng
       **cảnh báo 80%** và **chặn 100%** là hai nhánh khác nhau, không gộp.*
-- [ ] 🤖 Ghi bản ghi `PENDING` — *verify: `title` 3–255 ký tự (ADR-0017), `description` ≤ 500,
+- [x] 🤖 Ghi bản ghi `PENDING` — *verify: `title` 3–255 ký tự (ADR-0017), `description` ≤ 500,
       `language` ∈ {`vi`,`en`}; ràng buộc `ck_doc_failed` của V202 không bị vi phạm.*
-- [ ] 🖐 **Lưu tệp theo đường dẫn CÓ CHỨA `tenant_id`** — cô lập ngay ở tầng kho lưu trữ chứ
-      không chỉ ở truy vấn.
-- [ ] 🖐 Trùng tiêu đề → **tăng `version`**, không ghi đè (uq theo `(tenant, title, version)`).
-- [ ] 🤖 Trả `202` + `job_id`; phát sự kiện với **khoá phân vùng = `tenant_id`** — *verify: khoá
+- [x] 🖐 **Lưu tệp theo đường dẫn CÓ CHỨA `tenant_id`** — cô lập ngay ở tầng kho lưu trữ chứ
+      không chỉ ở truy vấn. *(Claude viết theo yêu cầu; bạn đã tự giải thích được — 27/09/2026)*
+- [x] 🖐 Trùng tiêu đề → **tăng `version`**, không ghi đè (uq theo `(tenant, title, version)`).
+      *(Claude viết theo yêu cầu; bạn đã tự giải thích được — 27/09/2026)*
+- [x] 🤖 Trả `202` + `job_id`; phát sự kiện với **khoá phân vùng = `tenant_id`** — *verify: khoá
       phân vùng đúng là `tenant_id`, nếu không thì thứ tự sự kiện trong một tenant không đảm bảo.*
 - [ ] 🖐 **Test 5 mã lỗi tách bạch:** `413` (tệp > 20 MB) · `415` (sai định dạng) · `409` (chạm
       hạn mức gói) · `422` · `PARSE_NO_TEXT_EXTRACTED`.
       *Đây là điểm 1 trong "Mười một điểm cần chốt" của đặc tả UC.*
+      **27/09: 4/5 xong** (413/415/409/422 — `docs/report/uc018-e2e-2026-09-27.md`).
+      `PARSE_NO_TEXT_EXTRACTED` chỉ đo được khi có parser → tick ở Ngày 4.
 
 **File sẽ đụng:** `src/api/v1/router.py` · `src/api/v1/endpoints/` · `src/ai/rag/ingest/` ·
 `src/ai/service.py` (facade — Dev B duyệt) · `data/` (tệp mẫu)
@@ -324,6 +327,7 @@ chỉ chọn model + export, dời đo parity sang sáng Ngày 3.
 chiếu, đo **Cohen's kappa**, ngồi lại giải quyết mọi ca bất đồng.
 *Bất đồng nhãn ở đây biến thành sai số hệ thống ở MỌI chỉ số về sau.*
 **Phải giao:** không có. **Cần nhận:** không có.
+**27/09: dời sang Ngày 4** — buổi gõ tay 200 câu chưa diễn ra nên chưa có tập để gán chéo.
 
 **Phải giải thích được:**
 - Vì sao đường dẫn lưu trữ phải chứa `tenant_id` khi truy vấn đã lọc `tenant_id` rồi?

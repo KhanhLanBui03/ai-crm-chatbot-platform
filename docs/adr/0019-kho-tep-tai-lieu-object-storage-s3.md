@@ -1,6 +1,6 @@
 # ADR-0019 — Tệp tài liệu gốc lưu ở object storage giao thức S3 (RustFS ở dev, AWS S3 trên cloud)
 
-- **Trạng thái:** Đề xuất
+- **Trạng thái:** Chấp nhận (27/09/2026)
 - **Ngày:** 2026-09-27
 - **Làn sở hữu:** Cả hai — java-core ghi tệp, ai-service đọc tệp
 
