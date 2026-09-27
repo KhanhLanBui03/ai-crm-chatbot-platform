@@ -509,7 +509,7 @@ erDiagram
         uuid          document_id       FK "ON DELETE CASCADE"
         int           chunk_index       UK "UNIQUE (document_id, chunk_index)"
         text          content
-        tsvector      content_segmented    "đã tách từ tiếng Việt · chỉ mục GIN"
+        tsvector      content_segmented    "GENERATED · theo âm tiết, bỏ dấu (V210) · chỉ mục GIN"
         int           token_count
         vector(1024)  embedding            "pgvector · chỉ mục HNSW"
         varchar(100)  embedding_model

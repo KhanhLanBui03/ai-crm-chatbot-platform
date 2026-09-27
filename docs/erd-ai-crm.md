@@ -734,7 +734,7 @@ tiến trình nạp đang chạy. Giữ `version` để câu trả lời đã si
 | `document_id` | uuid | — | ✓ | `knowledge_documents` | `ON DELETE CASCADE` |
 | `chunk_index` | int | — | ✓ | — | `UNIQUE (document_id, chunk_index)` |
 | `content` | text | — | — | — | ~500 token |
-| `content_segmented` | tsvector | ✓ | — | — | Đã tách từ tiếng Việt. Index **GIN** |
+| `content_segmented` | tsvector | ✓ | — | — | **GENERATED** từ `content`: theo âm tiết, hạ chữ thường, bỏ dấu (`to_tsvector('simple', knowledge.f_unaccent(content))`, V210). Index **GIN**. Ghép từ ghép làm ở phía câu hỏi bằng `<->` |
 | `token_count` | int | — | — | — | |
 | `embedding` | vector(1024) | ✓ | — | — | Index **HNSW** — tạo **ngoài** Flyway |
 | `embedding_model` · `embedding_version` | varchar | — | — | — | Lưu **trên từng dòng** |
