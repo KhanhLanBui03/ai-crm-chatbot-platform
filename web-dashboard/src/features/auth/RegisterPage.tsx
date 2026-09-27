@@ -156,7 +156,7 @@ export function RegisterPage() {
     } catch {
       const randomOtp = String(Math.floor(100000 + Math.random() * 900000))
       sessionStorage.setItem(`otp_reg_${giaTri.email.toLowerCase().trim()}`, randomOtp)
-      await guiOtpQuaResendDirect(giaTri.email.trim(), giaTri.companyName, randomOtp).catch(() => {})
+      await guiOtpQuaResendDirect(giaTri.email.trim(), giaTri.companyName, randomOtp).catch(() => { })
       toast.info(`Mã OTP xác thực của bạn là: ${randomOtp}`, { duration: 10000 })
     }
 
@@ -180,7 +180,7 @@ export function RegisterPage() {
     } catch {
       const randomOtp = String(Math.floor(100000 + Math.random() * 900000))
       sessionStorage.setItem(`otp_reg_${emailHienTai.toLowerCase().trim()}`, randomOtp)
-      await guiOtpQuaResendDirect(emailHienTai.trim(), tenCtyHienTai, randomOtp).catch(() => {})
+      await guiOtpQuaResendDirect(emailHienTai.trim(), tenCtyHienTai, randomOtp).catch(() => { })
       toast.info(`Mã OTP mới của bạn là: ${randomOtp}`, { duration: 10000 })
     } finally {
       datDemNguoc(60)

@@ -7,6 +7,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import jakarta.mail.internet.MimeMessage;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -21,6 +26,9 @@ public class EmailService {
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
     private static final String RESEND_API_URL = "https://api.resend.com/emails";
 
+    @Value("${spring.mail.username:}")
+    private String springMailUsername;
+
     @Value("${crm.mail.resend.api-key:}")
     private String resendApiKey;
 
@@ -32,9 +40,11 @@ public class EmailService {
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    private final JavaMailSender javaMailSender;
 
-    public EmailService(ObjectMapper objectMapper) {
+    public EmailService(ObjectMapper objectMapper, ObjectProvider<JavaMailSender> mailSenderProvider) {
         this.objectMapper = objectMapper;
+        this.javaMailSender = mailSenderProvider.getIfAvailable();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
@@ -89,39 +99,57 @@ public class EmailService {
         log.info("📧 [EMAIL DISPATCH] Gửi tới: {} | Tiêu đề: [{}] | Info: [{}]", toEmail, subject, debugInfo);
         log.info("==================================================================");
 
-        if (resendApiKey == null || resendApiKey.isBlank() || resendApiKey.startsWith("re_dummy")) {
-            log.warn("⚠️ Chưa cấu hình Resend API Key hợp lệ. Email đã được ghi log ở trên.");
-            return;
+        // 1. Ưu tiên gửi qua Spring Boot JavaMailSender (Gmail SMTP)
+        if (javaMailSender != null && springMailUsername != null && !springMailUsername.isBlank()) {
+            try {
+                MimeMessage mimeMessage = javaMailSender.createMimeMessage();
+                MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+                helper.setFrom(springMailUsername, "CRM AI Platform");
+                helper.setTo(toEmail);
+                helper.setSubject(subject);
+                helper.setText(htmlContent, true);
+
+                javaMailSender.send(mimeMessage);
+                log.info("✅ Gửi email thành công qua Gmail SMTP (from: {}) tới: {}", springMailUsername, toEmail);
+                return;
+            } catch (Exception e) {
+                log.error("⚠️ Gửi qua Gmail SMTP thất bại: {}. Đang thử phương thức tiếp theo...", e.getMessage());
+            }
         }
 
-        try {
-            Map<String, Object> payload = Map.of(
-                    "from", fromEmail,
-                    "to", List.of(toEmail),
-                    "subject", subject,
-                    "html", htmlContent
-            );
+        // 2. Dự phòng: Gửi qua Resend HTTP API nếu có cấu hình
+        if (resendApiKey != null && !resendApiKey.isBlank() && !resendApiKey.startsWith("re_dummy")) {
+            try {
+                Map<String, Object> payload = Map.of(
+                        "from", fromEmail,
+                        "to", List.of(toEmail),
+                        "subject", subject,
+                        "html", htmlContent
+                );
 
-            String requestBody = objectMapper.writeValueAsString(payload);
+                String requestBody = objectMapper.writeValueAsString(payload);
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(RESEND_API_URL))
-                    .header("Authorization", "Bearer " + resendApiKey.trim())
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                    .timeout(Duration.ofSeconds(15))
-                    .build();
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(RESEND_API_URL))
+                        .header("Authorization", "Bearer " + resendApiKey.trim())
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                        .timeout(Duration.ofSeconds(15))
+                        .build();
 
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                log.info("✅ Gửi email thành công qua Resend tới: {} (Response: {})", toEmail, response.body());
-            } else {
-                log.warn("⚠️ Gửi email Resend trả về mã lỗi {}: {}. [Lưu ý Resend Sandbox chỉ gửi được về email đăng ký tài khoản Resend nếu chưa xác thực Domain]",
-                        response.statusCode(), response.body());
+                if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                    log.info("✅ Gửi email thành công qua Resend tới: {} (Response: {})", toEmail, response.body());
+                    return;
+                } else {
+                    log.warn("⚠️ Gửi email Resend trả về mã lỗi {}: {}", response.statusCode(), response.body());
+                }
+            } catch (Exception e) {
+                log.error("❌ Lỗi khi gửi email qua Resend API: {}. Debug Info: [{}]", e.getMessage(), debugInfo);
             }
-        } catch (Exception e) {
-            log.error("❌ Lỗi khi gửi email qua Resend API: {}. Debug Info: [{}]", e.getMessage(), debugInfo);
+        } else {
+            log.info("ℹ️ Đã ghi nhận email dispatch vào log (debugInfo: [{}])", debugInfo);
         }
     }
 

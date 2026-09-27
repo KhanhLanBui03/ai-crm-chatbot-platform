@@ -131,7 +131,7 @@ export function ForgotPasswordPage() {
     } catch {
       const randomOtp = String(Math.floor(100000 + Math.random() * 900000))
       sessionStorage.setItem(`otp_forgot_${emailChuan}`, randomOtp)
-      await guiOtpQuenMatKhauQuaResendDirect(emailChuan, randomOtp).catch(() => {})
+      await guiOtpQuenMatKhauQuaResendDirect(emailChuan, randomOtp).catch(() => { })
       toast.info(`Mã OTP đặt lại mật khẩu của bạn là: ${randomOtp}`, { duration: 10000 })
     }
 
@@ -152,7 +152,7 @@ export function ForgotPasswordPage() {
     } catch {
       const randomOtp = String(Math.floor(100000 + Math.random() * 900000))
       sessionStorage.setItem(`otp_forgot_${email}`, randomOtp)
-      await guiOtpQuenMatKhauQuaResendDirect(email, randomOtp).catch(() => {})
+      await guiOtpQuenMatKhauQuaResendDirect(email, randomOtp).catch(() => { })
       toast.info(`Mã OTP mới của bạn là: ${randomOtp}`, { duration: 10000 })
     } finally {
       datDemNguoc(60)

@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_APP_NAME: string
   /** `'true'` thì bật tầng mock MSW thay cho backend thật. */
   readonly VITE_USE_MOCK?: string
+  /** API key Resend để gửi email xác thực OTP trực tiếp */
+  readonly VITE_RESEND_API_KEY?: string
 }
 
 interface ImportMeta {
