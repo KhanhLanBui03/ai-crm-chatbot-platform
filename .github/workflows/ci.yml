@@ -7,11 +7,15 @@
 
 name: ci-module-ai
 
+# data/kb_samples/ và scripts/init-db.sql cũng là đầu vào của test ai-service (manifest 25 tệp
+# của UC018, role ai_app) — đổi chúng mà CI không chạy thì test đỏ nằm im tới lần sửa code sau.
 on:
   push:
-    paths: ["ai-service/**", "inference/**", ".github/workflows/ci.yml"]
+    paths: ["ai-service/**", "inference/**", "data/kb_samples/**", "scripts/init-db.sql",
+            ".github/workflows/ci.yml"]
   pull_request:
-    paths: ["ai-service/**", "inference/**", ".github/workflows/ci.yml"]
+    paths: ["ai-service/**", "inference/**", "data/kb_samples/**", "scripts/init-db.sql",
+            ".github/workflows/ci.yml"]
 
 jobs:
   ai-service:
@@ -155,3 +159,10 @@ jobs:
       - name: Test cách ly tenant (RLS)
         working-directory: ai-service
         run: pytest tests/integration/test_rls.py -v
+
+      # Phần còn lại: UC018 (25/25 tệp mẫu trên Postgres + RustFS thật, cấp version đồng thời,
+      # chặn URI ngoài vùng tenant), adapter kho S3, unit test. Tách bước để khi đỏ thì nhìn tên
+      # bước là biết đỏ ở cô lập tenant hay ở chức năng. Kéo thêm image rustfs/rustfs:1.0.0.
+      - name: Toàn bộ test còn lại
+        working-directory: ai-service
+        run: pytest tests -v --ignore=tests/integration/test_rls.py
