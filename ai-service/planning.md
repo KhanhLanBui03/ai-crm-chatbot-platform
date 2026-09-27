@@ -506,15 +506,17 @@ HNSW tồn tại · DLQ hoạt động · restart worker không mất job.
       20 tenant**.
       ⚠️ *Đây là MỐC SO SÁNH DUY NHẤT của phần fine-tune — không đo hôm nay thì ngày mai không
       có gì để so.* Lưu bảng này lại cẩn thận.
-- [ ] 🤖 Khai thác cặp huấn luyện từ **chính kho tri thức** — *verify: `positive` = (câu hỏi sinh
+- [ ] ~~🤖 Khai thác cặp huấn luyện từ **chính kho tri thức**~~ — **BỎ khỏi Ngày 6 (27/09, người
+      dùng quyết: ra kết quả trước).** *verify gốc: `positive` = (câu hỏi sinh
       từ đoạn, đoạn đó); `hard negative` = đoạn **lọt top-5 hybrid nhưng SAI** — chỉ có được SAU
       khi hybrid chạy, nên đúng thứ tự là hôm nay.*
 - [ ] 🖐 **Tách tập giữ lại theo TÀI LIỆU, không theo đoạn.**
       *Tách theo đoạn thì các đoạn cùng một tài liệu lọt cả hai bên, model học thuộc văn phong
       tài liệu đó và chỉ số bị thổi phồng.*
-- [ ] 🤖 Notebook `07_finetune_embedding.ipynb` — `MultipleNegativesRankingLoss` — *verify: ghim
+- [ ] ~~🤖 Notebook `07_finetune_embedding.ipynb`~~ — **BỎ khỏi Ngày 6 (27/09).** *verify gốc: ghim
       seed, ghim phiên bản thư viện, ghi hash dữ liệu, xuất metric ra file (4 điều kiện tái lập).*
-- [ ] 🖐 **CUỐI NGÀY: phóng notebook lên Kaggle GPU.** 3–5 giờ máy, **0 giờ người**.
+- [ ] ~~🖐 **CUỐI NGÀY: phóng notebook lên Kaggle GPU.**~~ — **BỎ khỏi Ngày 6 (27/09).** Ngày 7
+      (export, parity, reindex bản fine-tune) phụ thuộc mục này — cần chốt lại Ngày 7.
 
 **File sẽ đụng:** `src/ai/rag/retrieve/` · `tests/eval/golden_set.jsonl` (hoặc chỗ đã chốt) ·
 `notebooks/07_finetune_embedding.ipynb`
