@@ -103,3 +103,93 @@ class ParseTimeoutError(AiServiceError):
     """Phân tích vượt ``kb_parse_timeout_s`` — tiến trình con đã bị giết. [CẦN XÁC NHẬN] mã."""
 
     code = "PARSE_TIMEOUT"
+
+
+# ── Nạp tài liệu — UC019 (2/2), ADR-0021 ─────────────────────────────────────
+
+
+class DocumentNotFoundError(AiServiceError):
+    """Không thấy tài liệu/job — không tồn tại, hoặc thuộc tenant khác (RLS che, không phân biệt
+    hai trường hợp: phân biệt được là lộ ra id đó CÓ tồn tại ở tenant khác)."""
+
+    code = "DOCUMENT_NOT_FOUND"
+
+
+class EmbeddingUnavailableError(AiServiceError):
+    """Tầng suy luận ``ai-embed`` không trả lời: mất kết nối, hết thời gian chờ, 429, 5xx.
+
+    TẠM THỜI — thử lại sau là có thể được. Không đẩy tài liệu vào ``FAILED`` ngay.
+    """
+
+    code = "EMBEDDING_UNAVAILABLE"
+
+
+class EmbeddingRejectedError(AiServiceError):
+    """``ai-embed`` từ chối yêu cầu (400/422) hoặc trả kết quả sai hình dạng (số vector, số chiều).
+
+    VĨNH VIỄN với lượt nạp này — gửi lại đúng yêu cầu đó sẽ bị từ chối y như vậy.
+    """
+
+    code = "EMBEDDING_REJECTED"
+
+
+class EmbeddingModelMismatchError(AiServiceError):
+    """``model_id`` mà ``ai-embed`` đang phục vụ khác ``embedding_model`` đã ghim — bất biến 1,
+    §3.4.2.
+
+    Nạp tiếp là ghi vào kho những vector thuộc một không gian khác với vector câu hỏi: truy hồi
+    vẫn chạy, vẫn trả 5 đoạn, nhưng 5 đoạn đó vô nghĩa. Dừng ngay, không thử lại.
+    """
+
+    code = "EMBEDDING_MODEL_MISMATCH"
+
+
+class IngestOwnershipLostError(AiServiceError):
+    """Lượt nạp này không còn giữ tài liệu — bộ quét đã trả nó về hàng đợi và lượt khác đã nhận.
+
+    Không phải lỗi của tài liệu: lượt hiện tại chỉ việc dừng, không ghi gì thêm (ADR-0021).
+    """
+
+    code = "INGEST_OWNERSHIP_LOST"
+
+
+class IngestRetryExhaustedError(AiServiceError):
+    """Lỗi tạm thời lặp lại đủ ``kb_so_luot_toi_da`` lượt — thôi thử, tài liệu chuyển ``FAILED``.
+
+    Thông điệp mang theo mã của lỗi tạm thời cuối cùng (``STORAGE_UNAVAILABLE``,
+    ``EMBEDDING_UNAVAILABLE``…) để người vận hành biết hạ tầng nào đã chết.
+    """
+
+    code = "INGEST_RETRY_EXHAUSTED"
+
+
+class IngestStalledError(AiServiceError):
+    """Tiến trình nạp chết giữa chừng đủ ``kb_so_luot_toi_da`` lượt — bộ quét chuyển ``FAILED``.
+
+    Một tệp làm worker chết (hết bộ nhớ, bị OOM-kill) sẽ làm chết mọi lượt thử; không có trần thì
+    nó kéo worker vào vòng lặp khởi động lại vô hạn.
+    """
+
+    code = "INGEST_STALLED"
+
+
+# ── Sự kiện Kafka — worker nạp tài liệu ──────────────────────────────────────
+# Hai mã này KHÔNG bao giờ gắn lên tài liệu: không giải mã được sự kiện thì cũng không biết chắc
+# nó nói về tài liệu nào. Chúng đi vào header ``dlq.error_code`` của bản tin trong ``ai.dlq``.
+
+
+class EventSchemaInvalidError(AiServiceError):
+    """Bản tin không đúng lược đồ: không phải JSON, thiếu trường, sai kiểu, id tài liệu ở vỏ và ở
+    payload lệch nhau. Thử lại không giúp gì — sang DLQ ngay."""
+
+    code = "EVENT_SCHEMA_INVALID"
+
+
+class EventUnsupportedError(AiServiceError):
+    """Đúng khuôn vỏ nhưng ``event_type``/``event_version`` mà bản worker này chưa biết.
+
+    Sang DLQ chứ không bỏ qua: đó thường là java-core đã nâng lược đồ trước ai-service. Nâng
+    worker xong thì phát lại từ DLQ — bỏ qua là mất sự kiện vĩnh viễn.
+    """
+
+    code = "EVENT_UNSUPPORTED"

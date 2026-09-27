@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from src.ai.exceptions import (
     AiServiceError,
+    DocumentNotFoundError,
     FileTooLargeError,
     ForbiddenFileUriError,
     StorageUnavailableError,
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 _MA_HTTP: dict[type[AiServiceError], int] = {
     TenantContextMissingError: 401,
     ForbiddenFileUriError: 403,
+    DocumentNotFoundError: 404,
     StoredFileNotFoundError: 422,
     FileTooLargeError: 413,
     UnsupportedFormatError: 415,

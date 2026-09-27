@@ -13,7 +13,7 @@ from src.api.v1.endpoints import documents
 
 api_router = APIRouter()
 
-api_router.include_router(documents.router)  # /v1/ai/kb/documents — UC018
+api_router.include_router(documents.router)  # /v1/ai/kb/documents — UC018 · /ingestion-jobs — UC019
 
 # TODO: answer, summarize, scoring
 # Đặc tả giao ước: docs/openapi/ai-service-to-java-core.yaml (hạn chốt 07/09)

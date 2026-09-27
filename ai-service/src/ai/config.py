@@ -91,6 +91,36 @@ class Settings(BaseSettings):
     # Cỡ đoạn mục tiêu, tính bằng token ƯỚC LƯỢNG (xem rag/ingest/chia_doan.py).
     kb_chunk_tokens: int = Field(default=500, gt=0)
 
+    # ── Nạp tài liệu — UC019 (2/2), ADR-0021 ────────────────────────────
+    # Số đoạn mỗi lần gọi /v1/embed/batch và mỗi transaction ghi knowledge_chunks. Nhúng xong lô
+    # nào ghi lô đó rồi bỏ vector khỏi bộ nhớ — tài liệu 3.000 đoạn không giữ 3.000 vector cùng lúc.
+    kb_embed_batch: int = Field(default=32, gt=0, le=128)
+    # Trần số lần NHẬN xử lý một tài liệu (attempt_count). Đủ trần: lỗi tạm thời → FAILED
+    # INGEST_RETRY_EXHAUSTED; tiến trình chết → FAILED INGEST_STALLED.
+    kb_so_luot_toi_da: int = Field(default=3, ge=1)
+    # Chờ trước lượt thử thứ 2, thứ 3… khi gặp lỗi tạm thời (giây). Hết danh sách thì dùng số cuối.
+    kb_cho_thu_lai_s: tuple[float, ...] = (5.0, 30.0)
+    # Tài liệu PROCESSING không có nhịp tim (updated_at) quá chừng này thì coi như tiến trình đã
+    # chết. Phải lớn hơn hẳn chặng dài nhất không ghi nhịp tim: phân tích một tệp, trần 120 s.
+    kb_job_ket_sau_s: float = Field(default=300.0, gt=0)
+    # Chu kỳ chạy bộ quét job kẹt trong worker.
+    kb_chu_ky_quet_s: float = Field(default=60.0, gt=0)
+
+    # ── Kafka — worker nạp tài liệu ─────────────────────────────────────
+    kafka_topic_tai_lieu: str = "crm.kb.document.uploaded"
+    # Master Plan §2.6: "Lỗi vĩnh viễn đẩy sang ai.dlq (giữ 30 ngày)". Bộ tên topic còn lại chưa
+    # chốt (ADR-0017 quyết định 4) — tên này chỉ ai-service ghi, không ai tiêu thụ tự động.
+    kafka_topic_dlq: str = "ai.dlq"
+
+    # ── Tầng suy luận — §3.4.1 ──────────────────────────────────────────
+    # remote: gọi ai-embed. mock: vector giả seed cố định (CI, dev khi chưa có ai-embed).
+    # offline: nạp model trong tiến trình — KHÔNG hỗ trợ ở ai-service (không có ML runtime, §3.2).
+    ai_mode: Literal["remote", "mock", "offline"] = "remote"
+    embed_url: str = "http://ai-embed:8080"
+    # Một lô 32 đoạn trên CPU: đo ở Ngày 7/15. Tạm đặt rộng; chuỗi timeout phải tăng dần từ trong
+    # ra ngoài (§3.10.2) — ở đây là job nền nên không bị ALB 120 s chặn trên.
+    embed_timeout_s: float = Field(default=60.0, gt=0)
+
     @property
     def database_url(self) -> str:
         """DSN cho SQLAlchemy async."""

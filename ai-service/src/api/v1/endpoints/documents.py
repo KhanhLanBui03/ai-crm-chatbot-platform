@@ -1,4 +1,4 @@
-"""Kho tri thức — UC018 tải lên tài liệu. [PRODUCTION]
+"""Kho tri thức — UC018 tải lên tài liệu · UC019 tiến độ nạp. [PRODUCTION]
 
 Chỉ java-core gọi endpoint này, SAU KHI đã kiểm hạn mức gói (409), dung lượng (413), đuôi tệp
 và ghi tệp vào kho S3 (ADR-0019). Đặc tả UC018 đặt ranh giới ở URI tệp: java-core không
@@ -8,10 +8,12 @@ Tên đường dẫn ``/v1/ai/kb/documents`` theo đặc tả UC018 và ``servic
 ``docs/openapi/ai-service-to-java-core.yaml`` còn ghi ``/v1/documents``, ghi nợ ở ADR-0017.
 """
 
+from uuid import UUID
+
 from fastapi import APIRouter
 
 from src.ai import service
-from src.ai.schemas import KbDocumentAccepted, KbDocumentCreate
+from src.ai.schemas import IngestionJobProgress, KbDocumentAccepted, KbDocumentCreate
 from src.api.deps import SessionDep, TenantIdDep
 
 router = APIRouter(prefix="/ai/kb", tags=["kb"])
@@ -40,3 +42,23 @@ async def tao_tai_lieu(
     không có trường tenant, và ``extra="forbid"`` từ chối nếu phía gọi cố gửi.
     """
     return await service.index_document(session, tenant_id, yeu_cau)
+
+
+@router.get(
+    "/ingestion-jobs/{job_id}",
+    response_model=IngestionJobProgress,
+    responses={
+        401: {"description": "TENANT_CONTEXT_MISSING — thiếu X-Tenant-Id"},
+        404: {"description": "DOCUMENT_NOT_FOUND — không có, hoặc thuộc tenant khác"},
+    },
+)
+async def tien_do_nap(
+    job_id: UUID, tenant_id: TenantIdDep, session: SessionDep
+) -> IngestionJobProgress:
+    """UC019 — sáu bước tiến độ của một job nạp (SCR033). ``job_id`` = ``document_id``.
+
+    ``job_id`` trên đường dẫn chỉ là định danh tài nguyên, KHÔNG phải nguồn tenant: phiên CSDL gắn
+    tenant từ ``X-Tenant-Id``, RLS che mọi job của tenant khác thành 404 — cùng mã với job không
+    tồn tại, để không dò được id nào có thật ở tenant khác.
+    """
+    return await service.tien_do_nap(session, job_id)

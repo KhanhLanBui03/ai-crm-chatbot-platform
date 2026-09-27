@@ -7,6 +7,7 @@ Không dùng lại các model này làm entity CSDL. ORM model nằm ở src/ai/
 """
 
 import unicodedata
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -109,3 +110,47 @@ class KbDocumentAccepted(BaseModel):
     status: Literal["PENDING"] = "PENDING"
     source_type: str
     mime_type: str
+
+
+# ── Tiến độ nạp — UC019, SCR033 ──────────────────────────────────────────────
+# [CẦN XÁC NHẬN] Hợp đồng ai-service → java-core: ``/v1/ingestion-jobs`` của
+# ``docs/openapi/ai-service-to-java-core.yaml`` còn TODO. Tên trường ở đây bám ``CongViecNap`` của
+# ``dashboard-api.yaml`` (đổi snake_case → camelCase ở java-core) để java-core chỉ phải đổi tên,
+# không phải tính lại gì.
+
+
+class IngestionStep(BaseModel):
+    """Một trong sáu bước và trạng thái của nó."""
+
+    step: Literal["QUEUED", "EXTRACTING", "CHUNKING", "EMBEDDING", "INDEXING", "DONE"]
+    state: Literal["DONE", "RUNNING", "PENDING", "FAILED", "SKIPPED"]
+
+
+class IngestionJobProgress(BaseModel):
+    """Tiến độ một job nạp — ``job_id`` = ``document_id`` (V202: một tài liệu, một tiến trình nạp).
+
+    ``chunks_created`` đếm THẬT trong ``knowledge_chunks`` lúc đọc; ``chunks_total`` là số đoạn dự
+    kiến sau chặng CHUNKING (``null`` trước đó). ``error_code`` tách từ tiền tố của
+    ``error_message`` (``"{code}: {câu hiển thị}"``, xem ``document_repository.danh_dau_that_bai``).
+    """
+
+    job_id: UUID
+    document_id: UUID
+    document_title: str
+    trigger: Literal["UPLOAD"] = "UPLOAD"
+    state: Literal[
+        "QUEUED", "EXTRACTING", "CHUNKING", "EMBEDDING", "INDEXING", "DONE", "FAILED"
+    ]
+    status: str
+    attempt: int
+    steps: list[IngestionStep]
+    chunks_created: int
+    chunks_total: int | None
+    percent: float = Field(ge=0, le=100)
+    error_code: str | None
+    error_message: str | None
+    duration_ms: int | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
