@@ -44,7 +44,7 @@
 # báo cáo để đảm bảo tính tái lập.
 
 # --- Web ---
-fastapi>=0.115
+fastapi>=0.121   # Depends(scope="function") cho SessionDep — commit TRƯỚC khi trả phản hồi
 uvicorn[standard]>=0.32
 pydantic>=2.9
 pydantic-settings>=2.6

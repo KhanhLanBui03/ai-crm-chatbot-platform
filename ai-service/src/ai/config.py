@@ -6,6 +6,7 @@ khởi động rằng biến bắt buộc đã có.
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field
@@ -65,6 +66,15 @@ class Settings(BaseSettings):
     rerank_top_k: int = 5
     rrf_k: int = 60
     refusal_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+
+    # ── Kho tri thức — UC018 ─────────────────────────────────────────────
+    # Gốc của volume dùng chung: java-core GHI tệp vào, ai-service chỉ ĐỌC. Mỗi tenant một
+    # thư mục con {root}/{tenant_id}/ — cô lập ngay ở tầng lưu trữ, không chỉ ở truy vấn.
+    kb_storage_root: Path = Path("/data/kb")
+    # 20 MiB = 20 × 1024 × 1024, khớp cách Spring hiểu "20MB" ở phía java-core. Dùng
+    # 20 000 000 thì tệp nằm giữa hai con số được java-core nhận nhưng ai-service trả 413.
+    # java-core chặn trước; ở đây là lớp phòng thủ thứ hai.
+    kb_max_file_bytes: int = 20 * 1024 * 1024
 
     @property
     def database_url(self) -> str:

@@ -40,3 +40,58 @@ TODO: các phương thức của facade — bám theo 10 endpoint §2.5 và hai 
     usage_summary()    UC006/039           GET /v1/ai/usage
     summarize()        UC026               (bất đồng bộ, từ crm.conversation.closed)
 """
+
+import asyncio
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.ai.config import get_settings
+from src.ai.db.repositories import document_repository
+from src.ai.rag.ingest.luu_tru import kiem_uri_thuoc_tenant
+from src.ai.rag.ingest.mime import nhan_dien_tep
+from src.ai.schemas import KbDocumentAccepted, KbDocumentCreate
+
+
+async def index_document(
+    session: AsyncSession, tenant_id: str, yeu_cau: KbDocumentCreate
+) -> KbDocumentAccepted:
+    """UC018 — nhận tài liệu java-core đã lưu, ghi ``PENDING``, trả về để phản hồi 202.
+
+    Kết thúc ngay khi tài liệu được nhận — KHÔNG phân tích cú pháp, không chờ lập chỉ mục
+    (UC019 chạy nền). Vì vậy PDF scan cũng được nhận 202 ở đây; nó chỉ chuyển ``FAILED`` kèm
+    ``PARSE_NO_TEXT_EXTRACTED`` khi parser chạy.
+
+    Thứ tự bước là thứ tự rẻ → đắt: kiểm đường dẫn (thuần tính toán) → đọc vài KB trên đĩa →
+    chạm CSDL. Tệp sai thì bị loại trước khi tốn một lượt khoá hay một dòng INSERT nào.
+    """
+    settings = get_settings()
+
+    duong_dan = kiem_uri_thuoc_tenant(yeu_cau.file_uri, tenant_id, settings.kb_storage_root)
+    # I/O đĩa đồng bộ → đẩy sang luồng phụ, không chặn vòng lặp sự kiện của các request khác.
+    tep = await asyncio.to_thread(
+        nhan_dien_tep, duong_dan, yeu_cau.file_name, settings.kb_max_file_bytes
+    )
+
+    version = await document_repository.tinh_version_ke_tiep(session, yeu_cau.title)
+    document_id = await document_repository.them_tai_lieu_pending(
+        session,
+        title=yeu_cau.title,
+        description=yeu_cau.description,
+        language=yeu_cau.language,
+        source_type=tep.source_type,
+        file_name=yeu_cau.file_name,
+        file_path=str(duong_dan),
+        mime_type=tep.mime_type,
+        file_size_bytes=tep.size_bytes,
+        version=version,
+        uploaded_by=yeu_cau.uploaded_by,
+    )
+
+    return KbDocumentAccepted(
+        document_id=document_id,
+        job_id=document_id,
+        title=yeu_cau.title,
+        version=version,
+        source_type=tep.source_type,
+        mime_type=tep.mime_type,
+    )

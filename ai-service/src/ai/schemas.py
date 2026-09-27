@@ -1,4 +1,4 @@
-"""DTO cho endpoint sinh câu trả lời.
+"""DTO vào/ra của ai-service.
 
 MẪU cho tầng schemas. Pydantic model ở đây là GIAO ƯỚC với java-core — mọi thay đổi phải
 đồng bộ với docs/openapi/ai-service-to-java-core.yaml.
@@ -6,7 +6,11 @@ MẪU cho tầng schemas. Pydantic model ở đây là GIAO ƯỚC với java-co
 Không dùng lại các model này làm entity CSDL. ORM model nằm ở src/ai/db/models/.
 """
 
-from pydantic import BaseModel, Field
+import unicodedata
+from typing import Literal
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Citation(BaseModel):
@@ -39,3 +43,68 @@ class AnswerResponse(BaseModel):
     groundedness_score: float | None = None
     latency_ms: int
     cost_vnd: float | None = None
+
+
+# ── Kho tri thức — UC018 ─────────────────────────────────────────────────────
+
+
+class KbDocumentCreate(BaseModel):
+    """java-core báo: tệp đã nằm trong kho dùng chung, hãy tạo bản ghi ``PENDING``.
+
+    KHÔNG có trường ``tenant_id``: tenant chỉ đến từ header ``X-Tenant-Id`` (ADR-0001).
+    ``extra="forbid"`` biến việc lén gửi ``tenant_id`` trong body thành lỗi 422 ồn ào, thay vì
+    bị bỏ qua trong im lặng — bỏ qua thì không ai biết phía gọi đang hiểu sai hợp đồng.
+
+    ``title`` tối đa 255 chứ không phải 300 như đặc tả: khớp ``varchar(255)`` của V202, để
+    tiêu đề dài bị 422 ở đây thay vì nổ 500 ở CSDL. Độ lệch ghi ở ADR-0017.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Đường dẫn tới tệp trong kho dùng chung. Kiểm thuộc tenant ở rag/ingest/luu_tru.py.
+    file_uri: str = Field(min_length=1, max_length=2048)
+    # Tên gốc để hiển thị và để biết đuôi tệp người dùng khai — không dùng để đọc tệp.
+    file_name: str = Field(min_length=1, max_length=255)
+    title: str = Field(min_length=3, max_length=255)
+    description: str | None = Field(default=None, max_length=500)
+    # Quyết định bộ tách từ ở bước chia đoạn của UC019.
+    language: Literal["vi", "en"] = "vi"
+    # Người tải lên — java-core biết từ JWT. Chỉ lưu uuid trần, không FK (ADR-0002).
+    uploaded_by: UUID | None = None
+
+    @field_validator("file_name", "title", "description", mode="before")
+    @classmethod
+    def _nfc_roi_strip(cls, v: object) -> object:
+        """Chuẩn hoá NFC rồi strip — chạy TRƯỚC khi Pydantic đếm độ dài.
+
+        ``len()`` của Python và ``varchar(n)`` của Postgres đều đếm CODE POINT. Chữ tiếng Việt
+        dạng NFD (hay gặp khi dán từ macOS) tách ``ệ`` thành 3 code point, nên một tiêu đề
+        nhìn thấy ~150 chữ đã có thể vượt 255. NFC trước thì hai tầng đếm cùng một con số,
+        và tiêu đề lưu xuống CSDL cũng ở đúng một dạng — so trùng tiêu đề để tăng ``version``
+        mới đúng.
+        """
+        if isinstance(v, str):
+            return unicodedata.normalize("NFC", v).strip()
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def _mo_ta_rong_la_none(cls, v: str | None) -> str | None:
+        """Mô tả chỉ toàn khoảng trắng coi như không có — không lưu chuỗi rỗng xuống CSDL."""
+        return v or None
+
+
+class KbDocumentAccepted(BaseModel):
+    """Phản hồi 202: tài liệu đã nhận và xếp hàng, CHƯA lập chỉ mục.
+
+    ``job_id`` bằng đúng ``document_id``: cột ``status`` của ``knowledge_documents`` thay cho
+    bảng ``ingestion_jobs`` (V202 dòng 4–5) — mỗi tài liệu có đúng một tiến trình nạp.
+    """
+
+    document_id: UUID
+    job_id: UUID
+    title: str
+    version: int
+    status: Literal["PENDING"] = "PENDING"
+    source_type: str
+    mime_type: str

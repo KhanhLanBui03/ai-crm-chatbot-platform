@@ -21,6 +21,7 @@ from fastapi import FastAPI
 from src.ai.config import get_settings
 from src.ai.telemetry.logging import setup_logging
 from src.api import eureka
+from src.api.errors import dang_ky_xu_ly_loi
 from src.api.v1.endpoints import health
 from src.api.v1.router import api_router
 
@@ -60,8 +61,10 @@ def create_app() -> FastAPI:
     )
 
     # TODO: middleware gắn X-Trace-Id vào ContextVar cho mọi request
-    # TODO: exception handler dịch AiServiceError sang phản hồi HTTP
     # TODO: /metrics cho Prometheus (prometheus-client)
+
+    # AiServiceError → mã HTTP, lỗi validate → 422 kèm mã nghiệp vụ (src/api/errors.py).
+    dang_ky_xu_ly_loi(app)
 
     # Bề mặt vận hành — KHÔNG đánh phiên bản. Docker Compose gọi /health, Prometheus gọi
     # /metrics; hai đường dẫn này phải ổn định kể cả khi giao ước nghiệp vụ lên v2.
