@@ -32,6 +32,7 @@ TODO: các phương thức của facade — bám theo 10 endpoint §2.5 và hai 
     extract_signal()   UC029               POST /v1/ai/extract
     score_lead()       UC030               POST /v1/ai/lead-score
     index_document()   UC018/019           POST /v1/ai/kb/documents
+    phan_tich_tai_lieu() UC019             (bất đồng bộ, từ crm.kb.document.uploaded) — Ngày 4
     delete_document()  UC020               DELETE /v1/ai/kb/documents/{id}
     reindex_tenant()   UC020               POST /v1/ai/kb/reindex
     record_feedback()  UC027               POST /v1/ai/feedback
@@ -42,18 +43,33 @@ TODO: các phương thức của facade — bám theo 10 endpoint §2.5 và hai 
 """
 
 import asyncio
+import logging
 import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.config import get_settings
 from src.ai.db.repositories import document_repository
-from src.ai.exceptions import FileTooLargeError
+from src.ai.exceptions import (
+    FileTooLargeError,
+    ForbiddenFileUriError,
+    NoTextExtractedError,
+    ParseFailedError,
+    ParseTimeoutError,
+    StoredFileNotFoundError,
+)
 from src.ai.integrations import object_storage
+from src.ai.rag.ingest.chia_doan import Doan
+from src.ai.rag.ingest.duong_ong import trich_doan_tu_s3
 from src.ai.rag.ingest.luu_tru import kiem_uri_thuoc_tenant
 from src.ai.rag.ingest.mime import nhan_dien_tep
 from src.ai.schemas import KbDocumentAccepted, KbDocumentCreate
+
+logger = logging.getLogger(__name__)
 
 
 async def index_document(
@@ -111,3 +127,75 @@ async def index_document(
         source_type=tep.source_type,
         mime_type=tep.mime_type,
     )
+
+
+# ── UC019 (1/2) — phân tích tài liệu ─────────────────────────────────────────
+
+# Lỗi VĨNH VIỄN: thử lại bao nhiêu lần cũng ra cùng kết quả → tài liệu chuyển FAILED, người dùng
+# sửa tệp rồi tải lại. Mọi lỗi khác (StorageUnavailableError, lỗi CSDL) là TẠM THỜI: để ném ra,
+# transaction huỷ, tài liệu quay về PENDING và worker nhận lại sau (Ngày 5 — đẩy DLQ khi hết
+# lượt thử). Gộp hai loại làm một là hoặc đẩy tệp tốt vào FAILED chỉ vì S3 chớp tắt, hoặc thử
+# lại mãi một PDF scan.
+#
+# PARSE_TIMEOUT xếp vào vĩnh viễn: trần 120 s gấp hàng chục lần thời gian đo được cho một PDF
+# 100 trang, nên quá trần gần như chắc chắn là tệp hỏng chứ không phải máy bận.
+_LOI_VINH_VIEN = (
+    NoTextExtractedError,
+    ParseFailedError,
+    ParseTimeoutError,
+    StoredFileNotFoundError,
+    ForbiddenFileUriError,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class KetQuaPhanTich:
+    """Kết quả ``phan_tich_tai_lieu``.
+
+    ``BO_QUA``: tài liệu không còn ``PENDING`` — lượt khác đã nhận, hoặc không thuộc tenant.
+    ``FAILED``: đã ghi ``FAILED`` + ``error_message``; ``loi`` là mã lỗi.
+    ``PROCESSING``: phân tích xong, ``doan`` chờ nhúng (Ngày 5).
+    """
+
+    trang_thai: Literal["BO_QUA", "FAILED", "PROCESSING"]
+    doan: list[Doan] = field(default_factory=list)
+    loi: str | None = None
+
+
+async def phan_tich_tai_lieu(
+    session: AsyncSession, tenant_id: str, document_id: UUID
+) -> KetQuaPhanTich:
+    """UC019 (1/2) — nhận một tài liệu ``PENDING``, tải về, phân tích, chuẩn hoá, chia đoạn.
+
+    Lỗi vĩnh viễn KHÔNG ném ra mà trả ``FAILED``: nếu ném, ``get_tenant_session`` sẽ rollback
+    transaction và mất luôn dòng ``FAILED`` vừa ghi — tài liệu quay về ``PENDING``, bị nhận
+    lại và hỏng lại mãi. Lỗi tạm thời thì ném, CHÍNH VÌ muốn rollback đó.
+
+    Ngày 4 dừng ở ``PROCESSING`` + danh sách đoạn trong bộ nhớ; Ngày 5 nhúng, ghi
+    ``knowledge_chunks`` và chuyển ``READY`` trong cùng lượt.
+    """
+    settings = get_settings()
+
+    tai_lieu = await document_repository.nhan_xu_ly(session, document_id)
+    if tai_lieu is None:
+        return KetQuaPhanTich("BO_QUA")
+
+    try:
+        # Kiểm lại dù file_path do chính UC018 ghi sau khi đã kiểm: dòng trong CSDL có thể bị
+        # sửa ngoài luồng (UC020, thao tác tay), và giá phải trả chỉ là một phép so chuỗi.
+        key = kiem_uri_thuoc_tenant(tai_lieu.file_path, tenant_id, settings.s3_bucket)
+        cac_doan = await trich_doan_tu_s3(
+            settings.s3_bucket,
+            key,
+            tai_lieu.source_type,
+            gioi_han_byte=settings.kb_max_file_bytes,
+            timeout_s=settings.kb_parse_timeout_s,
+            tran_token=settings.kb_chunk_tokens,
+        )
+    except _LOI_VINH_VIEN as loi:
+        if isinstance(loi, ForbiddenFileUriError):
+            logger.warning("Tài liệu %s có file_path ngoài vùng tenant", document_id)
+        await document_repository.danh_dau_that_bai(session, document_id, loi)
+        return KetQuaPhanTich("FAILED", loi=loi.code)
+
+    return KetQuaPhanTich("PROCESSING", doan=cac_doan)

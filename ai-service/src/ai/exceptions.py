@@ -74,3 +74,32 @@ class StorageUnavailableError(AiServiceError):
     """
 
     code = "STORAGE_UNAVAILABLE"
+
+
+# ── Nạp tài liệu — UC019 ─────────────────────────────────────────────────────
+# Ba mã này KHÔNG có mã HTTP: phân tích chạy nền sau khi UC018 đã trả 202. Chúng chỉ đi vào
+# ``knowledge_documents.error_message`` dạng "{code}: {thông điệp}" khi tài liệu chuyển
+# ``FAILED`` (ràng buộc ``ck_doc_failed`` của V202 bắt buộc phải có lý do).
+
+
+class NoTextExtractedError(AiServiceError):
+    """Tệp hợp lệ nhưng không có chữ nào để lấy — điển hình là PDF scan chỉ có ảnh.
+
+    Mã lấy nguyên văn từ đặc tả UC018 ("Mười một điểm cần chốt", điểm 1). Thông điệp phải nói
+    được cho người dùng cách sửa (OCR rồi tải lại), vì nó hiển thị nguyên văn trên dashboard.
+    """
+
+    code = "PARSE_NO_TEXT_EXTRACTED"
+
+
+class ParseFailedError(AiServiceError):
+    """Thư viện không đọc được tệp (hỏng cấu trúc), hoặc tiến trình phân tích chết giữa chừng.
+    [CẦN XÁC NHẬN] mã — đặc tả chưa có."""
+
+    code = "PARSE_FAILED"
+
+
+class ParseTimeoutError(AiServiceError):
+    """Phân tích vượt ``kb_parse_timeout_s`` — tiến trình con đã bị giết. [CẦN XÁC NHẬN] mã."""
+
+    code = "PARSE_TIMEOUT"

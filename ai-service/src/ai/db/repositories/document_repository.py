@@ -1,4 +1,4 @@
-"""Truy cập ``knowledge.knowledge_documents`` — UC018. [PRODUCTION]
+"""Truy cập ``knowledge.knowledge_documents`` — UC018 · UC019. [PRODUCTION]
 
 Mọi hàm nhận một ``AsyncSession`` ĐÃ gắn tenant (``src.ai.db.session.get_tenant_session``).
 
@@ -14,10 +14,13 @@ Ba điều cố ý:
 - **Cấp version dưới khoá advisory** — xem ``tinh_version_ke_tiep``.
 """
 
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.ai.exceptions import AiServiceError
 
 # Không gian khoá advisory riêng cho việc cấp version tài liệu (18 = UC018). Dạng hai tham số
 # (int4, int4) tách khỏi khoá của nơi khác trong cùng CSDL — Flyway cũng dùng khoá advisory.
@@ -118,3 +121,64 @@ async def them_tai_lieu_pending(
         },
     )
     return ket_qua.scalar_one()
+
+
+# ── UC019 — nhận xử lý và đánh dấu thất bại ──────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class TaiLieuCanNap:
+    """Những gì bước phân tích cần biết về một tài liệu vừa nhận xử lý."""
+
+    id: UUID
+    file_path: str
+    source_type: str
+
+
+async def nhan_xu_ly(session: AsyncSession, document_id: UUID) -> TaiLieuCanNap | None:
+    """Chuyển ``PENDING → PROCESSING`` CÓ ĐIỀU KIỆN; trả ``None`` nếu không chuyển được.
+
+    ``None`` nghĩa là tài liệu không còn ``PENDING`` (một lượt khác đã nhận, hoặc đã xong),
+    hoặc không nhìn thấy được qua RLS (không thuộc tenant của phiên). Cả hai trường hợp nơi gọi
+    đều phải BỎ QUA, không báo lỗi.
+
+    Một câu ``UPDATE … WHERE status = 'PENDING' RETURNING`` thay vì ``SELECT`` rồi ``UPDATE``:
+    hai lượt cùng nhận một tài liệu (Kafka giao ít nhất một lần — nhận trùng là chắc chắn) thì
+    Postgres khoá dòng cho lượt đầu; lượt sau chờ, đọc lại dòng sau khi lượt đầu commit, thấy
+    ``status`` đã khác ``PENDING`` và cập nhật 0 dòng. SELECT-rồi-UPDATE thì cả hai cùng đọc
+    thấy ``PENDING`` và cùng xử lý. Cách này dùng được cho cả hai phương án chống trùng đang chờ
+    chốt ở ADR-0021 (Ngày 5).
+    """
+    ket_qua = await session.execute(
+        text(
+            """
+            UPDATE knowledge.knowledge_documents
+               SET status = 'PROCESSING', error_message = NULL
+             WHERE id = :id AND status = 'PENDING'
+            RETURNING id, file_path, source_type
+            """
+        ),
+        {"id": document_id},
+    )
+    dong = ket_qua.one_or_none()
+    return TaiLieuCanNap(*dong) if dong else None
+
+
+async def danh_dau_that_bai(session: AsyncSession, document_id: UUID, loi: AiServiceError) -> None:
+    """``FAILED`` kèm ``error_message = "{code}: {thông điệp}"``.
+
+    Mã đứng ĐẦU chuỗi để dashboard và báo cáo lọc được theo tiền tố
+    (``error_message LIKE 'PARSE_NO_TEXT_EXTRACTED%'``) mà không cần thêm cột; phần sau là câu
+    hiển thị nguyên văn cho người dùng sửa tệp. ``ck_doc_failed`` (V202) được thoả vì chuỗi
+    không bao giờ rỗng.
+    """
+    await session.execute(
+        text(
+            """
+            UPDATE knowledge.knowledge_documents
+               SET status = 'FAILED', error_message = :loi
+             WHERE id = :id
+            """
+        ),
+        {"id": document_id, "loi": f"{loi.code}: {loi}"},
+    )

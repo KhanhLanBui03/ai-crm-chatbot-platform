@@ -83,6 +83,14 @@ class Settings(BaseSettings):
     # java-core chặn trước; ở đây là lớp phòng thủ thứ hai.
     kb_max_file_bytes: int = 20 * 1024 * 1024
 
+    # ── Nạp tài liệu — UC019 ─────────────────────────────────────────────
+    # Trần thời gian phân tích MỘT tệp ở tiến trình con. PDF 100 trang đo được vài giây; quá
+    # trần gần như chắc chắn là tệp hỏng làm thư viện treo → giết tiến trình con, tài liệu
+    # chuyển FAILED với PARSE_TIMEOUT.
+    kb_parse_timeout_s: float = Field(default=120.0, gt=0)
+    # Cỡ đoạn mục tiêu, tính bằng token ƯỚC LƯỢNG (xem rag/ingest/chia_doan.py).
+    kb_chunk_tokens: int = Field(default=500, gt=0)
+
     @property
     def database_url(self) -> str:
         """DSN cho SQLAlchemy async."""

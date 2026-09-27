@@ -1,7 +1,8 @@
 """Đường ống RAG tiếng Việt — 11 chặng (kế hoạch mục 7.1).
 
-    ingest/    1. trích xuất  2. chuẩn hóa NFC  3. chia đoạn ~500 token  4. tách từ
-               5. nhúng theo lô 32  6. đánh chỉ mục
+    ingest/    1. trích xuất  2. chuẩn hóa (chuan_hoa.normalize_vi)  3. chia đoạn ≤ 500 token
+               4. tách từ — CHỈ phía câu hỏi (tsquery.py); chỉ mục từ khoá theo ÂM TIẾT, cột
+                  GENERATED của V210  5. nhúng theo lô 32  6. đánh chỉ mục
     retrieve/  7. truy hồi song song vector + BM25, mỗi làn 30 ứng viên
                8. hợp nhất RRF hằng số 60 — CHỈ dùng thứ hạng, không dùng điểm thô
                   nên không phải chuẩn hoá hai thang điểm khác nhau
