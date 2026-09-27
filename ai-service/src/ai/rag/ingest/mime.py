@@ -98,8 +98,8 @@ def nhan_dien_tep(duong_dan: Path, file_name: str, max_bytes: int) -> KetQuaNhan
     """Kiểm tệp đã lưu và trả về định dạng thật. Hàm đồng bộ, có I/O đĩa — gọi qua
     ``asyncio.to_thread`` từ code async.
 
-    ``duong_dan`` phải là đường dẫn ĐÃ kiểm thuộc tenant (``luu_tru.kiem_uri_thuoc_tenant``).
-    ``file_name`` là tên người dùng khai — chỉ dùng để lấy đuôi.
+    ``duong_dan`` là tệp tạm cục bộ đã tải về từ kho S3 (``service.index_document``) — hàm
+    này không biết gì về S3 hay tenant. ``file_name`` là tên người dùng khai, chỉ để lấy đuôi.
     """
     if not duong_dan.is_file():
         raise StoredFileNotFoundError(f"Không có tệp tại {duong_dan}")

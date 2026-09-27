@@ -1,7 +1,7 @@
 # Hạ tầng + dịch vụ cho môi trường phát triển.
 # Nguồn: kế hoạch phần 4 (kiến trúc), mục 4.3 (Kafka), mục 4.4 (Eureka), mục 4.5 (quan sát).
 #
-#   docker compose up -d postgres redis kafka        # chỉ hạ tầng (kéo theo zookeeper)
+#   docker compose up -d postgres redis kafka rustfs-init   # hạ tầng (kéo theo zookeeper, rustfs)
 #   docker compose up -d                             # thêm dịch vụ (cần code, xem README)
 #   docker compose --profile observability up -d      # thêm Prometheus + Grafana
 #
@@ -131,6 +131,57 @@ services:
       start_period: 30s
     networks: [crm]
 
+  rustfs:
+    # Kho tệp tài liệu gốc (UC018) — object storage nói giao thức S3 (ADR-0019).
+    # Dev dùng RustFS; cloud dùng AWS S3. Code không đổi, chỉ đổi S3_ENDPOINT.
+    #
+    # KHÔNG dùng image minio/minio: MinIO ngừng phát hành image từ 10/2025, repo bị lưu
+    # trữ 25/04/2026 — mọi tag đã biến mất khỏi Docker Hub lẫn quay.io. RustFS nói cùng
+    # API S3, dùng được với client của MinIO (Apache-2.0). Ghim phiên bản cứng.
+    image: rustfs/rustfs:1.0.0
+    container_name: crm-rustfs
+    environment:
+      # Tài khoản gốc — CHỈ cho môi trường dev. Cloud dùng IAM role (IRSA), không có khoá.
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-kb-dev}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-changeme-dev}
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      # 9000 trên máy chủ đã dành cho mcp-server-mock — nên API S3 ra cổng 9010.
+      - "${S3_HOST_PORT:-9010}:9000"            # API S3
+      - "${S3_CONSOLE_HOST_PORT:-9011}:9001"    # giao diện web để xem tệp đã tải lên
+    volumes:
+      - rustfs_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [crm]
+
+  rustfs-init:
+    # Chạy một lần: tạo bucket nếu chưa có. Dùng lại chính image RustFS vì nó có sẵn
+    # curl hỗ trợ --aws-sigv4 — không phải kéo thêm image công cụ nào. Chạy lại vô hại
+    # (tạo bucket đã tồn tại vẫn trả 200).
+    image: rustfs/rustfs:1.0.0
+    container_name: crm-rustfs-init
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        curl -fsS --aws-sigv4 "aws:amz:$$S3_REGION:s3"
+        --user "$$S3_ACCESS_KEY:$$S3_SECRET_KEY"
+        -X PUT "http://rustfs:9000/$$S3_BUCKET"
+        && echo "bucket $$S3_BUCKET sẵn sàng"
+    environment:
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-kb-tai-lieu}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-kb-dev}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-changeme-dev}
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    restart: "no"
+    networks: [crm]
+
   # ─────────────────────────── TRACK A ───────────────────────────
 
   eureka-server:
@@ -254,11 +305,20 @@ services:
       MCP_SERVER_URL: ${MCP_SERVER_URL:-http://host.docker.internal:9000}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       LLM_TEMPERATURE: "0"
+      # Kho tệp S3 (ADR-0019). ai-service chỉ ĐỌC tệp java-core đã ghi.
+      S3_ENDPOINT: rustfs:9000
+      S3_SECURE: "false"
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-kb-tai-lieu}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-kb-dev}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-changeme-dev}
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      rustfs-init:
+        condition: service_completed_successfully
       eureka-server:
         condition: service_healthy
     healthcheck:
@@ -309,5 +369,6 @@ volumes:
   zookeeper_data:
   zookeeper_log:
   kafka_data:
+  rustfs_data:
   prometheus_data:
   grafana_data:

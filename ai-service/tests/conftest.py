@@ -20,6 +20,10 @@ Ba quyết định đằng sau file này:
 Driver là **psycopg3** (``base.txt`` đã có ``psycopg[binary,pool]``), nên DSN dựng tay chứ
 không lấy ``get_connection_url()`` — hàm đó mặc định sinh chuỗi ``postgresql+psycopg2://``
 và sẽ kéo theo một driver dự án không dùng.
+
+Kho tệp S3 cũng thật: fixture ``kho_s3`` dựng RustFS bằng CÙNG image với
+``docker-compose.yml`` (ADR-0019). Không dùng module MinIO của testcontainers — nó kéo image
+``minio/minio``, mà image đó đã bị gỡ khỏi Docker Hub.
 """
 
 import time
@@ -29,7 +33,10 @@ from uuid import UUID
 
 import psycopg
 import pytest
+import urllib3
+from minio import Minio
 from testcontainers.community.postgres import PostgresContainer
+from testcontainers.core.container import DockerContainer
 
 # ── Đường dẫn ────────────────────────────────────────────────────────────────
 AI_SERVICE_DIR = Path(__file__).resolve().parents[1]
@@ -47,6 +54,12 @@ OWNER_PASSWORD = "changeme"  # chỉ sống trong container dùng một lần
 AI_USER = "ai_app"
 AI_PASSWORD = "changeme"  # init-db.sql:26-27 hardcode đúng chuỗi này
 DB_NAME = "thesis_crm"
+
+# ── Kho tệp S3 ───────────────────────────────────────────────────────────────
+RUSTFS_IMAGE = "rustfs/rustfs:1.0.0"  # trùng docker-compose.yml
+S3_ACCESS_KEY = "kb-test"
+S3_SECRET_KEY = "kb-test-secret"  # chỉ sống trong container dùng một lần
+S3_BUCKET = "kb-tai-lieu"
 
 # ── Dữ liệu gieo sẵn ─────────────────────────────────────────────────────────
 # UUID cố định chứ không sinh ngẫu nhiên: test cách ly tenant cần trỏ đích danh "dòng của
@@ -190,3 +203,47 @@ def tenant_a() -> UUID:
 @pytest.fixture(scope="session")
 def tenant_b() -> UUID:
     return TENANT_B
+
+
+def _cho_s3_san_sang(endpoint: str, so_lan: int = 30) -> None:
+    """Chờ RustFS trả 200 ở ``/health`` — cổng mở chưa chắc máy chủ đã nhận request."""
+    http = urllib3.PoolManager(timeout=2, retries=False)
+    loi: Exception | None = None
+    for _ in range(so_lan):
+        try:
+            if http.request("GET", f"http://{endpoint}/health").status == 200:
+                return
+        except urllib3.exceptions.HTTPError as e:
+            loi = e
+        time.sleep(1)
+    raise RuntimeError(f"RustFS không sẵn sàng sau {so_lan}s: {loi}")
+
+
+@pytest.fixture(scope="session")
+def kho_s3_endpoint() -> Iterator[str]:
+    """``host:cổng`` của một RustFS thật đang chạy, bucket ``S3_BUCKET`` đã tạo sẵn.
+
+    Session-scope: một container cho cả lượt chạy. Test nào ghi object thì dùng key có tiền
+    tố riêng (ví dụ theo tên test) để không giẫm lên nhau.
+    """
+    container = (
+        DockerContainer(RUSTFS_IMAGE)
+        .with_env("RUSTFS_ACCESS_KEY", S3_ACCESS_KEY)
+        .with_env("RUSTFS_SECRET_KEY", S3_SECRET_KEY)
+        .with_exposed_ports(9000)
+    )
+    with container:
+        endpoint = f"{container.get_container_host_ip()}:{container.get_exposed_port(9000)}"
+        _cho_s3_san_sang(endpoint)
+        Minio(
+            endpoint, access_key=S3_ACCESS_KEY, secret_key=S3_SECRET_KEY, secure=False
+        ).make_bucket(S3_BUCKET)
+        yield endpoint
+
+
+@pytest.fixture(scope="session")
+def kho_s3(kho_s3_endpoint: str) -> Minio:
+    """Client S3 có quyền đầy đủ trên RustFS của ``kho_s3_endpoint``."""
+    return Minio(
+        kho_s3_endpoint, access_key=S3_ACCESS_KEY, secret_key=S3_SECRET_KEY, secure=False
+    )

@@ -70,6 +70,12 @@ redis>=5.2
 # --- Kafka (§2.6) ---
 aiokafka>=0.12
 
+# --- Kho tệp S3: RustFS ở dev, AWS S3 trên cloud (ADR-0019) ---
+# Client của MinIO chứ không phải boto3: ~8,5 MB so với ~27 MB (riêng botocore 25 MB), mà
+# image đang nợ dung lượng. Nói S3 chuẩn nên chạy được với mọi máy chủ S3, và hỗ trợ IRSA
+# (IamAwsProvider). Máy chủ MinIO đã bị lưu trữ, nhưng SDK Python vẫn được bảo trì.
+minio>=7.2
+
 # --- Service discovery: FastAPI không tự đăng ký Eureka ---
 py-eureka-client>=0.11
 

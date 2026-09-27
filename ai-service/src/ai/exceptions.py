@@ -47,7 +47,7 @@ class UnsupportedFormatError(AiServiceError):
 
 
 class ForbiddenFileUriError(AiServiceError):
-    """URI trỏ ra ngoài thư mục của tenant đang gọi. [CẦN XÁC NHẬN] mã — đặc tả chưa có.
+    """URI trỏ ra ngoài vùng của tenant đang gọi. [CẦN XÁC NHẬN] mã — đặc tả chưa có.
 
     Đây là dấu hiệu tấn công (hoặc lỗi nghiêm trọng ở java-core), không phải lỗi nhập liệu —
     nên tách khỏi ``INVALID_METADATA`` và luôn ghi log cảnh báo.
@@ -57,10 +57,20 @@ class ForbiddenFileUriError(AiServiceError):
 
 
 class StoredFileNotFoundError(AiServiceError):
-    """URI hợp lệ nhưng không có tệp ở đó. [CẦN XÁC NHẬN] mã — đặc tả chưa có.
+    """URI hợp lệ nhưng kho S3 không có object đó. [CẦN XÁC NHẬN] mã — đặc tả chưa có.
 
-    java-core lưu tệp XONG mới gọi ai-service, nên ca này nghĩa là hai bên lệch nhau
-    (sai đường dẫn volume, hoặc tệp bị xoá giữa chừng).
+    java-core ghi tệp XONG mới gọi ai-service, nên ca này nghĩa là hai bên lệch nhau
+    (sai bucket, sai key, hoặc object bị xoá giữa chừng).
     """
 
     code = "FILE_NOT_FOUND"
+
+
+class StorageUnavailableError(AiServiceError):
+    """Không nói chuyện được với kho S3: mất kết nối, hết thời gian chờ, sai quyền truy cập.
+
+    Lỗi của hạ tầng, không phải của phía gọi — tách riêng để java-core biết nên thử lại sau
+    thay vì báo người dùng sửa tệp.
+    """
+
+    code = "STORAGE_UNAVAILABLE"

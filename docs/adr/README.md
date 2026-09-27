@@ -33,5 +33,6 @@ Mỗi quyết định kiến trúc một file. Nguồn trực tiếp cho **chư�
 | 0016 | Role runtime tên `ai_app`; nhãn kết quả Lead vào `sales.lead_scores` | Lệch Master Plan |
 | 0017 | _(để dành — 4 quyết định hợp đồng của Dev B, chưa viết)_ | |
 | 0018 | Cổng parity INT8 trượt: hoãn phán quyết, phân xử bằng Recall@5 ở Ngày 7 | Đo thực nghiệm |
+| 0019 | Tệp tài liệu gốc lưu ở object storage S3 (RustFS ở dev, AWS S3 trên cloud) | Thiết kế UC018 |
 
 `KH` = tài liệu `Ke-hoach-do-an-Chatbot-AI-CRM-v2-nhom-2-nguoi.docx`.

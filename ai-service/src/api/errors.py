@@ -17,6 +17,7 @@ from src.ai.exceptions import (
     AiServiceError,
     FileTooLargeError,
     ForbiddenFileUriError,
+    StorageUnavailableError,
     StoredFileNotFoundError,
     TenantContextMissingError,
     UnsupportedFormatError,
@@ -32,6 +33,7 @@ _MA_HTTP: dict[type[AiServiceError], int] = {
     StoredFileNotFoundError: 422,
     FileTooLargeError: 413,
     UnsupportedFormatError: 415,
+    StorageUnavailableError: 503,
 }
 
 # Mã nghiệp vụ cho lỗi validate, theo từng đường dẫn. Đặc tả UC018 gọi lỗi siêu dữ liệu là

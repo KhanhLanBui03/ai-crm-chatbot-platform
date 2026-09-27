@@ -1,8 +1,8 @@
 """Kho tri thức — UC018 tải lên tài liệu. [PRODUCTION]
 
 Chỉ java-core gọi endpoint này, SAU KHI đã kiểm hạn mức gói (409), dung lượng (413), đuôi tệp
-và lưu tệp vào kho dùng chung. Đặc tả UC018 đặt ranh giới ở URI tệp: java-core không đọc
-nội dung tệp, ai-service không ghi vào schema của Track A (ADR-0002).
+và ghi tệp vào kho S3 (ADR-0019). Đặc tả UC018 đặt ranh giới ở URI tệp: java-core không
+đọc nội dung tệp, ai-service không ghi vào schema của Track A (ADR-0002).
 
 Tên đường dẫn ``/v1/ai/kb/documents`` theo đặc tả UC018 và ``service.py`` — hợp đồng
 ``docs/openapi/ai-service-to-java-core.yaml`` còn ghi ``/v1/documents``, ghi nợ ở ADR-0017.
@@ -24,10 +24,11 @@ router = APIRouter(prefix="/ai/kb", tags=["kb"])
     # Mọi thân lỗi có dạng {code, message} — src/api/errors.py.
     responses={
         401: {"description": "TENANT_CONTEXT_MISSING — thiếu X-Tenant-Id"},
-        403: {"description": "FORBIDDEN_FILE_URI — URI ngoài thư mục của tenant"},
+        403: {"description": "FORBIDDEN_FILE_URI — URI ngoài vùng của tenant"},
         413: {"description": "FILE_TOO_LARGE — tệp vượt 20 MiB"},
         415: {"description": "UNSUPPORTED_FORMAT — đuôi hoặc nội dung không hỗ trợ"},
         422: {"description": "INVALID_METADATA hoặc FILE_NOT_FOUND"},
+        503: {"description": "STORAGE_UNAVAILABLE — không đọc được kho S3, thử lại sau"},
     },
 )
 async def tao_tai_lieu(

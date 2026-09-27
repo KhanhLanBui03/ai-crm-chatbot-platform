@@ -6,7 +6,6 @@ khởi động rằng biến bắt buộc đã có.
 """
 
 from functools import lru_cache
-from pathlib import Path
 from typing import Literal
 
 from pydantic import Field
@@ -67,10 +66,18 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     refusal_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
 
-    # ── Kho tri thức — UC018 ─────────────────────────────────────────────
-    # Gốc của volume dùng chung: java-core GHI tệp vào, ai-service chỉ ĐỌC. Mỗi tenant một
-    # thư mục con {root}/{tenant_id}/ — cô lập ngay ở tầng lưu trữ, không chỉ ở truy vấn.
-    kb_storage_root: Path = Path("/data/kb")
+    # ── Kho tệp S3 — UC018 (ADR-0019) ────────────────────────────────────
+    # java-core GHI tệp gốc vào bucket, ai-service chỉ ĐỌC. Key có dạng {tenant_id}/… — cô lập
+    # ngay ở tầng lưu trữ, không chỉ ở truy vấn. Dev: RustFS trong compose. Cloud: AWS S3
+    # (s3_endpoint = "s3.amazonaws.com", s3_secure = True).
+    s3_endpoint: str = "rustfs:9000"
+    s3_secure: bool = False
+    s3_region: str = "us-east-1"
+    s3_bucket: str = "kb-tai-lieu"
+    # Để trống cả hai trên cloud: client tự lấy quyền qua IAM role (IRSA), không giữ khoá.
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+
     # 20 MiB = 20 × 1024 × 1024, khớp cách Spring hiểu "20MB" ở phía java-core. Dùng
     # 20 000 000 thì tệp nằm giữa hai con số được java-core nhận nhưng ai-service trả 413.
     # java-core chặn trước; ở đây là lớp phòng thủ thứ hai.

@@ -61,7 +61,8 @@ class KbDocumentCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # Đường dẫn tới tệp trong kho dùng chung. Kiểm thuộc tenant ở rag/ingest/luu_tru.py.
+    # URI object trong kho S3: s3://{bucket}/{tenant_id}/…/{ten-tep} (ADR-0019).
+    # Kiểm thuộc tenant ở rag/ingest/luu_tru.py.
     file_uri: str = Field(min_length=1, max_length=2048)
     # Tên gốc để hiển thị và để biết đuôi tệp người dùng khai — không dùng để đọc tệp.
     file_name: str = Field(min_length=1, max_length=255)

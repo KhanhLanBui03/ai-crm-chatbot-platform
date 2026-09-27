@@ -42,11 +42,15 @@ TODO: các phương thức của facade — bám theo 10 endpoint §2.5 và hai 
 """
 
 import asyncio
+import tempfile
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.config import get_settings
 from src.ai.db.repositories import document_repository
+from src.ai.exceptions import FileTooLargeError
+from src.ai.integrations import object_storage
 from src.ai.rag.ingest.luu_tru import kiem_uri_thuoc_tenant
 from src.ai.rag.ingest.mime import nhan_dien_tep
 from src.ai.schemas import KbDocumentAccepted, KbDocumentCreate
@@ -55,22 +59,33 @@ from src.ai.schemas import KbDocumentAccepted, KbDocumentCreate
 async def index_document(
     session: AsyncSession, tenant_id: str, yeu_cau: KbDocumentCreate
 ) -> KbDocumentAccepted:
-    """UC018 — nhận tài liệu java-core đã lưu, ghi ``PENDING``, trả về để phản hồi 202.
+    """UC018 — nhận tài liệu java-core đã ghi vào kho S3, ghi ``PENDING``, trả về cho 202.
 
     Kết thúc ngay khi tài liệu được nhận — KHÔNG phân tích cú pháp, không chờ lập chỉ mục
     (UC019 chạy nền). Vì vậy PDF scan cũng được nhận 202 ở đây; nó chỉ chuyển ``FAILED`` kèm
     ``PARSE_NO_TEXT_EXTRACTED`` khi parser chạy.
 
-    Thứ tự bước là thứ tự rẻ → đắt: kiểm đường dẫn (thuần tính toán) → đọc vài KB trên đĩa →
-    chạm CSDL. Tệp sai thì bị loại trước khi tốn một lượt khoá hay một dòng INSERT nào.
+    Thứ tự bước là thứ tự rẻ → đắt, để tệp sai bị loại trước khi tốn tài nguyên:
+    kiểm URI (thuần tính toán) → HEAD lấy dung lượng (413 mà không phải tải) → tải về tệp tạm
+    và kiểm định dạng thật → chạm CSDL.
+
+    Tải cả tệp (tối đa 20 MiB) chứ không chỉ vài KB đầu: nhận ra DOCX cần danh mục ZIP, mà
+    danh mục đó nằm ở CUỐI tệp.
     """
     settings = get_settings()
+    gioi_han = settings.kb_max_file_bytes
 
-    duong_dan = kiem_uri_thuoc_tenant(yeu_cau.file_uri, tenant_id, settings.kb_storage_root)
-    # I/O đĩa đồng bộ → đẩy sang luồng phụ, không chặn vòng lặp sự kiện của các request khác.
-    tep = await asyncio.to_thread(
-        nhan_dien_tep, duong_dan, yeu_cau.file_name, settings.kb_max_file_bytes
-    )
+    key = kiem_uri_thuoc_tenant(yeu_cau.file_uri, tenant_id, settings.s3_bucket)
+
+    # Thư viện S3 và I/O đĩa đều đồng bộ → đẩy sang luồng phụ, không chặn vòng lặp sự kiện.
+    dung_luong = await asyncio.to_thread(object_storage.lay_dung_luong, settings.s3_bucket, key)
+    if dung_luong > gioi_han:
+        raise FileTooLargeError(f"Tệp {dung_luong} byte, vượt giới hạn {gioi_han} byte")
+
+    with tempfile.TemporaryDirectory(prefix="kb-") as thu_muc:
+        tep_tam = Path(thu_muc) / "tep"
+        await asyncio.to_thread(object_storage.tai_ve, settings.s3_bucket, key, tep_tam, gioi_han)
+        tep = await asyncio.to_thread(nhan_dien_tep, tep_tam, yeu_cau.file_name, gioi_han)
 
     version = await document_repository.tinh_version_ke_tiep(session, yeu_cau.title)
     document_id = await document_repository.them_tai_lieu_pending(
@@ -80,7 +95,8 @@ async def index_document(
         language=yeu_cau.language,
         source_type=tep.source_type,
         file_name=yeu_cau.file_name,
-        file_path=str(duong_dan),
+        # Dựng lại URI từ bucket + key đã kiểm, không lưu nguyên văn chuỗi phía gọi gửi.
+        file_path=f"s3://{settings.s3_bucket}/{key}",
         mime_type=tep.mime_type,
         file_size_bytes=tep.size_bytes,
         version=version,
