@@ -26,6 +26,7 @@ Kho tệp S3 cũng thật: fixture ``kho_s3`` dựng RustFS bằng CÙNG image v
 ``minio/minio``, mà image đó đã bị gỡ khỏi Docker Hub.
 """
 
+import re
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -113,6 +114,40 @@ def _cho_postgres_san_sang(dsn: str, so_lan: int = 30) -> None:
     raise RuntimeError(f"Postgres không sẵn sàng sau {so_lan}s: {loi}")
 
 
+_TEN_MIGRATION = re.compile(r"V(2\d\d)__[^/]+\.sql")
+
+
+def _cac_file_migration() -> list[Path]:
+    """Các file V2xx theo thứ tự số, sau khi kiểm dãy LIỀN NHAU từ V201.
+
+    Không đếm cứng số file: đếm cứng thì mỗi migration mới làm đỏ toàn bộ test tích hợp vì
+    một con số trong fixture, không vì lược đồ sai. Thứ thật sự cần giữ là không thiếu số
+    và không trùng số: thiếu một số thì lược đồ test âm thầm khác production, còn hai người
+    cùng tạo V210 là lỗi merge hay gặp nhất của dải migration.
+
+    Sắp theo SỐ chứ không theo tên: theo tên thì ``V210__…`` vẫn đúng chỗ, nhưng chỉ vì mọi
+    số đều có ba chữ số, một giả định không nên dựa vào.
+    """
+    theo_so: dict[int, list[Path]] = {}
+    for f in MIGRATION_DIR.glob("V2*.sql"):
+        khop = _TEN_MIGRATION.fullmatch(f.name)
+        if not khop:
+            raise RuntimeError(f"Tên migration sai dạng V2xx__mo_ta.sql: {f.name}")
+        theo_so.setdefault(int(khop.group(1)), []).append(f)
+
+    trung = {so: [f.name for f in ds] for so, ds in theo_so.items() if len(ds) > 1}
+    if trung:
+        raise RuntimeError(f"Trùng số migration: {trung}")
+
+    cac_so = sorted(theo_so)
+    mong_doi = list(range(201, 201 + len(cac_so)))
+    if cac_so != mong_doi:
+        thieu = sorted(set(range(201, max(cac_so, default=200) + 1)) - set(cac_so))
+        raise RuntimeError(f"Dãy migration phải liền nhau từ V201, thiếu: {thieu}")
+
+    return [theo_so[so][0] for so in cac_so]
+
+
 def _nap_luoc_do(dsn: str) -> None:
     """Chạy init-db.sql rồi dải V2xx theo đúng thứ tự Flyway sẽ chạy.
 
@@ -125,9 +160,7 @@ def _nap_luoc_do(dsn: str) -> None:
     Flyway. Muốn biết migration nào đã chạy thì soi lược đồ (ví dụ cột ``description`` chỉ
     xuất hiện từ V209), đừng đếm dòng trong bảng lịch sử.
     """
-    files = sorted(MIGRATION_DIR.glob("V2*.sql"))
-    if len(files) != 9:
-        raise RuntimeError(f"Chờ 9 file V201-V209, thấy {len(files)}: {[f.name for f in files]}")
+    files = _cac_file_migration()
 
     with psycopg.connect(dsn, autocommit=True) as conn:
         conn.execute(INIT_DB_SQL.read_text(encoding="utf-8"))
@@ -156,7 +189,7 @@ def _gieo_du_lieu(dsn: str) -> None:
 
 @pytest.fixture(scope="session")
 def pg_dsn_ai_app() -> Iterator[str]:
-    """DSN kết nối bằng ``ai_app`` tới một Postgres đã nạp đủ V201-V209 và gieo 2 tenant."""
+    """DSN kết nối bằng ``ai_app`` tới một Postgres đã nạp đủ dải V2xx và gieo 2 tenant."""
     with PostgresContainer(
         "pgvector/pgvector:pg16",
         username=OWNER_USER,
