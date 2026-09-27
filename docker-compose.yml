@@ -345,6 +345,42 @@ services:
       start_period: 40s
     networks: [crm]
 
+  # Cùng image với ai-service, vai trò consumer Kafka (§3.9.1) — UC019 nạp tài liệu (ADR-0021).
+  # Không cổng, không Eureka: không ai gọi vào nó, nó chỉ đọc crm.kb.document.uploaded.
+  # Scale bằng replica (cùng group ingestion-cg, Kafka chia partition), KHÔNG tăng tiến trình.
+  ai-worker:
+    build: ./ai-service
+    container_name: crm-ai-worker
+    environment:
+      RUN_MODE: worker
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-thesis_crm}
+      DB_USERNAME: ${AI_DB_USERNAME:-ai_app}
+      DB_PASSWORD: ${AI_DB_PASSWORD:-changeme}
+      # Trong mạng Docker: kafka:9092 (KHÔNG phải localhost:29092 — bẫy hai listener).
+      KAFKA_BOOTSTRAP: kafka:9092
+      KAFKA_CONSUMER_GROUP: ingestion-cg
+      AI_MODE: ${AI_MODE:-mock}
+      EMBED_URL: ${EMBED_URL:-http://host.docker.internal:8081}
+      S3_ENDPOINT: rustfs:9000
+      S3_SECURE: "false"
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-kb-tai-lieu}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-kb-dev}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-changeme-dev}
+    # Luật 4 của worker: SIGTERM → nạp nốt tài liệu đang dở rồi mới thoát. Mặc định 10 s là giết
+    # cứng giữa chừng; 60 s khớp terminationGracePeriodSeconds của §3.10.6.
+    stop_grace_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      rustfs-init:
+        condition: service_completed_successfully
+    networks: [crm]
+
   # ────────────────── QUAN SÁT (profile riêng) ──────────────────
   # Tách sau profile để `docker compose up` mặc định không nặng thêm.
   # Ba bảng điều khiển là đủ: sức khỏe hệ thống, đường ống AI, chỉ số nghiệp vụ (mục 4.5).

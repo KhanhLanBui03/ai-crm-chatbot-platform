@@ -33,6 +33,19 @@ for t in "${TOPICS[@]}"; do
   echo "  ok: $t"
 done
 
+# Hàng đợi chết của ai-service (Master Plan §2.6, ADR-0021). Giữ 30 ngày thay vì mặc định 7:
+# đủ để sửa lỗi rồi phát lại, và khớp hạn dọn ai.processed_events — quá hạn đó không còn bản tin
+# nào để nhận trùng. Khoá vẫn là tenant_id (giữ nguyên khoá của bản tin gốc).
+DLQ_RETENTION_MS=$((30 * 24 * 60 * 60 * 1000))
+docker exec "$CONTAINER" kafka-topics \
+  --bootstrap-server "$BOOTSTRAP" \
+  --create --if-not-exists \
+  --topic "ai.dlq" \
+  --partitions "$PARTITIONS" \
+  --replication-factor "$REPLICATION" \
+  --config "retention.ms=$DLQ_RETENTION_MS"
+echo "  ok: ai.dlq (giữ 30 ngày)"
+
 echo
 echo "Danh sách topic hiện có:"
 docker exec "$CONTAINER" kafka-topics --bootstrap-server "$BOOTSTRAP" --list
