@@ -319,6 +319,8 @@ chỉ chọn model + export, dời đo parity sang sáng Ngày 3.
       *Đây là điểm 1 trong "Mười một điểm cần chốt" của đặc tả UC.*
       **27/09: 4/5 xong** (413/415/409/422 — `docs/report/uc018-e2e-2026-09-27.md`).
       `PARSE_NO_TEXT_EXTRACTED` chỉ đo được khi có parser → tick ở Ngày 4.
+      **27/09 (phiên Ngày 4): mã thứ 5 đã có test** — `test_pdf_scan_chuyen_failed_kem_parse_no_text_extracted`
+      (`tests/integration/test_phan_tich_tai_lieu.py`). Đủ 5/5 → tick khi bạn tự giải thích lại được.
 
 **File sẽ đụng:** `src/api/v1/router.py` · `src/api/v1/endpoints/` · `src/ai/rag/ingest/` ·
 `src/ai/service.py` (facade — Dev B duyệt) · `data/` (tệp mẫu)
@@ -351,21 +353,37 @@ chiếu, đo **Cohen's kappa**, ngồi lại giải quyết mọi ca bất đồ
 - [ ] 🤖 Parser đa định dạng (pymupdf / python-docx / trafilatura) chạy trong
       `ProcessPoolExecutor` **ĐÚNG 1 WORKER** — *verify: đúng 1 worker, không phải mặc định.
       PDF hỏng làm treo tiến trình; tách tiến trình là để **giết được nó** mà không giết cả service.*
+      *(27/09: Claude viết — `rag/ingest/phan_tich.py` + `tien_trinh.py`; test giết-rồi-dựng-lại
+      `test_qua_gio_thi_giet_tien_trinh_con_va_dung_pool_moi`. Chờ bạn đọc từng dòng rồi tick.)*
 - [ ] 🖐 **`normalize_vi` — tự gõ.** Xử lý zero-width, NFD/NFC, `hoà`/`hòa`, ký tự lặp.
       ⚠️ **MỘT HÀM DUY NHẤT dùng cho CẢ hai đầu** — lúc nạp và lúc truy vấn.
       *Hai hàm khác nhau là lỗi thầm lặng: không có exception, chỉ có recall tụt.*
+      *(27/09: Claude viết theo yêu cầu — `src/ai/rag/chuan_hoa.py`. Tick khi bạn tự giải thích lại được.)*
 - [ ] 🖐 **Hàm chia đoạn — tự gõ.** ~500 token, **GIỮ số trang và heading** để trích dẫn được
       (ví dụ `"Bảng giá 2026 > Gói Pro"`).
-- [ ] 🤖 Ghi `content_segmented` bằng `pyvi` — *verify: `ViTokenizer` chạy đúng trên câu có dấu
-      lẫn không dấu.*
+      *(27/09: Claude viết theo yêu cầu — `rag/ingest/chia_doan.py`. Tick khi bạn tự giải thích lại được.)*
+- [ ] ~~🤖 Ghi `content_segmented` bằng `pyvi`~~ → **ĐỔI 27/09 (bạn chốt):** `content_segmented` là
+      cột **GENERATED** `to_tsvector('simple', knowledge.f_unaccent(content))` theo **âm tiết**;
+      `pyvi` chỉ chạy **phía câu hỏi** (`tsquery.py`) để dựng `<->`. Lý do đã đo: (1) pyvi không
+      ghép được từ trong câu không dấu; (2) Postgres coi `_` là dấu tách nên `chính_sách` vẫn thành
+      hai âm tiết — tách từ phía tài liệu không đổi được chỉ mục. Ghi trong V210.
+      *verify: `test_cau_khong_dau_tim_duoc_doan_co_dau`, `test_lien_ke_loai_doan_…`.*
 - [ ] 🖐 `tsvector` bọc `unaccent` trong hàm **IMMUTABLE** (bắt buộc để đánh chỉ mục được).
+      *(27/09: Claude viết theo yêu cầu — V210 `knowledge.f_unaccent`. Đã kiểm ngược: đổi thành
+      STABLE thì V210 lỗi `generation expression is not immutable`. Tick khi bạn tự giải thích lại được.)*
 - [ ] 🖐 **Dựng phrase query — tự gõ:** toán tử **liền kề** cho cụm nhiều âm tiết, phép **OR**
       giữa các từ.
       ⚠️ *Dùng `AND` sẽ trả rỗng ngay khi khách gõ thừa một từ.*
+      *(27/09: Claude viết theo yêu cầu — `src/ai/rag/tsquery.py`. Tick khi bạn tự giải thích lại được.)*
 - [ ] 🤖 Nếu cần cột mới → migration **bắt đầu từ V210** — *verify: không sửa V201–V209 (đã chạy),
       không đụng dải V1xx của Track A.*
+      *(27/09: `V210__unaccent_va_lan_tu_khoa.sql` — Flyway 10 chạy V201→V210 sạch trên CSDL dùng
+      một lần; **CSDL dev đã lên v210** (`scripts/migrate-ai.sh`, 27/09).)*
 - [ ] 🖐 Unit test: `normalize_vi` · `build_tsquery` với câu **KHÔNG DẤU** · PDF scan phải chuyển
       `FAILED` kèm `error_message`.
+      *(27/09: Claude viết theo yêu cầu — `tests/unit/test_{normalize,tsquery,chia_doan,phan_tich}.py`,
+      `tests/integration/test_{tim_khong_dau,phan_tich_tai_lieu}.py`. `pytest tests` **218 passed**.
+      Kiểm ngược: OR→AND, bỏ NFC, bỏ lặp tiêu đề bảng, bỏ điều kiện PENDING → đều đỏ.)*
 
 **File sẽ đụng:** `src/ai/rag/ingest/` · `ai-service/migration/V210__*.sql` (nếu cần) ·
 `tests/unit/test_normalize.py`
@@ -385,6 +403,11 @@ hạn chót tối Ngày 4, trượt là đổ cả Ngày 5–7.
 **Minh chứng báo cáo:** bảng tỉ lệ trích xuất thành công **theo từng định dạng** · phân bố số
 token mỗi đoạn (trung vị ~500) · tỉ lệ khớp truy vấn KHÔNG DẤU **trước/sau** khi bật `unaccent` ·
 ảnh chụp một chunk có heading đầy đủ.
+*27/09: `python -m tests.eval.ngay4_minh_chung --dsn …` in đủ 4 bảng. Số đo lần đầu: trích xuất
+20/20 tệp hợp lệ (PDF scan ra đúng `PARSE_NO_TEXT_EXTRACTED`) · 190 đoạn, trung vị **87** token ước
+lượng (không phải ~500 — ranh giới heading là ranh giới đoạn, xem `chia_doan.py`) · khớp không dấu
+**28,9% → 88,8%**, top-5 `ts_rank` **10,7% → 40,1%** (187 truy vấn sinh từ heading). Bản đầy đủ:
+`docs/report/uc019-ngay4-2026-09-27.md`.*
 
 ---
 
