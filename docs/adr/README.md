@@ -32,5 +32,6 @@ Mỗi quyết định kiến trúc một file. Nguồn trực tiếp cho **chư�
 | 0015 | Cấu trúc `src/` + tách tầng suy luận `inference/` theo Master Plan v8.0 | Thay ADR-0010 |
 | 0016 | Role runtime tên `ai_app`; nhãn kết quả Lead vào `sales.lead_scores` | Lệch Master Plan |
 | 0017 | Chốt 4 mâu thuẫn hợp đồng (endpoint, topic, golden set, tập test) + siết CI | Rà soát Tuần 1 |
+| 0018 | Bỏ nhánh A (TF-IDF + LinearSVC), ưu tiên nhánh C (ai-embed) và nhánh B (XLM-R) | Quyết định phạm vi Ngày 4-5 |
 
 `KH` = tài liệu `Ke-hoach-do-an-Chatbot-AI-CRM-v2-nhom-2-nguoi.docx`.
