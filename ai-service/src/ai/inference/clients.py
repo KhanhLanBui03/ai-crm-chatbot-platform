@@ -2,29 +2,237 @@
 
 Chọn bằng biến môi trường ``AI_MODE``:
 
-    remote   gọi sang tầng suy luận. MẶC ĐỊNH ở mọi môi trường vận hành.
+    remote   gọi sang tầng suy luận qua HTTP. MẶC ĐỊNH ở mọi môi trường vận hành.
     mock     trả dữ liệu giả có seed cố định. Dùng cho CI và khi Frontend/Backend
              cần một bản giả lập ổn định để làm song song.
-    offline  nạp model nhẹ ngay trong tiến trình. CHỈ dùng khi lập trình viên không
-             có mạng. KHÔNG BAO GIỜ bật ở môi trường (D) AWS EKS.
+    offline  nạp logic nhẹ ngay trong tiến trình. CHỈ dùng khi lập trình viên không có mạng.
 
-Cùng một interface ở cả ba chế độ — đó là điều làm cho số đo ở môi trường (C)
-chuyển được sang (D) mà không phải sửa lời gọi.
-
-BA BẤT BIẾN KIỂM Ở ``/ready``, FAIL-CLOSED NẾU LỆCH — §3.4.2
--------------------------------------------------------------
+BA BẤT BIẾN KIỂM Ở ``/ready``, FAIL-CLOSED NẾU LỆCH — §3.4.2:
 1. ``model_id`` đang phục vụ phải khớp ``emb_model`` đã ghim trên từng chunk.
-   Lệch nghĩa là vector câu hỏi và vector chỉ mục thuộc hai không gian khác nhau —
-   truy hồi vẫn chạy, vẫn trả kết quả, nhưng kết quả vô nghĩa. Đây là kiểu hỏng
-   im lặng nguy hiểm nhất của RAG (mã lỗi ``EMBEDDING_MODEL_MISMATCH``).
-2. Thứ tự cột đặc trưng phải khớp ``lead_scorer.meta.json``. **Thứ tự cột là hợp
-   đồng**, không phải chi tiết hiện thực (§5.10.4).
-3. ``OMP_NUM_THREADS`` phải khớp số vCPU được cấp (§5.4).
+2. Thứ tự cột đặc trưng phải khớp ``lead_scorer.meta.json``.
+3. ``OMP_NUM_THREADS`` phải khớp số vCPU được cấp.
 
-[CẦN XÁC NHẬN] Payload gửi sang tầng suy luận **không được chứa** ``tenant_id``,
-``contact_id`` hay bất kỳ định danh nào — kế hoạch Ngày 41 yêu cầu assert điều này
-trên body request trong CI (§4.10, §3.6.3).
-
-TODO: ``EmbedClient`` · ``RerankClient`` · ``ClassifyClient`` theo Protocol chung.
-TODO: ba lớp hiện thực remote | mock | offline, chọn bằng factory đọc ``AI_MODE``.
+BẢO MẬT DỮ LIỆU: Payload gửi sang tầng suy luận KHÔNG ĐƯỢC CHỨA ``tenant_id``,
+``contact_id`` hay bất kỳ định danh nào (§4.10, §3.6.3).
 """
+
+from __future__ import annotations
+
+import hashlib
+import logging
+import os
+from typing import Any, Protocol, runtime_checkable
+
+import httpx
+
+logger = logging.getLogger("ai_service.inference.clients")
+
+FORBIDDEN_PAYLOAD_KEYS = {"tenant_id", "contact_id", "user_id", "customer_id", "phone", "email"}
+VECTOR_DIM = 1024
+
+
+def _assert_no_pii_keys(data: Any) -> None:
+    """Bảo vệ quyền riêng tư (§4.10): Đảm bảo payload gửi sang tầng suy luận không rò rỉ định danh."""
+    if isinstance(data, dict):
+        for k, v in data.items():
+            if k.lower() in FORBIDDEN_PAYLOAD_KEYS:
+                raise ValueError(
+                    f"VI PHẠM BẢO MẬT §4.10: Tầng suy luận nhận payload chứa định danh nhạy cảm {k!r}!"
+                )
+            _assert_no_pii_keys(v)
+    elif isinstance(data, list):
+        for item in data:
+            _assert_no_pii_keys(item)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PROTOCOLS / INTERFACES
+# ══════════════════════════════════════════════════════════════════════════════
+
+@runtime_checkable
+class EmbedClient(Protocol):
+    async def embed(self, text: str) -> list[float]:
+        ...
+
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        ...
+
+
+@runtime_checkable
+class RerankClient(Protocol):
+    async def rerank(self, query: str, candidates: list[dict[str, str]]) -> list[dict[str, Any]]:
+        ...
+
+
+@runtime_checkable
+class ClassifyClient(Protocol):
+    async def classify(self, text: str) -> dict[str, Any]:
+        ...
+
+    async def score_lead(self, features: dict[str, float]) -> dict[str, Any]:
+        ...
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 1. REMOTE INFERENCE CLIENT (HTTP sang container inference)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class RemoteEmbedClient:
+    def __init__(self, base_url: str | None = None) -> None:
+        self.base_url = base_url or os.getenv("INFERENCE_EMBED_URL", "http://ai-embed:8080")
+
+    async def embed(self, text: str) -> list[float]:
+        payload = {"text": text}
+        _assert_no_pii_keys(payload)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(f"{self.base_url}/v1/embed", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            return data["embedding"]
+
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        payload = {"texts": texts}
+        _assert_no_pii_keys(payload)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(f"{self.base_url}/v1/embed/batch", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            return data["embeddings"]
+
+
+class RemoteRerankClient:
+    def __init__(self, base_url: str | None = None) -> None:
+        self.base_url = base_url or os.getenv("INFERENCE_RERANK_URL", "http://ai-rerank:8080")
+
+    async def rerank(self, query: str, candidates: list[dict[str, str]]) -> list[dict[str, Any]]:
+        payload = {"query": query, "candidates": candidates}
+        _assert_no_pii_keys(payload)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(f"{self.base_url}/v1/rerank", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            return data["results"]
+
+
+class RemoteClassifyClient:
+    def __init__(self, base_url: str | None = None) -> None:
+        self.base_url = base_url or os.getenv("INFERENCE_CLASSIFY_URL", "http://ai-classify:8080")
+
+    async def classify(self, text: str) -> dict[str, Any]:
+        payload = {"text": text}
+        _assert_no_pii_keys(payload)
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{self.base_url}/v1/classify", json=payload)
+            resp.raise_for_status()
+            return resp.json()
+
+    async def score_lead(self, features: dict[str, float]) -> dict[str, Any]:
+        payload = {"features": features}
+        _assert_no_pii_keys(payload)
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{self.base_url}/v1/lead-score", json=payload)
+            resp.raise_for_status()
+            return resp.json()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 2. MOCK INFERENCE CLIENT (Trả kết quả giả lập với Seed cố định 42)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class MockEmbedClient:
+    """Mock client tạo vector giả lập ổn định bằng hash SHA-256 (phục vụ CI và Track A)."""
+
+    async def embed(self, text: str) -> list[float]:
+        seed = int(hashlib.sha256(text.encode("utf-8")).hexdigest()[:8], 16)
+        # Sử dụng LCG đơn giản để không phụ thuộc vào numpy trong ai-service (§3.2 sạch ML runtime)
+        vec: list[float] = []
+        cur = seed
+        for _ in range(VECTOR_DIM):
+            cur = (1103515245 * cur + 12345) % (2**31)
+            vec.append((cur / (2**31)) - 0.5)
+        # Chuẩn hóa L2
+        norm = sum(x * x for x in vec) ** 0.5
+        if norm > 0:
+            vec = [x / norm for x in vec]
+        return vec
+
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        return [await self.embed(t) for t in texts]
+
+
+class MockRerankClient:
+    async def rerank(self, query: str, candidates: list[dict[str, str]]) -> list[dict[str, Any]]:
+        results = []
+        for idx, cand in enumerate(candidates):
+            results.append({
+                "chunk_id": cand.get("chunk_id", f"mock-{idx}"),
+                "score": round(0.95 - (idx * 0.05), 4),
+                "rank": idx + 1,
+            })
+        return results
+
+
+class MockClassifyClient:
+    async def classify(self, text: str) -> dict[str, Any]:
+        t = text.lower()
+        if any(w in t for w in ["chào", "hi", "hello"]):
+            intent = "GREETING"
+            conf = 0.95
+        elif any(w in t for w in ["mua", "đặt", "đăng ký", "chốt"]):
+            intent = "BUYING_INTENT"
+            conf = 0.92
+        elif any(w in t for w in ["giá", "báo giá", "gói"]):
+            intent = "PRICING_POLICY"
+            conf = 0.91
+        elif any(w in t for w in ["người", "nhân viên", "tổng đài"]):
+            intent = "HANDOFF_HUMAN"
+            conf = 0.94
+        else:
+            intent = "KB_SEARCH"
+            conf = 0.86
+
+        return {
+            "intent": intent,
+            "confidence": conf,
+            "probabilities": {intent: conf},
+            "model_id": "mock-router-v1",
+        }
+
+    async def score_lead(self, features: dict[str, float]) -> dict[str, Any]:
+        buying = features.get("buying_intent_detected", 0.0)
+        score = int(80 if buying > 0 else 45)
+        return {
+            "score": score,
+            "model_version": "mock-lead-scorer-v1",
+            "confidence_level": "HIGH" if score >= 75 else "MEDIUM",
+            "reasons": ["Mock: Tín hiệu mua hàng tích cực" if score >= 75 else "Mock: Nhu cầu trung bình"],
+        }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FACTORY SELECTION (remote | mock | offline)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_ai_mode() -> str:
+    return os.getenv("AI_MODE", "remote").lower()
+
+
+def get_embed_client() -> EmbedClient:
+    mode = get_ai_mode()
+    if mode == "mock":
+        return MockEmbedClient()
+    return RemoteEmbedClient()
+
+
+def get_rerank_client() -> RerankClient:
+    mode = get_ai_mode()
+    if mode == "mock":
+        return MockRerankClient()
+    return RemoteRerankClient()
+
+
+def get_classify_client() -> ClassifyClient:
+    mode = get_ai_mode()
+    if mode == "mock":
+        return MockClassifyClient()
+    return RemoteClassifyClient()

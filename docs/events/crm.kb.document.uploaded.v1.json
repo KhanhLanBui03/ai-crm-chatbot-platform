@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thesis-crm-ai/events/crm.kb.document.uploaded.v1.json",
+  "title": "crm.kb.document.uploaded.v1",
+  "description": "Tài liệu tri thức được tải lên, kích hoạt pipeline nạp và phân đoạn (UC018/019). Consumer: ingestion-cg.",
+  "type": "object",
+  "required": ["event_id", "event_version", "event_type", "tenant_id", "occurred_at", "payload"],
+  "properties": {
+    "event_id": { "type": "integer", "description": "outbox_events.id — dùng để chống xử lý trùng" },
+    "event_version": { "type": "integer", "const": 1 },
+    "event_type": { "type": "string", "enum": ["DocumentUploaded"] },
+    "tenant_id": { "type": "string", "format": "uuid", "description": "khóa phân vùng Kafka" },
+    "aggregate_id": { "type": "string", "format": "uuid", "description": "document_id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "payload": {
+      "type": "object",
+      "required": ["document_id", "title", "file_path", "source_type"],
+      "properties": {
+        "document_id": { "type": "string", "format": "uuid" },
+        "title": { "type": "string" },
+        "file_path": { "type": "string" },
+        "source_type": { "type": "string", "enum": ["FILE", "TEXT", "URL", "NOTION"] },
+        "file_size": { "type": "integer" },
+        "mime_type": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

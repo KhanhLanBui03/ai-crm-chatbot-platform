@@ -27,12 +27,15 @@ kia trước, không tự sửa cho khớp code của mình."*
 | Tên role runtime | **`ai_app`** — Master Plan §4.2 ghi `ai_service`, tên đó sai | 0016 |
 | Nhãn huấn luyện UC030 | **`sales.lead_scores` + 3 cột**, KHÔNG tạo `ai.lead_features` | 0016 |
 | Số chiều vector · schema kho tri thức | **1024** · **`knowledge.knowledge_*`** | 0015 |
-| Cổng chặn CI | **3 gói** `onnxruntime\|torch\|xgboost` | 0015 |
+| Cổng chặn CI | **3 gói** `onnxruntime\|torch\|xgboost` + **exit 1 khi $\ge 400$ MB** | 0015, 0017 |
+| Bộ tên endpoint AI | **`/v1/ai/**`** theo Master Plan §2.5 | 0017 |
+| Bộ tên topic Kafka | **9 topic** (8 topic Master Plan §2.6 + `crm.deal.closed`) | 0017 |
+| Chỗ đặt bộ vàng | **`ai-service/tests/eval/golden_set.jsonl`** | 0017 |
+| Cỡ tập test người thật | **200 câu** cho nhóm 2 người trong 21 ngày | 0017 |
 
 ## Còn treo
 
 | # | Vấn đề | Hai nguồn |
 |---|---|---|
-| 1 | **Bộ tên topic Kafka** — *hoãn có chủ đích, chốt ở Ngày 12* | §2.6 khai 8 topic (`crm.kb.document.uploaded`, `crm.conversation.closed`, `ai.kb.document.indexed`, `ai.lead.signal.detected`, `ai.handoff.requested`, `ai.tool_call.audited`, `ai.turn.completed`, `ai.dlq`); `scripts/create-topics.sh` + `docs/events/` vẫn ở 5 topic `crm.*.v1`. `Dac-ta-UseCase-Module-AI.docx` điểm #7 đề xuất theo bộ của kế hoạch. **`crm.deal.closed` chưa có trong cả hai bộ** — cần cho vòng phản hồi UC030 |
-| 2 | **Mã lỗi hạn mức UC018** | `dashboard-api.yaml` gộp "vượt hạn mức" và "vượt dung lượng" vào 409; đặc tả UC đề xuất tách 409 / 413 / 415 |
-| 3 | **Enum vận chuyển và xác thực MCP** | Hợp đồng khai `HTTP_SSE`/`STREAMABLE_HTTP` + `BEARER`; `V205` khai `HTTP`/`SSE`/`STDIO`, không có `BEARER` |
+| 1 | **Mã lỗi hạn mức UC018** | `dashboard-api.yaml` gộp "vượt hạn mức" và "vượt dung lượng" vào 409; đặc tả UC đề xuất tách 409 / 413 / 415 |
+| 2 | **Enum vận chuyển và xác thực MCP** | Hợp đồng khai `HTTP_SSE`/`STREAMABLE_HTTP` + `BEARER`; `V205` khai `HTTP`/`SSE`/`STDIO`, không có `BEARER` |

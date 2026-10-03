@@ -1,223 +1,1217 @@
 # Giao ước: java-core GỌI ai-service
-# Track B viết đặc tả, Track A rà soát. Hạn chốt: 07/09 (kế hoạch mục 1.3).
+# Track B viết đặc tả, Track A rà soát.
+# Căn cứ: ADR-0014 (java-core làm mặt tiền duy nhất) và ADR-0017 (chuẩn hóa họ /v1/ai/**).
 #
-# HAI NHÓM, HAI LÝ DO TỒN TẠI KHÁC NHAU — đừng trộn khi đọc:
+# HAI NHÓM, HAI LÝ DO TỒN TẠI KHÁC NHAU:
 #
-#   A. Nhóm XỬ LÝ (/v1/answer, /v1/summarize, /v1/leads/score, /v1/documents/ingest)
-#      java-core nhờ ai-service làm một việc tốn mô hình. Có từ đầu.
+#   A. Nhóm XỬ LÝ (/v1/ai/**)
+#      java-core nhờ ai-service làm việc tốn mô hình (chat, tóm tắt, chấm điểm lead, nạp tri thức).
 #
-#   B. Nhóm ĐỌC BỀ MẶT DASHBOARD (mục B bên dưới) — thêm 25/08/2026, xem ADR-0014.
+#   B. Nhóm ĐỌC BỀ MẶT DASHBOARD (mục B bên dưới) — ADR-0014.
 #      dashboard-api.yaml giao cho java-core phục vụ CẢ 78 đường dẫn, trong đó 17
 #      đường đọc dữ liệu ở schema knowledge/ai/integration. Mà V111 không cấp cho
-#      crm_app USAGE trên ba schema đó — cố ý, đúng ADR-0002. Không có nhóm B thì
-#      13 màn (SCR029–040, SCR051, SCR054) không có đường lấy dữ liệu nào.
+#      crm_app USAGE trên ba schema đó — cố ý, đúng ADR-0002.
+#      ai-service trả uuid trần, java-core làm giàu tên người dùng trước khi trả về web-dashboard.
+
 openapi: 3.1.0
 info:
   title: ai-service API (dành cho java-core)
-  version: 0.1.0-draft
+  version: 1.0.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
   description: |
-    java-core gọi được gì để yêu cầu trả lời, yêu cầu tóm tắt, yêu cầu chấm điểm,
-    và để đọc dữ liệu Track B mà dashboard cần.
-    TODO: chốt trước 07/09.
+    Giao diện RESTful của ai-service phục vụ các yêu cầu suy luận mô hình và cung cấp dữ liệu
+    bảng đọc cho java-core theo kiến trúc Contract-First và ADR-0017.
 servers:
   - url: http://ai-service:8000
     description: nội bộ mạng Docker
   - url: http://gateway:8080
     description: qua gateway (lb://ai-service)
 
+security:
+  - bearerAuth: []
+  - internalNetwork: []
+
 paths:
   # ══════════════════════════════════════════════════════════════════════════════
-  # A. Nhóm xử lý — java-core nhờ ai-service làm việc tốn mô hình
+  # A. Nhóm xử lý nghiệp vụ AI (/v1/ai/**) — Master Plan §2.5, ADR-0017
   # ══════════════════════════════════════════════════════════════════════════════
-  /v1/answer:
+
+  /v1/ai/chat:
     post:
+      operationId: answerChatTurn
       summary: Sinh câu trả lời cho một lượt hội thoại
       description: |
-        Đi qua đồ thị LangGraph. Trả về câu trả lời kèm trích dẫn chunk_id, hoặc
-        cờ `refused` khi không đủ căn cứ, hoặc cờ `handoff` khi cần chuyển nhân viên.
-      # TODO: request (tenant_id, conversation_id, message, history), response (answer,
-      #       citations[], route, refused, handoff, groundedness_score, latency_ms, cost_vnd)
+        Đi qua router ý định và đồ thị RAG / LangGraph. Trả về câu trả lời kèm trích dẫn
+        chunk_id, hoặc cờ refused khi không đủ căn cứ, hoặc cờ handoff khi cần chuyển nhân viên.
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: Sinh phản hồi hội thoại thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
-  /v1/summarize:
+  /v1/ai/summarize:
     post:
+      operationId: summarizeConversation
       summary: Tóm tắt một hội thoại
-      # TODO
+      description: |
+        Trích xuất 4 phần có cấu trúc từ lịch sử hội thoại: nhu cầu chính, thông tin đã cung cấp,
+        vấn đề chưa giải quyết và bước tiếp theo (UC026).
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SummarizeRequest'
+      responses:
+        '200':
+          description: Bản tóm tắt hội thoại có cấu trúc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummarizeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
-  /v1/leads/score:
+  /v1/ai/lead-score:
     post:
+      operationId: scoreLeadConversation
       summary: Chấm điểm một lead từ nội dung hội thoại
-      # TODO: trả về score, model_version, features (jsonb) — java-core ghi vào sales.LEAD_SCORES
+      description: |
+        Sử dụng mô hình phân loại kết hợp trích xuất đặc trưng để tính điểm 0-100, mức độ tin cậy,
+        các mã lý do giải thích theo SHAP (UC030).
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadScoreRequest'
+      responses:
+        '200':
+          description: Kết quả chấm điểm lead
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadScoreResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
-  /v1/documents/ingest:
+  /v1/ai/kb/documents:
     post:
+      operationId: ingestKnowledgeDocument
       summary: Nạp một tài liệu vào chỉ mục tri thức
-      description: Thường được kích hoạt bất đồng bộ qua topic `crm.document.v1`.
-      # TODO
+      description: Tiếp nhận tài liệu, phân đoạn (chunking), sinh embedding và lưu trữ vector (UC018/019).
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestDocumentRequest'
+      responses:
+        '201':
+          description: Tài liệu đã được tiếp nhận và đưa vào hàng đợi nạp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestDocumentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/ai/kb/documents/{documentId}:
+    delete:
+      operationId: deleteKnowledgeDocument
+      summary: Gỡ bỏ tài liệu và toàn bộ chunk liên quan
+      description: Xóa logic hoặc vật lý tài liệu trong schema knowledge và chỉ mục vector HNSW (UC020).
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Gỡ bỏ tài liệu thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/ai/kb/reindex:
+    post:
+      operationId: reindexKnowledgeBase
+      summary: Lập lại chỉ mục toàn bộ tài liệu cho tenant
+      description: Kích hoạt pipeline tái nhúng toàn bộ chunk khi nâng cấp model embedding (UC020).
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Đã kích hoạt tác vụ tái lập chỉ mục
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReindexResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/ai/extract:
+    post:
+      operationId: extractSignals
+      summary: Trích xuất thực thể và tín hiệu bán hàng từ hội thoại
+      description: Nhận diện nhu cầu, thông tin liên hệ, ngân sách và tín hiệu mua hàng (UC029).
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtractRequest'
+      responses:
+        '200':
+          description: Kết quả trích xuất thực thể
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/ai/feedback:
+    post:
+      operationId: recordFeedback
+      summary: Ghi nhận đánh giá phản hồi chất lượng câu trả lời
+      description: Thu thập phản hồi thích/không thích (thumb up/down) và câu trả lời điều chỉnh từ người dùng (UC027).
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+      responses:
+        '200':
+          description: Đã ghi nhận phản hồi thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionSuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   # ══════════════════════════════════════════════════════════════════════════════
   # B. Bề mặt đọc cho dashboard — ADR-0014
-  #
-  # Mỗi đường dẫn ở đây ánh xạ 1–1 với một đường dẫn /api/v1/* của dashboard-api.yaml.
-  # java-core nhận request của dashboard, gọi xuống đây, rồi LÀM GIÀU trước khi trả về.
-  #
-  # LÀM GIÀU LÀ PHẦN KHÔNG BỎ ĐƯỢC, không phải tiện ích:
-  # ba trường uploadedByName · approvedByName · contactName nằm trong hợp đồng
-  # dashboard nhưng KHÔNG bảng nào của Track B có. Bảng Track B chỉ giữ uuid trần
-  # (uploaded_by, approved_by) vì tham chiếu liên làn không có khoá ngoại, và ai_app
-  # không có USAGE trên platform/engagement. java-core là nơi DUY NHẤT nối được hai
-  # đầu — nên ai-service trả uuid, java-core đổi thành tên.
-  #
-  # Hệ quả cho Track B: mọi phản hồi ở nhóm B trả uuid trần, KHÔNG cố đoán tên người.
   # ══════════════════════════════════════════════════════════════════════════════
 
-  # --- Kho tri thức (knowledge) — SCR029–SCR033, UC018–UC020 ---
   /v1/documents:
     get:
+      operationId: listDocuments
       summary: Danh sách tài liệu — nguồn của GET /api/v1/documents
-      description: |
-        java-core làm giàu `uploaded_by` → `uploadedByName` từ `platform.users`.
+      description: java-core làm giàu `uploaded_by` -> `uploadedByName` từ `platform.users`.
       parameters:
-        - { name: page,       in: query, schema: { type: integer, default: 0 } }
-        - { name: size,       in: query, schema: { type: integer, default: 20 } }
-        - { name: keyword,    in: query, schema: { type: string } }
-        - { name: status,     in: query, schema: { type: string } }
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+        - { name: page, in: query, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, default: 20 } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
         - { name: sourceType, in: query, schema: { type: string } }
-      # TODO: response — Page<TaiLieu> nhưng với uploadedBy (uuid) thay uploadedByName
+      responses:
+        '200':
+          description: Danh sách tài liệu kèm phân trang
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentPageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
+      operationId: uploadDocumentProxy
       summary: Nhận tài liệu tải lên — nguồn của POST /api/v1/documents
-      description: |
-        multipart. java-core kiểm hạn mức `max_documents` và `STORAGE_MB` TRƯỚC khi
-        chuyển tiếp — hạn mức nằm ở `platform.subscription_plans`, ai-service không
-        đọc được. Tài liệu vào `PENDING`, ai-service tự chạy nạp bất đồng bộ.
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestDocumentRequest'
+      responses:
+        '201':
+          description: Tiếp nhận tài liệu thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestDocumentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /v1/documents/{documentId}:
     get:
+      operationId: getDocumentDetail
       summary: Chi tiết tài liệu — nguồn của GET /api/v1/documents/{documentId}
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Chi tiết tài liệu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
+      operationId: deleteDocumentProxy
       summary: Gỡ tài liệu — nguồn của DELETE /api/v1/documents/{documentId}
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Đã gỡ tài liệu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /v1/documents/{documentId}/reindex:
     post:
-      summary: Nạp lại và lập chỉ mục — UC019, SCR033
-      # TODO
+      operationId: reindexSingleDocument
+      summary: Nạp lại và lập chỉ mục cho một tài liệu — UC019, SCR033
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Đã đưa tài liệu vào hàng đợi nạp lại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /v1/documents/{documentId}/chunks:
     get:
+      operationId: listDocumentChunks
       summary: Các đoạn của tài liệu — SCR032
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/DocumentId'
+        - { name: page, in: query, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: Danh sách các đoạn chunk của tài liệu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChunkPageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /v1/knowledge/search:
     post:
+      operationId: testSearchKnowledge
       summary: Tìm thử trên kho tri thức — SCR031, UC020
       description: |
-        Trả về cả thứ hạng của hai làn truy hồi (`vectorRank`, `keywordRank`) trước khi
-        hợp nhất RRF — đó là thứ làm SCR031 có giá trị chứng minh cho ADR-0006.
-      # TODO
+        Trả về cả thứ hạng của hai làn truy hồi (vectorRank, keywordRank) trước khi
+        hợp nhất RRF — chứng minh cho ADR-0006.
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: { type: string }
+                top_k: { type: integer, default: 5 }
+      responses:
+        '200':
+          description: Kết quả tìm kiếm tri thức lai
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Citation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /v1/ingestion-jobs:
     get:
+      operationId: listIngestionJobs
       summary: Tiến độ nạp — SCR033
-      description: Chiếu từ `knowledge_documents.status`, không phải bảng riêng.
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Danh sách trạng thái tiến độ nạp
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IngestionJobItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /v1/knowledge-gaps:
     get:
+      operationId: listKnowledgeGaps
       summary: Khoảng trống tri thức — SCR034, UC039 bước 9-10
-      description: |
-        Truy vấn GỘP trên `ai.ai_interactions` (`is_answered = false`, nhóm theo
-        `user_query` đã chuẩn hoá), không phải bảng. Xem ERD mục 11.
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Danh sách các câu hỏi chưa có câu trả lời
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/KnowledgeGapItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
-  # --- Máy chủ MCP và sổ đăng ký công cụ (integration) — SCR037–SCR039, UC021 ---
   /v1/mcp-servers:
     get:
+      operationId: listMcpServers
       summary: Danh sách máy chủ MCP
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Danh sách máy chủ MCP đã đăng ký
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/McpServerItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
+      operationId: createMcpServer
       summary: Thêm máy chủ MCP — SCR038
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpServerCreateRequest'
+      responses:
+        '201':
+          description: Đã tạo máy chủ MCP thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServerItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /v1/mcp-servers/{serverId}:
     get:
+      operationId: getMcpServerDetail
       summary: Chi tiết máy chủ MCP
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Chi tiết máy chủ MCP
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServerItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     patch:
+      operationId: updateMcpServer
       summary: Sửa cấu hình máy chủ MCP
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/ServerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                url: { type: string }
+                enabled: { type: boolean }
+      responses:
+        '200':
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServerItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
+      operationId: deleteMcpServer
       summary: Gỡ máy chủ MCP
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Gỡ bỏ thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /v1/mcp-servers/{serverId}/handshake:
     post:
+      operationId: handshakeMcpServer
       summary: Bắt tay và khám phá công cụ — UC021 bước 5-7
       description: Công cụ mới luôn về `enabled = false` (UC021 bước 7).
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Bắt tay thành công và trả về danh sách công cụ khám phá được
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ToolItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /v1/tools:
     get:
+      operationId: listTools
       summary: Sổ đăng ký công cụ — SCR039
-      description: |
-        Chiếu từ `integration.mcp_servers.tool_schema_cache`. Trả `approved_by` (uuid);
-        java-core đổi thành `approvedByName`.
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Danh sách công cụ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ToolItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /v1/tools/{toolId}:
     patch:
+      operationId: toggleTool
       summary: Bật/tắt và duyệt lược đồ công cụ — UC021 bước 8-9
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/ToolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+      responses:
+        '200':
+          description: Đã cập nhật trạng thái công cụ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
-  # --- Nhật ký của tác tử (ai) — SCR035, SCR036, SCR040, SCR051 ---
   /v1/tool-calls:
     get:
+      operationId: listToolCalls
       summary: Nhật ký gọi công cụ — SCR035, UC024/UC028
-      description: |
-        Trả `conversation_id` (nối qua `ai_interactions`) và `approved_by` dưới dạng
-        uuid; java-core đổi thành `contactName` và `approvedByName`.
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Danh sách lời gọi công cụ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ToolCallItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /v1/tool-calls/{callId}/approval:
     post:
+      operationId: approveToolCall
       summary: Duyệt hoặc từ chối một lời gọi chờ — SCR040, UC024 6.x
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/CallId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [APPROVED, REJECTED] }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Đã cập nhật quyết định duyệt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /v1/ai-interactions:
     get:
+      operationId: listAiInteractions
       summary: Giám sát từng lượt xử lý — SCR036
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Danh sách lượt xử lý
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AiInteractionItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /v1/ai-interactions/{interactionId}/feedback:
     post:
+      operationId: recordInteractionFeedbackProxy
       summary: Ghi đánh giá chất lượng — UC027
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/InteractionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+      responses:
+        '200':
+          description: Ghi nhận đánh giá thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /v1/safety-events:
     get:
+      operationId: listSafetyEvents
       summary: Phần Track B của cảnh báo an toàn — UC040 bước 8
-      description: |
-        CHỈ hai trong ba nguồn: `ai_tool_calls.decision = 'BLOCKED'` và
-        `ai_interactions.safety_flag IS NOT NULL`.
-
-        Nguồn thứ ba — `platform.audit_logs.severity = 'CRITICAL'` — java-core tự đọc
-        rồi trộn vào, sắp chung theo thời gian. Đây là lý do `/safety-events` không thể
-        do một mình bên nào phục vụ, và cũng là lý do không dựng bảng `ai.safety_events`
-        chung: bảng chung buộc java-core ghi vào schema Track B, đúng cái ADR-0002 đóng.
-      # TODO
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Danh sách cảnh báo an toàn từ phía AI
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SafetyEventItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /health:
     get:
+      security: []
+      operationId: checkHealth
       summary: Healthcheck cho Docker Compose và Eureka
+      responses:
+        '200':
+          description: Service hoạt động bình thường
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: UP }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/InternalServerError'
+
+  /ready:
+    get:
+      security: []
+      operationId: checkReadiness
+      summary: Readiness probe kiểm tra 3 bất biến suy luận (§3.4.2)
+      responses:
+        '200':
+          description: Sẵn sàng nhận yêu cầu
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ready: { type: boolean, example: true }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          description: Chưa sẵn sàng nhận yêu cầu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /metrics:
     get:
+      security: []
+      operationId: getMetrics
       summary: Số liệu Prometheus (prometheus-client)
+      responses:
+        '200':
+          description: Số liệu định dạng plain text Prometheus
+          content:
+            text/plain:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Bearer token xác thực dịch vụ nội bộ
+    internalNetwork:
+      type: apiKey
+      name: X-Internal-Token
+      in: header
+      description: Token mạng nội bộ giữa các service
+
   parameters:
     TenantId:
       name: X-Tenant-Id
       in: header
       required: true
-      schema: { type: string, format: uuid }
+      schema:
+        type: string
+        format: uuid
+      description: Mã định danh tenant xác thực qua Gateway
     TraceId:
       name: X-Trace-Id
       in: header
       required: true
-      schema: { type: string }
+      schema:
+        type: string
+      description: Mã vết phân tán liên làn
+    DocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Mã tài liệu tri thức
+    ServerId:
+      name: serverId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Mã máy chủ MCP
+    ToolId:
+      name: toolId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Mã công cụ MCP
+    CallId:
+      name: callId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Mã lời gọi công cụ
+    InteractionId:
+      name: interactionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Mã tương tác AI
+
+  responses:
+    BadRequest:
+      description: Dữ liệu yêu cầu không hợp lệ
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Thiếu header xác thực hoặc tenant context
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Không tìm thấy tài nguyên
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnprocessableEntity:
+      description: Lỗi ngữ nghĩa hoặc vi phạm rule
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalServerError:
+      description: Lỗi máy chủ nội bộ
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: INVALID_ARGUMENT }
+        message: { type: string, example: "Dữ liệu yêu cầu không hợp lệ" }
+        details: { type: object }
+        timestamp: { type: string, format: date-time }
+
+    ActionSuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: "Thao tác thành công" }
+
+    ChatRequest:
+      type: object
+      required: [conversation_id, message]
+      properties:
+        conversation_id: { type: string, format: uuid }
+        message: { type: string, example: "Gói cước bên mình có những tính năng gì?" }
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              role: { type: string, enum: [user, assistant, system] }
+              content: { type: string }
+        metadata: { type: object }
+
+    Citation:
+      type: object
+      required: [chunk_id, document_id, score]
+      properties:
+        chunk_id: { type: string, format: uuid }
+        document_id: { type: string, format: uuid }
+        title: { type: string }
+        snippet: { type: string }
+        score: { type: number, format: float }
+
+    ChatResponse:
+      type: object
+      required: [answer, route, refused, handoff]
+      properties:
+        answer: { type: string }
+        citations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Citation'
+        route: { type: string, enum: [FAST_PATH, RAG, FALLBACK, HANDOFF] }
+        refused: { type: boolean }
+        handoff: { type: boolean }
+        groundedness_score: { type: number, format: float }
+        latency_ms: { type: integer }
+        cost_vnd: { type: number, format: float }
+
+    SummarizeRequest:
+      type: object
+      required: [conversation_id]
+      properties:
+        conversation_id: { type: string, format: uuid }
+        trigger: { type: string, example: CONVERSATION_CLOSED }
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              sender: { type: string }
+              text: { type: string }
+              created_at: { type: string, format: date-time }
+
+    SummarizeResponse:
+      type: object
+      required: [trigger, mainNeed, providedInfo, unresolvedIssues, nextSteps, modelVersion, summaryText]
+      properties:
+        trigger: { type: string }
+        mainNeed: { type: string }
+        providedInfo: { type: string }
+        unresolvedIssues: { type: string }
+        nextSteps: { type: string }
+        modelVersion: { type: string }
+        summaryText: { type: string }
+
+    LeadScoreRequest:
+      type: object
+      required: [conversation_id]
+      properties:
+        conversation_id: { type: string, format: uuid }
+        lead_id: { type: string, format: uuid }
+        signals:
+          type: array
+          items: { type: string }
+        features: { type: object }
+
+    LeadScoreResponse:
+      type: object
+      required: [score, model_version, confidence_level]
+      properties:
+        score: { type: integer, minimum: 0, maximum: 100 }
+        model_version: { type: string }
+        confidence_level: { type: string, enum: [LOW, MEDIUM, HIGH] }
+        reasons:
+          type: array
+          items: { type: string }
+        features: { type: object }
+
+    IngestDocumentRequest:
+      type: object
+      required: [document_id, title, content]
+      properties:
+        document_id: { type: string, format: uuid }
+        title: { type: string }
+        content: { type: string }
+        source_type: { type: string, enum: [FILE, TEXT, URL, NOTION] }
+        metadata: { type: object }
+
+    IngestDocumentResponse:
+      type: object
+      required: [document_id, status]
+      properties:
+        document_id: { type: string, format: uuid }
+        status: { type: string, enum: [PENDING, PROCESSING, INDEXED, FAILED] }
+        chunk_count: { type: integer }
+        message: { type: string }
+
+    ReindexResponse:
+      type: object
+      required: [tenant_id, status]
+      properties:
+        tenant_id: { type: string, format: uuid }
+        status: { type: string, example: ACCEPTED }
+        total_documents: { type: integer }
+
+    ExtractRequest:
+      type: object
+      required: [conversation_id, text]
+      properties:
+        conversation_id: { type: string, format: uuid }
+        text: { type: string }
+
+    ExtractResponse:
+      type: object
+      required: [intent, confidence]
+      properties:
+        intent: { type: string }
+        confidence: { type: number, format: float }
+        entities: { type: object }
+        buying_intent: { type: boolean }
+
+    FeedbackRequest:
+      type: object
+      required: [rating]
+      properties:
+        interaction_id: { type: string, format: uuid }
+        rating: { type: integer, enum: [1, -1] }
+        comment: { type: string }
+        corrected_answer: { type: string }
+
+    DocumentPageResponse:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentDetailResponse'
+        total: { type: integer }
+        page: { type: integer }
+        size: { type: integer }
+
+    DocumentDetailResponse:
+      type: object
+      required: [id, title, status]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        status: { type: string }
+        source_type: { type: string }
+        uploaded_by: { type: string, format: uuid }
+        chunk_count: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    ChunkPageResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              chunk_id: { type: string, format: uuid }
+              content: { type: string }
+              chunk_index: { type: integer }
+        total: { type: integer }
+
+    IngestionJobItem:
+      type: object
+      properties:
+        job_id: { type: string, format: uuid }
+        document_id: { type: string, format: uuid }
+        status: { type: string }
+        progress: { type: integer }
+
+    KnowledgeGapItem:
+      type: object
+      properties:
+        query_text: { type: string }
+        unanswered_count: { type: integer }
+        last_occurred_at: { type: string, format: date-time }
+
+    McpServerItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        transport_type: { type: string }
+        status: { type: string }
+
+    McpServerCreateRequest:
+      type: object
+      required: [name, url]
+      properties:
+        name: { type: string }
+        url: { type: string }
+        transport_type: { type: string, enum: [HTTP_SSE, STDIO] }
+
+    ToolItem:
+      type: object
+      properties:
+        tool_id: { type: string }
+        server_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        enabled: { type: boolean }
+
+    ToolCallItem:
+      type: object
+      properties:
+        call_id: { type: string, format: uuid }
+        tool_name: { type: string }
+        status: { type: string }
+        decision: { type: string }
+
+    AiInteractionItem:
+      type: object
+      properties:
+        interaction_id: { type: string, format: uuid }
+        conversation_id: { type: string, format: uuid }
+        user_query: { type: string }
+        is_answered: { type: boolean }
+
+    SafetyEventItem:
+      type: object
+      properties:
+        event_id: { type: string, format: uuid }
+        severity: { type: string }
+        reason: { type: string }
