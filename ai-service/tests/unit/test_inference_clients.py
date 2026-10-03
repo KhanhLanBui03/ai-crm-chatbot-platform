@@ -1,11 +1,12 @@
 """Kiểm thử inference clients: Chế độ mock và rào chắn quyền riêng tư không rò rỉ PII."""
 
 import asyncio
+
 import pytest
+
 from src.ai.inference.clients import (
-    MockEmbedClient,
     MockClassifyClient,
-    MockRerankClient,
+    MockEmbedClient,
     _assert_no_pii_keys,
 )
 
@@ -49,7 +50,7 @@ def test_mock_classify_client():
 
 
 def test_pii_security_assertion():
-    """Kiểm tra rào chắn bảo mật §4.10: Không bao giờ gửi tenant_id / contact_id sang tầng suy luận."""
+    """Kiểm tra rào chắn bảo mật §4.10: Không gửi định danh sang tầng suy luận."""
     # Payload sạch: Hợp lệ
     clean_payload = {"text": "Xin chào", "context": {"topic": "support"}}
     _assert_no_pii_keys(clean_payload)

@@ -32,13 +32,12 @@ VECTOR_DIM = 1024
 
 
 def _assert_no_pii_keys(data: Any) -> None:
-    """Bảo vệ quyền riêng tư (§4.10): Đảm bảo payload gửi sang tầng suy luận không rò rỉ định danh."""
+    """Bảo vệ quyền riêng tư (§4.10): Đảm bảo payload không rò rỉ định danh."""
     if isinstance(data, dict):
         for k, v in data.items():
             if k.lower() in FORBIDDEN_PAYLOAD_KEYS:
-                raise ValueError(
-                    f"VI PHẠM BẢO MẬT §4.10: Tầng suy luận nhận payload chứa định danh nhạy cảm {k!r}!"
-                )
+                msg = f"VI PHẠM BẢO MẬT §4.10: Payload suy luận chứa định danh nhạy cảm {k!r}!"
+                raise ValueError(msg)
             _assert_no_pii_keys(v)
     elif isinstance(data, list):
         for item in data:
@@ -205,7 +204,9 @@ class MockClassifyClient:
             "score": score,
             "model_version": "mock-lead-scorer-v1",
             "confidence_level": "HIGH" if score >= 75 else "MEDIUM",
-            "reasons": ["Mock: Tín hiệu mua hàng tích cực" if score >= 75 else "Mock: Nhu cầu trung bình"],
+            "reasons": [
+                "Mock: Tín hiệu mua hàng tích cực" if score >= 75 else "Mock: Nhu cầu trung bình"
+            ],
         }
 
 
