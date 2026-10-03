@@ -1,0 +1,200 @@
+{"id": 1, "text": "Xin chào bot, chúc bạn một ngày tốt lành", "intent": "GREETING", "variant": "standard"}
+{"id": 2, "text": "Chào bạn, mình cần hỗ trợ một chút", "intent": "GREETING", "variant": "standard"}
+{"id": 3, "text": "Hello em, có ai trực ở đây không?", "intent": "GREETING", "variant": "standard"}
+{"id": 4, "text": "Hi shop", "intent": "GREETING", "variant": "slang"}
+{"id": 5, "text": "chao b", "intent": "GREETING", "variant": "no_accent"}
+{"id": 6, "text": "alo ad oi", "intent": "GREETING", "variant": "slang"}
+{"id": 7, "text": "Good morning crm", "intent": "GREETING", "variant": "standard"}
+{"id": 8, "text": "Dạ em chào anh chị bên chăm sóc khách hàng", "intent": "GREETING", "variant": "standard"}
+{"id": 9, "text": "Chào buổi chiều nhé", "intent": "GREETING", "variant": "standard"}
+{"id": 10, "text": "chao shop nhe", "intent": "GREETING", "variant": "no_accent"}
+{"id": 11, "text": "Hế nhô bot", "intent": "GREETING", "variant": "slang"}
+{"id": 12, "text": "Alo có ai ở đây ko", "intent": "GREETING", "variant": "slang"}
+{"id": 13, "text": "cho minh hoi ti", "intent": "GREETING", "variant": "no_accent"}
+{"id": 14, "text": "Xin chào", "intent": "GREETING", "variant": "standard"}
+{"id": 15, "text": "Cảm ơn bot nhiều nhé", "intent": "GREETING", "variant": "standard"}
+{"id": 16, "text": "thanks b nhieu nha", "intent": "GREETING", "variant": "slang"}
+{"id": 17, "text": "cam on shop rat nhiet tinh", "intent": "GREETING", "variant": "no_accent"}
+{"id": 18, "text": "Tạm biệt bot, hẹn gặp lại", "intent": "GREETING", "variant": "standard"}
+{"id": 19, "text": "bye bye shop", "intent": "GREETING", "variant": "slang"}
+{"id": 20, "text": "chuc ban mot ngay lam viec vui ve", "intent": "GREETING", "variant": "no_accent"}
+{"id": 21, "text": "Ok cảm ơn bạn đã giải đáp", "intent": "GREETING", "variant": "standard"}
+{"id": 22, "text": "rất vui được nói chuyện với bot", "intent": "GREETING", "variant": "standard"}
+{"id": 23, "text": "Chào em gái trực tổng đài", "intent": "GREETING", "variant": "standard"}
+{"id": 24, "text": "hello crm platform", "intent": "GREETING", "variant": "standard"}
+{"id": 25, "text": "Chao buoi sang ca nha", "intent": "GREETING", "variant": "no_accent"}
+{"id": 26, "text": "Bot oi cho hoi xiu", "intent": "GREETING", "variant": "slang"}
+{"id": 27, "text": "Ok thanks ad nhe", "intent": "GREETING", "variant": "slang"}
+{"id": 28, "text": "Cảm ơn ad nhé, thông tin rất hữu ích", "intent": "GREETING", "variant": "standard"}
+{"id": 29, "text": "Hệ thống CRM bên mình có những tính năng cốt lõi nào?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 30, "text": "Làm thế nào để tích hợp chatbot vào fanpage Facebook?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 31, "text": "Cho mình hỏi cơ chế phân quyền đa khách thuê RLS hoạt động ra sao?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 32, "text": "cách import danh sách khách hàng từ file excel như thế nào", "intent": "KB_SEARCH", "variant": "no_accent"}
+{"id": 33, "text": "huong dan tao webhook ket noi crm", "intent": "KB_SEARCH", "variant": "no_accent"}
+{"id": 34, "text": "Dữ liệu khách hàng được bảo mật bằng tiêu chuẩn gì?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 35, "text": "crm nay co ket noi duoc zalo oa ko ad", "intent": "KB_SEARCH", "variant": "slang"}
+{"id": 36, "text": "Thời gian lưu trữ lịch sử hội thoại là bao lâu?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 37, "text": "cach tao flow chatbot tu dong tra loi tin nhan", "intent": "KB_SEARCH", "variant": "no_accent"}
+{"id": 38, "text": "Cho mình xin tài liệu API kết nối hệ thống ERP ngoài", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 39, "text": "Hệ thống có hỗ trợ gửi email marketing tự động không?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 40, "text": "co the gan tag phan loai khach hang tu dong duoc ko", "intent": "KB_SEARCH", "variant": "slang"}
+{"id": 41, "text": "Tính năng nhận diện giọng nói tiếng Việt hoạt động như thế nào?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 42, "text": "Bên bạn dùng mô hình AI nào để sinh câu trả lời RAG?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 43, "text": "Dung lượng tải lên tối đa cho tài liệu PDF là bao nhiêu MB?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 44, "text": "co tinh nang cham soc khach cu dinh ky k", "intent": "KB_SEARCH", "variant": "slang"}
+{"id": 45, "text": "He thong co chay duoc tren dien thoai di dong ko", "intent": "KB_SEARCH", "variant": "no_accent"}
+{"id": 46, "text": "Làm cách nào để xuất báo cáo doanh số theo tháng?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 47, "text": "Quy trình phê duyệt công cụ MCP diễn ra như thế nào?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 48, "text": "huong dan setup chatbot tren website bang script nhung", "intent": "KB_SEARCH", "variant": "no_accent"}
+{"id": 49, "text": "Hệ thống có tự động lọc số điện thoại bị trùng không?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 50, "text": "Chính sách sao lưu backup dữ liệu định kỳ ra sao?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 51, "text": "crm co tich hop dc voi tong dai voip ko shop", "intent": "KB_SEARCH", "variant": "slang"}
+{"id": 52, "text": "Co the tao bao nhieu tai khoan nhan vien tren mot tenant", "intent": "KB_SEARCH", "variant": "no_accent"}
+{"id": 53, "text": "Cơ chế tóm tắt cuộc gọi và chat hoạt động như thế nào?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 54, "text": "Bot có tự học từ tài liệu nội bộ công ty tải lên không?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 55, "text": "cho xin link doc huong dan su dung tinh nang broadcast", "intent": "KB_SEARCH", "variant": "slang"}
+{"id": 56, "text": "He thong ho tro nhung dinh dang tai lieu nao khi nap tri thuc", "intent": "KB_SEARCH", "variant": "no_accent"}
+{"id": 57, "text": "Có giới hạn số lượng tin nhắn gửi đi trong một ngày không?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 58, "text": "Tính năng phát hiện ngôn từ tiêu cực hoạt động ra sao?", "intent": "KB_SEARCH", "variant": "standard"}
+{"id": 59, "text": "Bảng giá các gói cước dịch vụ bên mình hiện tại thế nào?", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 60, "text": "Gói Pro dành cho doanh nghiệp SME giá bao nhiêu một tháng?", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 61, "text": "chi phi duy tri he thong hang nam la bao nhieu", "intent": "PRICING_POLICY", "variant": "no_accent"}
+{"id": 62, "text": "gia goi enterprise ntn vay ad", "intent": "PRICING_POLICY", "variant": "slang"}
+{"id": 63, "text": "Nếu thanh toán theo năm thì có được chiết khấu giảm giá không?", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 64, "text": "Ben minh co goi mien phi dung thu khong shop", "intent": "PRICING_POLICY", "variant": "no_accent"}
+{"id": 65, "text": "báo ja gói cơ bản cho bên e với", "intent": "PRICING_POLICY", "variant": "typo"}
+{"id": 66, "text": "Gói cước có tính phí thêm khi vượt quá số lượng token không?", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 67, "text": "chi phí mua thêm dung lượng lưu trữ tài liệu là bao nhiêu", "intent": "PRICING_POLICY", "variant": "no_accent"}
+{"id": 68, "text": "Co uu dai gi cho startup moi thanh lap ko ad", "intent": "PRICING_POLICY", "variant": "slang"}
+{"id": 69, "text": "Hợp đồng tối thiểu phải ký bao nhiêu tháng?", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 70, "text": "Thanh toán bằng hình thức nào, có xuất hóa đơn đỏ VAT không?", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 71, "text": "gia tren web da bao gom vat chua b", "intent": "PRICING_POLICY", "variant": "slang"}
+{"id": 72, "text": "Cho mình hỏi giá gói Starter và Pro khác nhau những quyền lợi gì?", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 73, "text": "Nếu hủy gói giữa chừng thì có được hoàn tiền không?", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 74, "text": "Phi nang cap len goi cao hon duoc tinh ntn", "intent": "PRICING_POLICY", "variant": "slang"}
+{"id": 75, "text": "Co phu phi khoi tao he thong ban dau k", "intent": "PRICING_POLICY", "variant": "slang"}
+{"id": 76, "text": "Gói cước 5 triệu/tháng thì được bao nhiêu người dùng cùng lúc?", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 77, "text": "Chính sách hoàn tiền trong vòng 30 ngày áp dụng thế nào?", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 78, "text": "cho e bang bao gia chi tiet qua mail nhe", "intent": "PRICING_POLICY", "variant": "no_accent"}
+{"id": 79, "text": "bang ja dich vu thang nay co khuyen mai j k", "intent": "PRICING_POLICY", "variant": "typo"}
+{"id": 80, "text": "Mua 2 năm có được tặng thêm tháng sử dụng không?", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 81, "text": "Chi phí thuê máy chủ riêng on-premise là bao nhiêu?", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 82, "text": "co phai tra tien them cho moi luot goi ai khong", "intent": "PRICING_POLICY", "variant": "no_accent"}
+{"id": 83, "text": "bên bạn có nhận thanh toán bằng chuyển khoản ngân hàng không", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 84, "text": "Gói dùng thử 14 ngày có bị giới hạn tính năng AI không?", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 85, "text": "Phi duy tri ten mien va ssl rieng la bn", "intent": "PRICING_POLICY", "variant": "slang"}
+{"id": 86, "text": "Cho hỏi chi phí đào tạo nhân viên sử dụng hệ thống", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 87, "text": "Gia theo user hay tinh theo toan bo cong ty vay", "intent": "PRICING_POLICY", "variant": "no_accent"}
+{"id": 88, "text": "Có gói cước riêng cho trường đại học hoặc cơ sở giáo dục không?", "intent": "PRICING_POLICY", "variant": "standard"}
+{"id": 89, "text": "Hôm nay chatbot phản hồi rất chậm, khách hàng bên tôi phàn nàn nhiều", "intent": "COMPLAINT_SUPPORT", "variant": "standard"}
+{"id": 90, "text": "Tôi gửi yêu cầu hỗ trợ từ sáng mà đến giờ chưa ai phản hồi", "intent": "COMPLAINT_SUPPORT", "variant": "standard"}
+{"id": 91, "text": "he thong hay bi delay qua, lam an the nay mat het khach", "intent": "COMPLAINT_SUPPORT", "variant": "no_accent"}
+{"id": 92, "text": "thái độ nhân viên hỗ trợ ca trực tối qua rất thiếu chuyên nghiệp", "intent": "COMPLAINT_SUPPORT", "variant": "standard"}
+{"id": 93, "text": "tai sao tai khoan cua toi lai bi khoa dot ngot the nay", "intent": "COMPLAINT_SUPPORT", "variant": "no_accent"}
+{"id": 94, "text": "Dữ liệu báo cáo hôm qua hiển thị sai lệch hoàn toàn", "intent": "COMPLAINT_SUPPORT", "variant": "standard"}
+{"id": 95, "text": "phan mem loi lien tuc k the chap nhan dc", "intent": "COMPLAINT_SUPPORT", "variant": "slang"}
+{"id": 96, "text": "Tôi yêu cầu hoàn tiền vì dịch vụ không đúng như cam kết lúc tư vấn", "intent": "COMPLAINT_SUPPORT", "variant": "standard"}
+{"id": 97, "text": "Bot trả lời linh tinh làm khách hiểu lầm chính sách công ty tôi", "intent": "COMPLAINT_SUPPORT", "variant": "standard"}
+{"id": 98, "text": "gui ticket ho tro 2 ngay roi chua thay giai quyet", "intent": "COMPLAINT_SUPPORT", "variant": "slang"}
+{"id": 99, "text": "Sao hệ thống tự động trừ tiền trong thẻ mà không gửi thông báo trước?", "intent": "COMPLAINT_SUPPORT", "variant": "standard"}
+{"id": 100, "text": "Tính năng gửi tin hàng loạt bị đứng giữa chừng làm lỡ chiến dịch", "intent": "COMPLAINT_SUPPORT", "variant": "standard"}
+{"id": 101, "text": "chat bot tra loi sai gia san pham cho khach hang roi", "intent": "COMPLAINT_SUPPORT", "variant": "no_accent"}
+{"id": 102, "text": "Tôi rất thất vọng với quy trình bảo hành phần mềm của bên bạn", "intent": "COMPLAINT_SUPPORT", "variant": "standard"}
+{"id": 103, "text": "App bi vang lien tuc khi upload file, de nghi fix gap", "intent": "COMPLAINT_SUPPORT", "variant": "slang"}
+{"id": 104, "text": "Lần thứ 3 trong tuần hệ thống gặp sự cố mất kết nối rồi đấy", "intent": "COMPLAINT_SUPPORT", "variant": "standard"}
+{"id": 105, "text": "sao goi hotline ko ai nghe may vay troi", "intent": "COMPLAINT_SUPPORT", "variant": "slang"}
+{"id": 106, "text": "Toi yeu cau gap nguoi quan ly de khieu nai ve hop dong", "intent": "COMPLAINT_SUPPORT", "variant": "no_accent"}
+{"id": 107, "text": "Tin nhắn của khách bị sót không hiển thị trong hộp thư đến", "intent": "COMPLAINT_SUPPORT", "variant": "standard"}
+{"id": 108, "text": "Bot cứ lặp đi lặp lại một câu không giải quyết được vấn đề", "intent": "COMPLAINT_SUPPORT", "variant": "standard"}
+{"id": 109, "text": "Chat luong dich vu ngay cang di xuong tu khi nang cap phien ban moi", "intent": "COMPLAINT_SUPPORT", "variant": "no_accent"}
+{"id": 110, "text": "Doi ngu ky thuat lam an cau tha qua, bug day ra", "intent": "COMPLAINT_SUPPORT", "variant": "slang"}
+{"id": 111, "text": "Tôi muốn khiếu nại về việc tự ý thay đổi hạn mức sử dụng", "intent": "COMPLAINT_SUPPORT", "variant": "standard"}
+{"id": 112, "text": "Tai sao goi dien thoai cham soc khach hang thai do kho chiu the", "intent": "COMPLAINT_SUPPORT", "variant": "no_accent"}
+{"id": 113, "text": "He thong tinh sai so luong tin nhan da gui thang nay", "intent": "COMPLAINT_SUPPORT", "variant": "no_accent"}
+{"id": 114, "text": "Đề nghị bồi thường thiệt hại do gián đoạn dịch vụ chiều nay", "intent": "COMPLAINT_SUPPORT", "variant": "standard"}
+{"id": 115, "text": "Khach ben e keu bot tra loi ngu ngoc k dung trong tam", "intent": "COMPLAINT_SUPPORT", "variant": "slang"}
+{"id": 116, "text": "Toi muon huy hop dong ngay lap tuc vi qua that vong", "intent": "COMPLAINT_SUPPORT", "variant": "no_accent"}
+{"id": 117, "text": "Cho tôi gặp nhân viên tư vấn trực tiếp", "intent": "HANDOFF_HUMAN", "variant": "standard"}
+{"id": 118, "text": "Tôi muốn nói chuyện với người thật, không muốn chat với bot nữa", "intent": "HANDOFF_HUMAN", "variant": "standard"}
+{"id": 119, "text": "chuyen may gap tu van vien giup toi", "intent": "HANDOFF_HUMAN", "variant": "no_accent"}
+{"id": 120, "text": "cho gap nguoi that di ad", "intent": "HANDOFF_HUMAN", "variant": "slang"}
+{"id": 121, "text": "Chuyển cuộc gọi này sang bộ phận kỹ thuật giúp mình", "intent": "HANDOFF_HUMAN", "variant": "standard"}
+{"id": 122, "text": "Co ai truc tong dai truc tiep khong a", "intent": "HANDOFF_HUMAN", "variant": "no_accent"}
+{"id": 123, "text": "connect voi nhan vien di bot oi", "intent": "HANDOFF_HUMAN", "variant": "slang"}
+{"id": 124, "text": "Tôi cần người hỗ trợ giải quyết gấp vấn đề này", "intent": "HANDOFF_HUMAN", "variant": "standard"}
+{"id": 125, "text": "Chuyển sang nhân viên chăm sóc khách hàng giúp em với", "intent": "HANDOFF_HUMAN", "variant": "standard"}
+{"id": 126, "text": "gap nhan vien sales tu van giup minh", "intent": "HANDOFF_HUMAN", "variant": "no_accent"}
+{"id": 127, "text": "Cho e xin so dien thoai cua quan ly truc tiep", "intent": "HANDOFF_HUMAN", "variant": "slang"}
+{"id": 128, "text": "Bot không hiểu ý tôi, làm ơn chuyển cho nhân viên", "intent": "HANDOFF_HUMAN", "variant": "standard"}
+{"id": 129, "text": "minh muon trao doi truc tiep voi chuyen vien phan mem", "intent": "HANDOFF_HUMAN", "variant": "no_accent"}
+{"id": 130, "text": "chuyen sang agent di", "intent": "HANDOFF_HUMAN", "variant": "slang"}
+{"id": 131, "text": "Cần một bạn nhân viên gọi điện tư vấn trực tiếp", "intent": "HANDOFF_HUMAN", "variant": "standard"}
+{"id": 132, "text": "Co nhan vien nao online ko giup minh voi", "intent": "HANDOFF_HUMAN", "variant": "no_accent"}
+{"id": 133, "text": "Chuyển tiếp tin nhắn này cho bạn phụ trách tài chính nhé", "intent": "HANDOFF_HUMAN", "variant": "standard"}
+{"id": 134, "text": "Tôi muốn gặp trưởng phòng kinh doanh để bàn hợp tác", "intent": "HANDOFF_HUMAN", "variant": "standard"}
+{"id": 135, "text": "cho gap ho tro vien gap", "intent": "HANDOFF_HUMAN", "variant": "slang"}
+{"id": 136, "text": "alo co nguoi that o day k", "intent": "HANDOFF_HUMAN", "variant": "slang"}
+{"id": 137, "text": "Chuyển máy cho kỹ thuật viên IT phụ trách tích hợp", "intent": "HANDOFF_HUMAN", "variant": "standard"}
+{"id": 138, "text": "bot tam dung di de e nc voi nguoi", "intent": "HANDOFF_HUMAN", "variant": "slang"}
+{"id": 139, "text": "Làm ơn nối máy với nhân viên trực ban", "intent": "HANDOFF_HUMAN", "variant": "standard"}
+{"id": 140, "text": "Can nguoi xu ly ho so nay truc tiep", "intent": "HANDOFF_HUMAN", "variant": "no_accent"}
+{"id": 141, "text": "Chuyển cuộc hội thoại này sang nhân viên hỗ trợ cấp 2", "intent": "HANDOFF_HUMAN", "variant": "standard"}
+{"id": 142, "text": "Toi can mot ban telesale goi lai cho toi so 0912345678", "intent": "HANDOFF_HUMAN", "variant": "no_accent"}
+{"id": 143, "text": "Chuyển sang human agent ngay", "intent": "HANDOFF_HUMAN", "variant": "slang"}
+{"id": 144, "text": "Cho mình kết nối với bộ phận chăm sóc khách hàng cá nhân", "intent": "HANDOFF_HUMAN", "variant": "standard"}
+{"id": 145, "text": "Hệ thống báo lỗi 500 khi tôi nhấn lưu cấu hình chatbot", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 146, "text": "Tôi không thể đăng nhập vào bảng điều khiển admin, báo sai mật khẩu dù đã reset", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 147, "text": "app bi loi khong load duoc danh sach tin nhan", "intent": "TECH_ERROR", "variant": "no_accent"}
+{"id": 148, "text": "sao khong upload duoc file pdf vay ad bao loi 413", "intent": "TECH_ERROR", "variant": "slang"}
+{"id": 149, "text": "Hàm webhook trả về lỗi connection timeout liên tục", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 150, "text": "Trang dashboard bị màn hình trắng xóa không hiển thị dữ liệu", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 151, "text": "bi loi 401 unauthorized khi goi api lay thong tin lead", "intent": "TECH_ERROR", "variant": "slang"}
+{"id": 152, "text": "Vector search báo lỗi dimension mismatch 768 vs 1024", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 153, "text": "Khong the export du lieu ra file excel bi crash", "intent": "TECH_ERROR", "variant": "no_accent"}
+{"id": 154, "text": "Database bao loi qua tai ket noi pool acquire timeout", "intent": "TECH_ERROR", "variant": "no_accent"}
+{"id": 155, "text": "Tin nhắn gửi đi bị kẹt ở trạng thái sending không chuyển sang sent", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 156, "text": "Token xác thực JWT bị hết hạn liên tục dù mới đăng nhập 5 phút", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 157, "text": "loi kafka consumer khong nhan duoc message tu topic", "intent": "TECH_ERROR", "variant": "no_accent"}
+{"id": 158, "text": "Man hinh dang nhap bi do tren trinh duyet safari", "intent": "TECH_ERROR", "variant": "no_accent"}
+{"id": 159, "text": "Báo lỗi invalid uuid format khi truy vấn chi tiết cuộc hội thoại", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 160, "text": "Gặp lỗi CORS khi gọi từ web widget lên backend", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 161, "text": "Server bi crash moi khi chay batch embedding", "intent": "TECH_ERROR", "variant": "slang"}
+{"id": 162, "text": "Tính năng tìm kiếm toàn văn bản FTS không trả về kết quả nào", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 163, "text": "loi phan quyen rls khong xem duoc du lieu cua chi nhanh", "intent": "TECH_ERROR", "variant": "no_accent"}
+{"id": 164, "text": "Postgres bao loi deadlock detected tren bang conversations", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 165, "text": "Bi loi 502 bad gateway moi khi upload file tren 10mb", "intent": "TECH_ERROR", "variant": "slang"}
+{"id": 166, "text": "Khong nhan duoc otp qua email de xac thuc tai khoan", "intent": "TECH_ERROR", "variant": "no_accent"}
+{"id": 167, "text": "Lỗi hiển thị font chữ tiếng Việt bị mã hóa ô vuông", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 168, "text": "Chatbot widget bi vo layout tren man hinh dien thoai", "intent": "TECH_ERROR", "variant": "no_accent"}
+{"id": 169, "text": "Nút bấm gửi tin nhắn bị disable không ấn được", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 170, "text": "Bị lỗi out of memory khi chạy reindex kho tri thức", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 171, "text": "WebSocket connection to gateway failed khong nhan dc tin nhan realtime", "intent": "TECH_ERROR", "variant": "slang"}
+{"id": 172, "text": "Lỗi sai định dạng ngày tháng khi lọc hội thoại theo khoảng thời gian", "intent": "TECH_ERROR", "variant": "standard"}
+{"id": 173, "text": "Tôi muốn đăng ký mua gói Enterprise cho công ty 50 nhân sự", "intent": "BUYING_INTENT", "variant": "standard"}
+{"id": 174, "text": "Bên bạn gửi cho tôi hợp đồng dịch vụ để sếp duyệt thanh toán nhé", "intent": "BUYING_INTENT", "variant": "standard"}
+{"id": 175, "text": "minh muon nang cap len goi pro ngay hom nay", "intent": "BUYING_INTENT", "variant": "no_accent"}
+{"id": 176, "text": "chot cho e goi 1 nam nhe ad, thanh toan ntn", "intent": "BUYING_INTENT", "variant": "slang"}
+{"id": 177, "text": "Tôi cần đặt lịch demo phần mềm để triển khai cho chuỗi cửa hàng", "intent": "BUYING_INTENT", "variant": "standard"}
+{"id": 178, "text": "gui minh so tai khoan de minh ck thanh toan luon", "intent": "BUYING_INTENT", "variant": "slang"}
+{"id": 179, "text": "Doanh nghiệp chúng tôi muốn ký hợp đồng sử dụng 2 năm", "intent": "BUYING_INTENT", "variant": "standard"}
+{"id": 180, "text": "Cho em đăng ký dùng gói 6 tháng với giá khuyến mãi", "intent": "BUYING_INTENT", "variant": "standard"}
+{"id": 181, "text": "minh muon mua them 100k token thi lien he ai", "intent": "BUYING_INTENT", "variant": "no_accent"}
+{"id": 182, "text": "Bên em đã duyệt kinh phí, bên anh chuẩn bị hợp đồng giúp em", "intent": "BUYING_INTENT", "variant": "standard"}
+{"id": 183, "text": "Co the thanh toan qua cong vnpay hay momo khong de minh tra tien", "intent": "BUYING_INTENT", "variant": "no_accent"}
+{"id": 184, "text": "muon mua ban quyen phan mem thi lam the nao shop", "intent": "BUYING_INTENT", "variant": "slang"}
+{"id": 185, "text": "Chúng tôi muốn chốt hợp đồng triển khai ngay trong tuần này", "intent": "BUYING_INTENT", "variant": "standard"}
+{"id": 186, "text": "Gui bao gia chinh thuc de phong ke toan lam thu tuc chuyen khoan", "intent": "BUYING_INTENT", "variant": "no_accent"}
+{"id": 187, "text": "Tôi muốn đặt mua thêm gói hỗ trợ kỹ thuật 24/7", "intent": "BUYING_INTENT", "variant": "standard"}
+{"id": 188, "text": "dang ky su dung luon cho 3 chi nhanh thi dc giam bao nhieu", "intent": "BUYING_INTENT", "variant": "slang"}
+{"id": 189, "text": "Cần gặp chuyên viên ký hợp đồng mua phần mềm CRM", "intent": "BUYING_INTENT", "variant": "standard"}
+{"id": 190, "text": "Cho minh link thanh toan online qua the visa nhe", "intent": "BUYING_INTENT", "variant": "no_accent"}
+{"id": 191, "text": "Chốt gói Pro nhé, thông tin xuất hóa đơn công ty mình gửi ở dưới", "intent": "BUYING_INTENT", "variant": "standard"}
+{"id": 192, "text": "Ben toi muon bat dau trien khai ngay tu dau thang sau", "intent": "BUYING_INTENT", "variant": "no_accent"}
+{"id": 193, "text": "Gui cho e hop dong mau va thong tin chuyen khoan nhe", "intent": "BUYING_INTENT", "variant": "slang"}
+{"id": 194, "text": "Chúng tôi muốn thanh toán trọn gói 1 năm bằng tài khoản doanh nghiệp", "intent": "BUYING_INTENT", "variant": "standard"}
+{"id": 195, "text": "Tôi đồng ý với phương án báo giá, tiến hành thủ tục mua bán nhé", "intent": "BUYING_INTENT", "variant": "standard"}
+{"id": 196, "text": "minh muon ky ket bien ban ghi nho hop tac trien khai", "intent": "BUYING_INTENT", "variant": "no_accent"}
+{"id": 197, "text": "Cho em mua goi nang cao va them 20 account nhan vien", "intent": "BUYING_INTENT", "variant": "slang"}
+{"id": 198, "text": "Gửi hóa đơn điện tử cho mình sau khi mình chuyển tiền nhé", "intent": "BUYING_INTENT", "variant": "standard"}
+{"id": 199, "text": "Tôi cần đặt cọc trước bao nhiêu để giữ khuyến mãi này?", "intent": "BUYING_INTENT", "variant": "standard"}
+{"id": 200, "text": "Xác nhận đặt mua dịch vụ chatbot crm 1 năm cho bên mình", "intent": "BUYING_INTENT", "variant": "standard"}

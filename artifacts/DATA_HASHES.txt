@@ -1,0 +1,3 @@
+# SỔ ĐÓNG BĂNG MÃ HASH DỮ LIỆU ĐÁNH GIÁ (DATA HASHES)
+# Bất biến: Không bao giờ sửa các tệp đã đóng băng ở đây để 'tút' điểm.
+data/intent_test_human.jsonl:8cc500dc96ebd15f18af01ca386b53a3b85941dba9c06ce12f46ffa24d0a1ecf

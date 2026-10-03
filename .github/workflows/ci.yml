@@ -95,9 +95,12 @@ jobs:
           SIZE=$(docker image inspect ai-service:ci --format '{{.Size}}')
           MB=$((SIZE / 1024 / 1024))
           echo "ai-service:ci = ${MB} MB (ngưỡng §3.2.3: < 400 MB)"
-          # Chưa fail build: nợ đã ghi ở ADR-0015 mục Đánh đổi 6, giao cho Ngày 6.
-          # Đổi thành `exit 1` sau khi tách layer worker.
-          [ "$MB" -lt 400 ] || echo "::warning::vượt ngưỡng 400 MB — xem ADR-0015"
+          # Đã siết cổng kiểm tra dung lượng theo ADR-0017: exit 1 nếu >= 400 MB
+          if [ "$MB" -ge 400 ]; then
+            echo "FAIL: ai-service:ci vượt ngưỡng 400 MB (${MB} MB) — xem Master Plan §3.2.3 và ADR-0017"
+            exit 1
+          fi
+          echo "OK: ai-service image đạt chuẩn dung lượng (< 400 MB)"
 
   inference:
     runs-on: ubuntu-latest

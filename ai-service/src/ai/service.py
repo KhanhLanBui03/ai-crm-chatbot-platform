@@ -1,4 +1,4 @@
-"""FACADE DUY NHẤT của khối AI — §3.9.2.
+r"""FACADE DUY NHẤT của khối AI — §3.9.2.
 
 Đây là bề mặt duy nhất mà ``src/api/`` và ``src/worker/`` được phép gọi vào. Mọi
 năng lực bên dưới (``rag/``, ``orchestrator/``, ``mcp_client/``, ``extraction/``,

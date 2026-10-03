@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thesis-crm-ai/events/crm.conversation.closed.v1.json",
+  "title": "crm.conversation.closed.v1",
+  "description": "Hội thoại kết thúc/đóng, kích hoạt worker tóm tắt tự động (UC026). Consumer: summarizer-cg.",
+  "type": "object",
+  "required": ["event_id", "event_version", "event_type", "tenant_id", "occurred_at", "payload"],
+  "properties": {
+    "event_id": { "type": "integer", "description": "outbox_events.id — dùng để chống xử lý trùng" },
+    "event_version": { "type": "integer", "const": 1 },
+    "event_type": { "type": "string", "enum": ["ConversationClosed"] },
+    "tenant_id": { "type": "string", "format": "uuid", "description": "khóa phân vùng Kafka" },
+    "aggregate_id": { "type": "string", "format": "uuid", "description": "conversation_id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "payload": {
+      "type": "object",
+      "required": ["conversation_id", "closed_by", "closed_at"],
+      "properties": {
+        "conversation_id": { "type": "string", "format": "uuid" },
+        "closed_by": { "type": "string", "format": "uuid" },
+        "close_reason": { "type": "string" },
+        "closed_at": { "type": "string", "format": "date-time" },
+        "message_count": { "type": "integer" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thesis-crm-ai/events/crm.deal.closed.v1.json",
+  "title": "crm.deal.closed.v1",
+  "description": "Sự kiện kết thúc thương vụ (Deal Won/Lost) cung cấp ground-truth nhãn outcome phục vụ vòng lặp huấn luyện UC030. Producer: java-core (sales).",
+  "type": "object",
+  "required": ["event_id", "event_version", "event_type", "tenant_id", "occurred_at", "payload"],
+  "properties": {
+    "event_id": { "type": "integer", "description": "outbox_events.id — dùng để chống xử lý trùng" },
+    "event_version": { "type": "integer", "const": 1 },
+    "event_type": { "type": "string", "enum": ["DealWon", "DealLost"] },
+    "tenant_id": { "type": "string", "format": "uuid", "description": "khóa phân vùng Kafka" },
+    "aggregate_id": { "type": "string", "format": "uuid", "description": "deal_id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "payload": {
+      "type": "object",
+      "required": ["deal_id", "lead_id", "outcome", "closed_at"],
+      "properties": {
+        "deal_id": { "type": "string", "format": "uuid" },
+        "lead_id": { "type": "string", "format": "uuid" },
+        "outcome": { "type": "string", "enum": ["WON", "LOST"] },
+        "deal_value": { "type": "number", "minimum": 0 },
+        "closed_at": { "type": "string", "format": "date-time" },
+        "loss_reason": { "type": "string" },
+        "lead_score_at_close": { "type": "integer" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
