@@ -2,4 +2,5 @@
 # Bất biến: Không bao giờ sửa các tệp đã đóng băng ở đây để 'tút' điểm.
 data/intent_test_human.jsonl:8cc500dc96ebd15f18af01ca386b53a3b85941dba9c06ce12f46ffa24d0a1ecf
 data/intent_train_dedup.jsonl:d8c2bfc45292629df653a5e1d719d27b0b35e78fb2fe1bccf3fe0c6a75b4562d
-6612288f7122c078b22208cbb7b1fb62c939eadfc4e9fd2cf39326f8ad7bde6c  artifacts/router_branch_c.joblib
+bbad7ba113dd1acac8d4569670aee1020450026ec8488c28ed65ec57c72357df  artifacts/router_branch_c.joblib
+c70cfccbf70c9ea255aa3272a2192d251bc1dedf467c4157230b3874688da834  artifacts/router_model.onnx

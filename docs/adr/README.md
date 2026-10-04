@@ -33,5 +33,6 @@ Mỗi quyết định kiến trúc một file. Nguồn trực tiếp cho **chư�
 | 0016 | Role runtime tên `ai_app`; nhãn kết quả Lead vào `sales.lead_scores` | Lệch Master Plan |
 | 0017 | Chốt 4 mâu thuẫn hợp đồng (endpoint, topic, golden set, tập test) + siết CI | Rà soát Tuần 1 |
 | 0018 | Bỏ nhánh A (TF-IDF + LinearSVC), ưu tiên nhánh C (ai-embed) và nhánh B (XLM-R) | Quyết định phạm vi Ngày 4-5 |
+| 0019 | Chốt nhánh ship Intent Router (Nhánh C qua ONNX INT8) và thiết lập ngưỡng Abstention | Quyết định ship Ngày 6 (UC022 3/4) |
 
 `KH` = tài liệu `Ke-hoach-do-an-Chatbot-AI-CRM-v2-nhom-2-nguoi.docx`.

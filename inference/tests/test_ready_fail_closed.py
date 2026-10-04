@@ -4,8 +4,27 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-# Thêm thư mục inference vào sys.path để import src
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Thêm thư mục inference vào đầu sys.path và cô lập namespace src
+_inference_dir = str(Path(__file__).resolve().parent.parent)
+if sys.path[0] != _inference_dir:
+    sys.path.insert(0, _inference_dir)
+
+if "src" in sys.modules and ("src" not in getattr(sys.modules["src"], "__file__", "") or _inference_dir not in str(getattr(sys.modules["src"], "__file__", ""))):
+    for mod_name in list(sys.modules.keys()):
+        if mod_name == "src" or mod_name.startswith("src."):
+            del sys.modules[mod_name]
+
+
+def _get_create_app():
+    _inference_dir = str(Path(__file__).resolve().parent.parent)
+    if sys.path[0] != _inference_dir:
+        sys.path.insert(0, _inference_dir)
+    if "src" in sys.modules and ("src" not in getattr(sys.modules["src"], "__file__", "") or _inference_dir not in str(getattr(sys.modules["src"], "__file__", ""))):
+        for mod_name in list(sys.modules.keys()):
+            if mod_name == "src" or mod_name.startswith("src."):
+                del sys.modules[mod_name]
+    from src.entrypoint import create_app
+    return create_app
 
 
 def test_embed_ready_normal(monkeypatch):
@@ -14,7 +33,7 @@ def test_embed_ready_normal(monkeypatch):
     monkeypatch.delenv("EXPECTED_MODEL_ID", raising=False)
     monkeypatch.delenv("FORCE_READY_FAIL", raising=False)
 
-    from src.entrypoint import create_app
+    create_app = _get_create_app()
     app = create_app()
     client = TestClient(app)
 
@@ -45,7 +64,7 @@ def test_embed_ready_fail_closed_on_model_mismatch(monkeypatch):
     monkeypatch.setenv("MODEL_ID", "BAAI/bge-m3")
     monkeypatch.setenv("EXPECTED_MODEL_ID", "wrong/mismatched-model-768")
 
-    from src.entrypoint import create_app
+    create_app = _get_create_app()
     app = create_app()
     client = TestClient(app)
 
@@ -67,7 +86,7 @@ def test_classify_ready_and_endpoints(monkeypatch):
     monkeypatch.setenv("OMP_NUM_THREADS", "2")
     monkeypatch.delenv("EXPECTED_MODEL_ID", raising=False)
 
-    from src.entrypoint import create_app
+    create_app = _get_create_app()
     app = create_app()
     client = TestClient(app)
 
