@@ -1,7 +1,7 @@
 {
   "metadata": {
     "use_case": "UC022 (3/4)",
-    "evaluated_at": "2026-10-05T07:53:39Z",
+    "evaluated_at": "2026-10-05T16:55:03Z",
     "environment": {
       "os": "Windows 11",
       "python": "3.14.5",
@@ -9,7 +9,7 @@
       "random_seed": 42
     },
     "test_set_sha256": "8cc500dc96ebd15f18af01ca386b53a3b85941dba9c06ce12f46ffa24d0a1ecf",
-    "decision": "Nhánh B chưa được đánh giá trên tập test (không có file dự đoán thật). Nhánh C là nhánh DUY NHẤT đã đánh giá — ship nhánh C; chưa có cơ sở so sánh B–C.",
+    "decision": "Nhánh B vượt ngân sách 60 ms (p95 72.35 ms đo thật) — loại theo §5.9, ship nhánh C.",
     "note": "Mọi số liệu trong báo cáo này là số đo thật; nhánh không có số đo thì ghi null."
   },
   "branch_c_ai_embed": {
@@ -22,22 +22,57 @@
     ],
     "knn_reference_macro_f1": 0.7582,
     "latency": {
-      "p50_ms_embed_plus_classifier": 0.181,
-      "p95_ms_embed_plus_classifier": 0.329,
-      "p95_ms_classifier_only": 0.053,
+      "p50_ms_embed_plus_classifier": 0.262,
+      "p95_ms_embed_plus_classifier": 0.496,
+      "p95_ms_classifier_only": 0.096,
       "samples": 600,
       "machine": "Windows AMD64 / Intel64 Family 6 Model 154 Stepping 4, GenuineIntel"
     },
     "model_size_kb": 35.93
   },
   "branch_b_xlmr": {
-    "status": "NOT_EVALUATED",
-    "predictions_file": null,
-    "macro_f1": null,
-    "accuracy": null,
-    "latency": null
+    "status": "EVALUATED",
+    "predictions_file": "reports\\eval\\router_branch_b_predictions.jsonl",
+    "macro_f1": 0.721,
+    "accuracy": 0.725,
+    "latency": {
+      "p95_cpu_ms": 72.35,
+      "p50_cpu_ms": 34.92,
+      "variant": "int8_dynamic",
+      "fp32": {
+        "p50_ms": 56.81,
+        "p95_ms": 91.77,
+        "samples": 200
+      },
+      "int8_dynamic": {
+        "p50_ms": 34.92,
+        "p95_ms": 72.35,
+        "samples": 200
+      },
+      "cpu_threads": 2,
+      "model_size_mb": 1077.0,
+      "measured_on": "LAPTOP-SHG7O1F4 CPU · Intel64 Family 6 Model 154 Stepping 4, GenuineIntel · torch 2.14.1+cpu",
+      "note": "batch 1, gồm tokenize; CPU Kaggle khác CPU production — đo lại trên máy đích nếu cần"
+    }
   },
-  "paired_bootstrap_b_vs_c": null,
+  "paired_bootstrap_b_vs_c": {
+    "rounds": 1000,
+    "ci_95_branch_b": [
+      0.6606,
+      0.7747
+    ],
+    "ci_95_branch_c": [
+      0.6131,
+      0.7327
+    ],
+    "ci_95_delta": [
+      -0.0401,
+      0.1314
+    ],
+    "mean_delta": 0.0444,
+    "p_value": 0.151,
+    "statistically_significant": false
+  },
   "abstention_analysis": {
     "curve": [
       {

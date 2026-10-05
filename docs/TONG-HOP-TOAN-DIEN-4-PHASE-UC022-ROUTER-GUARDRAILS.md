@@ -16,7 +16,7 @@
 | Phase | Việc | Đã có thật | Chưa có / cần làm |
 |---|---|---|---|
 | **1/4** Dữ liệu + gán nhãn chéo | Tập train 6 văn phong, khử trùng lặp, Cohen's Kappa | 1.941 câu train (sinh bằng template), dedup Jaccard 3-gram; phiếu gán nhãn mù | **Kappa chưa đo** — hai người phải gán nhãn |
-| **2/4** Nhánh C + nhánh B | Huấn luyện nhánh C, chạy nhánh B trên Kaggle | Nhánh C (LogReg + kNN) trên embedder băm | **Nhánh B chưa có model**; embedder **chưa phải BGE-M3** |
+\1Nhánh B đã chạy (0,721, p95 72 ms); embedder **chưa phải BGE-M3** |
 | **3/4** So sánh + ship + ONNX | Bảng 2 nhánh, abstention, ONNX INT8, parity | ONNX INT8 35,9 KB, parity 2,98 × 10⁻⁷; đường cong abstention | So sánh B–C; τ = 0,65 chưa đạt 0,95 |
 | **4/4** API + guardrails | 7 nhánh, fast path, guardrails thuần Python | Guardrails đã sửa + đo; `/v1/ai/chat` định tuyến 7 nhánh | Bộ ≥ 60 mẫu adversarial; nhánh RAG; ghi DB/Kafka |
 
@@ -50,7 +50,8 @@ Chi tiết: [`GIAI-THICH-TASK-UC022-TRAIN-BRANCH-C-B.md`](GIAI-THICH-TASK-UC022-
 Embedder băm không phải vector ngữ nghĩa; lập luận "dùng chung lời gọi `ai-embed` với RAG" (ADR-0018)
 chỉ đúng khi huấn luyện lại trên vector BGE-M3 thật.
 
-**Nhánh B (XLM-R):** chưa có kết quả. Nhánh B **chưa từng chạy trên Kaggle** (xác nhận 2026-10-05). Log `kaggle_xlmr_training_launch.log` trước đây trong repo là log dựng sẵn, không phải đầu ra thật — đã xoá.
+**Nhánh B (XLM-R):** huấn luyện thật 2026-10-05 trên CPU laptop (38,8 phút) — Macro-F1 test **0,7210**
+[0,661 ; 0,775], p95 CPU **72,4 ms**. Paired bootstrap B − C: Δ +0,044, KTC [−0,040 ; +0,131] — không có ý nghĩa.
 
 ---
 

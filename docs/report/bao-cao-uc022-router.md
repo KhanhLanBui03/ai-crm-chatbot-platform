@@ -48,21 +48,30 @@ số IDF) — **không phải vector BGE-M3** của `ai-embed` như thiết kế
 Tái lập: `python scripts/evaluate_router_branches_comparison.py --no-export`
 (số liệu gốc: `docs/report/router_branches_comparison_report.json`).
 
-| Tiêu chí (200 câu test) | Nhánh C — embedder băm + LogReg (ship) | Nhánh B — XLM-R base fine-tune |
+| Tiêu chí (200 câu test người thật) | Nhánh C — embedder băm + LogReg (ship) | Nhánh B — XLM-R base fine-tune |
 |---|---|---|
-| Macro-F1 | **0,6755** | chờ Kaggle |
-| KTC 95% bootstrap (B = 1.000) | [0,6131 ; 0,7327] | chờ Kaggle |
-| Accuracy | 0,675 | chờ Kaggle |
-| p95 CPU một câu | 0,33 ms (embed + ONNX, trong tiến trình) | chờ Kaggle (đo trên CPU 2 luồng) |
-| Kích thước | 35,9 KB ONNX + 72 KB bảng IDF | chờ Kaggle |
-| Paired bootstrap B − C | — | chờ Kaggle |
+| Macro-F1 | 0,6755 | **0,7210** |
+| KTC 95% bootstrap (B = 1.000) | [0,6131 ; 0,7327] | [0,6606 ; 0,7747] |
+| Accuracy | 0,675 | 0,725 |
+| p95 CPU một câu, 2 luồng | 0,33 ms (embed + ONNX) | **72,4 ms** (INT8 dynamic) · 91,8 ms (FP32) |
+| Kích thước | 35,9 KB ONNX + 72 KB bảng IDF | 1.077 MB |
+| Macro-F1 trên validation (dữ liệu template) | — | 0,975 |
+
+**Paired bootstrap B − C** (B = 1.000, seed 42): Δ trung bình +0,044, KTC 95% **[−0,040 ; +0,131]**,
+p = 0,151 — **không có ý nghĩa thống kê**.
+
+**Quyết định theo §5.9 — cả hai quy tắc cùng chỉ về nhánh C:**
+1. Nhánh B vượt ngân sách độ trễ (p95 72,4 ms > 60 ms, ngay cả bản INT8 nhanh hơn) → loại.
+2. Chênh lệch chất lượng không có ý nghĩa → ship nhánh có p95 thấp hơn → nhánh C.
+
+**Lưu ý khi trích dẫn:** nhánh B huấn luyện trên CPU laptop (i5-1235U, 38,8 phút, transformers 4.46.3,
+seed 42) bằng `notebooks/05_train_router_xlmr.py`; độ trễ đo trên cùng laptop, batch 1, gồm tokenize
+— chưa phải CPU production. Validation 0,975 nhưng test 0,721: cùng hiện tượng lệch phân phối
+template ↔ câu người thật như nhánh C. Kết quả gốc: `docs/report/router_branch_b_*.json(l)`.
 
 Tham khảo, cùng embedding: kNN (k = 9, cosine) đạt Macro-F1 **0,7582** nhưng không phải mô hình được
 export. Lý do chọn LogisticRegression để ship chưa được ghi lại — cần quyết định.
 
-**Nhánh B chưa có số đo.** Notebook `notebooks/05_train_router_xlmr.ipynb` đã viết lại để chạy thật
-trên Kaggle T4 và xuất đúng 3 file mà script so sánh đọc; khi có, chạy lại lệnh trên — script tự thêm
-cột nhánh B, paired bootstrap và áp quy tắc phá thế hoà §5.9 (p95 CPU > 60 ms thì loại).
 
 ## 5. Cả router 3 tầng — đúng như `ai-classify` chạy
 
@@ -127,6 +136,6 @@ phối template ↔ người thật); lỗi tự tin sai 14 → 5, nhưng hỏi 
 1. Embedder không ngữ nghĩa (feature hashing) — nguyên nhân chính khiến chỉ ~40% câu vượt τ.
 2. Train sinh từ template, lệch phân phối so với câu người thật.
 3. Chưa có Cohen's Kappa — chưa định lượng độ tin cậy của nhãn vàng.
-4. Chưa có nhánh B — chưa áp được quy tắc chốt §5.9.
+4. Nhánh B huấn luyện và đo độ trễ trên laptop, chưa trên CPU production; chỉ một lần chạy (một seed).
 5. Nguồn gốc tập test cần xác nhận: file được commit lần đầu 04/10, muộn hơn mốc đóng băng Ngày 2 của kế hoạch.
 6. Số đo độ trễ là của môi trường (C) trên Windows/Docker Desktop, chưa phải pod EKS.

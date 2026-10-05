@@ -112,8 +112,27 @@ max |ΔP| = 2,98 × 10⁻⁷ < 10⁻⁴, khớp nhãn 200/200 — **PASSED**.
 
 ### 4.5. So sánh với nhánh B (XLM-R)
 
-**Chưa có.** Nhánh B **chưa từng chạy trên Kaggle** (xác nhận 2026-10-05). Log `kaggle_xlmr_training_launch.log` trước đây trong repo là log dựng sẵn, không phải đầu ra thật — đã xoá. Script so sánh
-chỉ tính nhánh B khi có `reports/eval/router_branch_b_predictions.jsonl` do notebook 05 xuất ra.
+| Tiêu chí (200 câu test người thật) | Nhánh C — embedder băm + LogReg (ship) | Nhánh B — XLM-R base fine-tune |
+|---|---|---|
+| Macro-F1 | 0,6755 | **0,7210** |
+| KTC 95% bootstrap (B = 1.000) | [0,6131 ; 0,7327] | [0,6606 ; 0,7747] |
+| Accuracy | 0,675 | 0,725 |
+| p95 CPU một câu, 2 luồng | 0,33 ms (embed + ONNX) | **72,4 ms** (INT8 dynamic) · 91,8 ms (FP32) |
+| Kích thước | 35,9 KB ONNX + 72 KB bảng IDF | 1.077 MB |
+| Macro-F1 trên validation (dữ liệu template) | — | 0,975 |
+
+**Paired bootstrap B − C** (B = 1.000, seed 42): Δ trung bình +0,044, KTC 95% **[−0,040 ; +0,131]**,
+p = 0,151 — **không có ý nghĩa thống kê**.
+
+
+**Quyết định theo §5.9 — cả hai quy tắc cùng chỉ về nhánh C:**
+1. Nhánh B vượt ngân sách độ trễ (p95 72,4 ms > 60 ms, ngay cả bản INT8 nhanh hơn) → loại.
+2. Chênh lệch chất lượng không có ý nghĩa → ship nhánh có p95 thấp hơn → nhánh C.
+
+**Lưu ý khi trích dẫn:** nhánh B huấn luyện trên CPU laptop (i5-1235U, 38,8 phút, transformers 4.46.3,
+seed 42) bằng `notebooks/05_train_router_xlmr.py`; độ trễ đo trên cùng laptop, batch 1, gồm tokenize
+— chưa phải CPU production. Validation 0,975 nhưng test 0,721: cùng hiện tượng lệch phân phối
+template ↔ câu người thật như nhánh C. Kết quả gốc: `docs/report/router_branch_b_*.json(l)`.
 
 ---
 

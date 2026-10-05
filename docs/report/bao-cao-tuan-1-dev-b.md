@@ -20,8 +20,8 @@
 | 1 | Chốt 4 mâu thuẫn hợp đồng + siết CI dung lượng | ADR-0017; CI exit 1 khi image ≥ 400 MB; **6/6 cổng CI xanh, image 232 MB** (`bash scripts/check_ci_gates.sh`) — `870b150`, `4c9cd24` | `create-topics.sh` tạo 14 topic, ADR chốt 9 — cần thống nhất với Dev A |
 | 2 | Tầng suy luận thật + gõ tập test | 3 service, `/ready` fail-closed 3 bất biến, client remote/mock; tập test 200 câu + hash — `870b150` | Xác nhận nguồn gốc 200 câu (commit lần đầu 04/10); ảnh chụp `/ready` 503 |
 | 3 | UC022 (1/4) dữ liệu + gán nhãn chéo | 1.941 câu train (template), dedup Jaccard; script Kappa đọc nhãn thật + phiếu mù — `a005547`, `98f327b` | **Kappa chưa đo** — cần hai người gán nhãn (~1 giờ/người) |
-| 4 | UC022 (2/4) nhánh C + nhánh B | Nhánh C: LogReg 0,676 / kNN 0,758; notebook 05 chạy được đầu–cuối (đã thử với transformers 4.46 và 5.18) — `fa15bed`, `b553bde` | **Nhánh B chưa chạy** trên Kaggle; quyết định LogReg/kNN và embedder băm/BGE-M3 |
-| 5 | UC022 (3/4) so sánh + ship + ONNX | ONNX INT8 parity 2,98 × 10⁻⁷, khớp 200/200; đường cong abstention; ADR-0019 (có đính chính) — `f99c6b2`, `98f327b` | Bảng so sánh B–C và paired bootstrap — chờ nhánh B |
+\1; **nhánh B huấn luyện thật trên CPU: Macro-F1 0,721, p95 72,4 ms** — `fa15bed`, `b553bde` | Quyết định LogReg/kNN và embedder băm/BGE-M3 |
+| 5 | UC022 (3/4) so sánh + ship + ONNX | ONNX INT8 parity 2,98 × 10⁻⁷, khớp 200/200; đường cong abstention; ADR-0019 (có đính chính) — `f99c6b2`, `98f327b` | — (đã có bảng B–C + paired bootstrap: ship C theo cả hai quy tắc §5.9) |
 | 6 | UC022 (4/4) API 7 nhánh + guardrails | Guardrails sửa + đo (0 báo nhầm / 2.141 câu); `/v1/ai/chat` định tuyến 7 nhánh, 26 test — `10769c5`, `5974882` | Bộ ≥ 60 câu adversarial; ảnh lượt TOOL_CALL → chuyển giao |
 | 7 | Kiểm chứng remote, tải hỗn hợp, báo cáo | **p95 phân loại qua remote 5,3 ms** (5 đồng thời 18,8 ms) sau khi sửa 2 lỗi; cổng CI xanh; báo cáo UC022 — `3a8eb7d`, `498733e`, `4c9cd24` | **Tải hỗn hợp: BLOCKED** (mục 5) |
 
@@ -32,8 +32,7 @@
 | p95 phân loại qua remote | ≤ 60 ms | **5,3 ms** tuần tự · 18,8 ms 5 đồng thời | `python scripts/bench_remote_classify.py --url http://127.0.0.1:8083` |
 | Image ai-service sạch ML runtime | grep rỗng | **rỗng** | `bash scripts/check_ci_gates.sh` |
 | Dung lượng image ai-service | < 400 MB | **232 MB** | như trên |
-| Parity ONNX INT8 | sai lệch < 1e-4 | 2,98 × 10⁻⁷ | `python scripts/evaluate_router_branches_comparison.py --no-export` |
-| Macro-F1 router 3 tầng | — | 0,712 | xem `docs/report/bao-cao-uc022-router.md` |
+\1| Nhánh B vs C (paired bootstrap) | — | Δ +0,044 [−0,040 ; +0,131], không ý nghĩa; B p95 72,4 ms > 60 ms | `python scripts/evaluate_router_branches_comparison.py --no-export` |\n| Macro-F1 router 3 tầng | — | 0,712 | xem `docs/report/bao-cao-uc022-router.md` |
 | Báo nhầm tiêm chỉ thị | < 1% | 0/200 test · 0/1.941 train | `python -m pytest ai-service/tests/unit/test_guardrails.py` |
 | Không gọi LLM | ≥ 55% | 72% (trong đó 39,5% hỏi lại) | mô phỏng 200 câu qua `run_turn` |
 | p95 không xấu đi > 15% khi đang nạp | — | **chưa đo** | BLOCKED |
@@ -76,8 +75,7 @@ Kế hoạch cũng ghi chạy **sau** khi Dev A reindex fine-tune xong để kh�
 
 ## 7. Việc tiếp theo
 
-1. Chạy notebook 05 trên Kaggle (qua đêm) → chạy lại script so sánh.
-2. Buổi gán nhãn chung với Dev A → Kappa.
+1. Buổi gán nhãn chung với Dev A → Kappa.
 3. Nhánh RAG (UC023) — `/v1/ai/chat` hiện từ chối mọi câu cần tra tài liệu; chặn mốc M2.
 4. Bộ ≥ 60 câu adversarial.
 5. Tải hỗn hợp khi Dev A xong UC018/UC019.

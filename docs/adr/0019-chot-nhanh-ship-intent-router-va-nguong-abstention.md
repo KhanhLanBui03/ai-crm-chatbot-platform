@@ -29,12 +29,14 @@ Rà soát `scripts/evaluate_router_branches_comparison.py` (bản tại commit `
 | Cả router 3 tầng (luật + ONNX + τ), Macro-F1 | 0,712 |
 | τ = 0,65: độ chính xác phần giữ lại / coverage | 0,924 / 0,395 |
 | τ nhỏ nhất đạt ≥ 0,95 | 0,80 (coverage 0,21) |
-| Nhánh B | **Chưa đánh giá** — chưa có model, chưa có dự đoán |
+| Nhánh B — XLM-R (đo 2026-10-05, CPU laptop) | Macro-F1 0,7210 [0,6606 ; 0,7747]; p95 CPU 72,4 ms (INT8) |
+| Paired bootstrap B − C | Δ +0,044, KTC [−0,040 ; +0,131], p = 0,151 — không có ý nghĩa |
 
 **Hệ quả cho quyết định:**
-- *Ship nhánh C* vẫn đứng được, nhưng với lý do khác: đây là **nhánh duy nhất đã được đánh giá**,
-  không phải "thắng nhánh B theo §5.9". Muốn dùng quy tắc phá thế hoà §5.9 thì phải chạy thật
-  notebook 05 và đo p95 CPU của XLM-R.
+- *Ship nhánh C* — **khẳng định lại bằng số đo thật** (cập nhật cuối ngày 2026-10-05): nhánh B vượt
+  ngân sách 60 ms (p95 72,4 ms ngay cả bản INT8) và chênh lệch Macro-F1 không có ý nghĩa thống kê.
+  Theo §5.9, cả hai quy tắc đều chọn nhánh C. Kết luận giống bản gốc, nhưng căn cứ khác hẳn: không
+  phải "XLM-R hơn 13,8 điểm" mà là "XLM-R hơn 4,4 điểm, nằm trong biên nhiễu".
 - *τ = 0,65* chưa đạt tiêu chí "độ chính xác phần giữ lại ≈ 0,95" của đặc tả UC022 (đo được
   0,924). Giữ 0,65 là đánh đổi có chủ ý để coverage không tụt xuống 21%; cần ghi rõ như vậy
   trong báo cáo, không ghi "đạt 95%".

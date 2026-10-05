@@ -16,8 +16,8 @@
 
 | Yêu cầu | Trạng thái |
 |---|---|
-| Đánh giá CẢ HAI nhánh trên cùng 200 câu test, Macro-F1 + KTC 95% bootstrap | **Một nửa** — chỉ nhánh C; nhánh B không có checkpoint trong repo |
-| So sánh theo cặp (paired bootstrap) | **Chưa** — cần dự đoán thật của nhánh B |
+| Đánh giá CẢ HAI nhánh trên cùng 200 câu test, Macro-F1 + KTC 95% bootstrap | **Đạt** (2026-10-05) — xem mục 2b |
+| So sánh theo cặp (paired bootstrap) | **Đạt** — Δ không có ý nghĩa thống kê |
 | Chọn ngưỡng bỏ phiếu trắng từ đường cong, tại điểm ≈ 0,95 | **Có đường cong**; τ đang chạy (0,65) chưa đạt 0,95 — mục 3 |
 | Export ONNX INT8 + cổng parity | **Đạt** |
 | Ghi ADR chốt nhánh | **Có**, nhưng căn cứ số liệu đã thu hồi — ADR-0019 mục 0 |
@@ -40,6 +40,31 @@ BGE-M3**) → LogisticRegression → ONNX INT8 (35,93 KB).
 **Câu hỏi còn mở:** kNN tốt hơn LogisticRegression 8 điểm Macro-F1 trên cùng embedding, nhưng
 LogisticRegression được export. Cần ghi lý do (vd: skl2onnx/kích thước/xác suất hiệu chỉnh) hoặc
 đổi mô hình export.
+
+---
+
+## 2b. Nhánh B và so sánh theo cặp
+
+| Tiêu chí (200 câu test người thật) | Nhánh C — embedder băm + LogReg (ship) | Nhánh B — XLM-R base fine-tune |
+|---|---|---|
+| Macro-F1 | 0,6755 | **0,7210** |
+| KTC 95% bootstrap (B = 1.000) | [0,6131 ; 0,7327] | [0,6606 ; 0,7747] |
+| Accuracy | 0,675 | 0,725 |
+| p95 CPU một câu, 2 luồng | 0,33 ms (embed + ONNX) | **72,4 ms** (INT8 dynamic) · 91,8 ms (FP32) |
+| Kích thước | 35,9 KB ONNX + 72 KB bảng IDF | 1.077 MB |
+| Macro-F1 trên validation (dữ liệu template) | — | 0,975 |
+
+**Paired bootstrap B − C** (B = 1.000, seed 42): Δ trung bình +0,044, KTC 95% **[−0,040 ; +0,131]**,
+p = 0,151 — **không có ý nghĩa thống kê**.
+
+**Quyết định theo §5.9 — cả hai quy tắc cùng chỉ về nhánh C:**
+1. Nhánh B vượt ngân sách độ trễ (p95 72,4 ms > 60 ms, ngay cả bản INT8 nhanh hơn) → loại.
+2. Chênh lệch chất lượng không có ý nghĩa → ship nhánh có p95 thấp hơn → nhánh C.
+
+**Lưu ý khi trích dẫn:** nhánh B huấn luyện trên CPU laptop (i5-1235U, 38,8 phút, transformers 4.46.3,
+seed 42) bằng `notebooks/05_train_router_xlmr.py`; độ trễ đo trên cùng laptop, batch 1, gồm tokenize
+— chưa phải CPU production. Validation 0,975 nhưng test 0,721: cùng hiện tượng lệch phân phối
+template ↔ câu người thật như nhánh C. Kết quả gốc: `docs/report/router_branch_b_*.json(l)`.
 
 ---
 
@@ -80,18 +105,7 @@ Số dao động giữa các lần chạy (một lần khác: p95 1,66 ms) và c
 
 ---
 
-## 6. Quyết định ship — lý do đúng
+## 6. Quyết định ship
 
-**Ship nhánh C** vì đây là **nhánh duy nhất đã được đánh giá** trên tập test và nằm trong ngân sách
-độ trễ. Chưa được nói "nhánh C thắng nhánh B theo quy tắc §5.9" — quy tắc đó cần p95 CPU **đo thật**
-của XLM-R.
-
-Để hoàn tất so sánh trước ngày nộp:
-1. Chạy notebook 05 trên Kaggle (GPU, qua đêm).
-2. Xuất `reports/eval/router_branch_b_predictions.jsonl` — mỗi dòng `{"id": ..., "pred": "<INTENT>"}`, đủ 200 câu.
-3. Đo p95 suy luận một câu trên CPU, ghi `reports/eval/router_branch_b_latency.json`
-   (`{"p95_cpu_ms": ..., "model_size_mb": ..., "measured_on": "..."}`).
-4. Chạy lại `python scripts/evaluate_router_branches_comparison.py --no-export` — script tự thêm
-   bootstrap theo cặp và áp quy tắc §5.9.
-
-Nếu không kịp: báo cáo ghi "nhánh B chưa đánh giá do giới hạn thời gian" là giới hạn thực nghiệm.
+**Ship nhánh C**, theo cả hai quy tắc §5.9 (mục 2b): nhánh B vượt ngân sách độ trễ, và chênh
+lệch chất lượng không có ý nghĩa thống kê.

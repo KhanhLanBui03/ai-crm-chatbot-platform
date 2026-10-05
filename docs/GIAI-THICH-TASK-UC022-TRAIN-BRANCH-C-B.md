@@ -12,7 +12,8 @@
 >    ký tự + IDF, docstring tự ghi "mô phỏng". Các lập luận "dùng chung lời gọi `ai-embed`" và
 >    "kế thừa không gian ngữ nghĩa bge-m3" ở mục 1 chưa đúng với artifact hiện tại (xem ADR-0018 mục 0).
 > 2. **κ = 0,9300 không có thật** — nhãn Dev A bị dựng từ nhãn vàng (xem `GIAI-THICH-TASK-UC022-DATA-KAPPA.md`).
-> 3. **Nhánh B chưa có kết quả** — xem mục 3.
+> 3. **Nhánh B đã chạy thật ngày 2026-10-05** trên CPU laptop: Macro-F1 test 0,7210, p95 CPU 72,4 ms —
+>    chi tiết `docs/report/bao-cao-uc022-router.md` mục 4.
 > 4. Độ trễ ở mục 2.1 sửa theo `reports/eval/router_branch_c_eval.json` (đo thật).
 > 5. Mô hình ship qua ONNX là **LogisticRegression (Macro-F1 0,6755)**, không phải kNN hay Hybrid Router.
 
