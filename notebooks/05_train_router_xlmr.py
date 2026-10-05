@@ -283,10 +283,19 @@ print(classification_report(y_test, preds, labels=INTENT_TAXONOMY, digits=4, zer
 
 # %%
 import copy
+import gc
+
+# Giải phóng optimizer (~2 lần cỡ mô hình) trước khi sao chép mô hình để đo — chạy trên máy
+# RAM ít (vd laptop 16–20 GB) thì đỉnh RAM ở bước này là chỗ dễ bị tắt tiến trình nhất.
+trainer.optimizer = None
+trainer.lr_scheduler = None
+gc.collect()
+if DEVICE == "cuda":
+    torch.cuda.empty_cache()
 
 CPU_THREADS = 2
 torch.set_num_threads(CPU_THREADS)
-cpu_fp32 = copy.deepcopy(model).to("cpu").float().eval()
+cpu_fp32 = model.to("cpu").float().eval()  # chính mô hình đã huấn luyện, không cần bản sao
 cpu_int8 = torch.ao.quantization.quantize_dynamic(copy.deepcopy(cpu_fp32), {torch.nn.Linear}, dtype=torch.qint8)
 latency_texts = [r["text"] for r in test_rows]
 
