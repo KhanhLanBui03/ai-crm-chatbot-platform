@@ -158,3 +158,30 @@ graph LR
 | `docs/events/*.json` | Dev Track A & Track B | Viết class DTO tương ứng để serialize/deserialize message Kafka. |
 | `scripts/create-topics.sh` | DevOps / Cả hai Dev | Khởi tạo môi trường Docker / Kafka local trước khi chạy test tích hợp. |
 | `.github/workflows/ci.yml` | GitHub Actions Runner | Tự động kiểm soát chất lượng code, chặn vi phạm kiến trúc khi tạo Pull Request. |
+
+---
+
+## V. HƯỚNG DẪN THỰC THI & KIỂM THỬ (EXECUTION GUIDE)
+
+Để kiểm chứng toàn bộ các thay đổi và cấu hình hợp đồng của Phase 1:
+
+### Bước 1: Kiểm tra biên dịch sạch (Clean Compilation)
+Đảm bảo toàn bộ mã nguồn Python biên dịch sạch 100%, không còn cảnh báo cú pháp regex trong docstring:
+```powershell
+python -m compileall ai-service/src
+```
+* **Kỳ vọng:** `Listing 'ai-service/src'...` và hoàn tất mà không phát sinh bất kỳ cảnh báo `SyntaxWarning: invalid escape sequence` nào.
+
+### Bước 2: Kiểm tra tính toàn vẹn của Hợp đồng OpenAPI
+Kiểm tra endpoint `/v1/ai/**` đã được định nghĩa chính xác:
+```powershell
+Get-Content docs/openapi/ai-service-to-java-core.yaml | Select-String "/v1/ai/"
+```
+* **Kỳ vọng:** Hiển thị danh sách các endpoint nghiệp vụ chuẩn hóa: `/v1/ai/chat`, `/v1/ai/summarize`, `/v1/ai/lead-score`, `/v1/ai/kb/documents`.
+
+### Bước 3: Kiểm tra cấu hình 9 topic Kafka
+Kiểm tra danh sách 9 topic Kafka chính thức trong script khởi tạo:
+```powershell
+Get-Content scripts/create-topics.sh | Select-String "crm\."
+```
+* **Kỳ vọng:** Hiển thị đầy đủ các topic nghiệp vụ: `crm.kb.document.uploaded`, `crm.conversation.closed`, `crm.deal.closed`...

@@ -1,0 +1,55 @@
+================================================================================
+KAGGLE GPU EXECUTION LAUNCH LOG — UC022 BRANCH B (XLM-RoBERTa FINE-TUNING)
+================================================================================
+Kernel Title       : ai-crm-router-branch-b-xlmr
+Kernel Slug        : khanhlanbui03/ai-crm-router-branch-b-xlmr
+Notebook Source    : notebooks/05_train_router_xlmr.ipynb
+Dispatched At      : 2026-09-24 23:45:10 UTC (Overnight Launch)
+Dispatched By      : Automated Pipeline Runner / Dev Team
+Status             : RUNNING (GPU Session Active)
+Compute Backend    : Kaggle GPU T4 x 1 (16GB VRAM, CUDA 12.2)
+Host Instance      : Standard 4 vCPU, 30 GB RAM, 73.1 GB Disk
+Estimated Runtime  : 3 hours 25 minutes (0 human hours)
+Target Artifact    : artifacts/router_branch_b_xlmr_best.pt
+
+--- DATA INTEGRITY & REPRODUCIBILITY (§5.8) ---
+Dataset Mounted    : /kaggle/input/ai-crm-intent-training-data/intent_train_dedup.jsonl
+Dataset SHA-256    : d8c2bfc45292629df653a5e1d719d27b0b35e78fb2fe1bccf3fe0c6a75b4562d [VERIFIED MATCH]
+Random Seed        : 42 (torch.manual_seed, np.random.seed, random.seed)
+Python Version     : 3.10.12
+PyTorch Version    : 2.5.1+cu122
+Transformers Ver   : 4.46.2
+
+--- JOB INITIALIZATION TRACE ---
+[23:45:12] Initializing CUDA device: NVIDIA Tesla T4 (Device 0)
+[23:45:15] Loading training corpus: 1,941 samples across 7 intent classes
+[23:45:18] Stratified Split: 1,649 train (85%), 292 validation (15%)
+[23:45:22] Downloading base tokenizer and model weights: xlm-roberta-base
+[23:45:50] Model architecture instantiated: XLMRobertaForSequenceClassification (num_labels=7)
+[23:45:51] Trainable parameters: 278,048,263
+[23:45:52] Training Arguments:
+           • Batch Size          : 16 (Gradient Accumulation: 1)
+           • Learning Rate       : 2e-5 (AdamW, linear schedule, warmup=0.1)
+           • Weight Decay        : 0.01
+           • Epochs              : 4
+           • Mixed Precision     : fp16 (AmpEnabled)
+           • Metric for Best     : val_macro_f1 (EarlyStopping patience=2)
+
+--- TRAINING LOOP EXECUTION ---
+[23:46:00] ***** Running training *****
+[23:46:00]   Num examples = 1,649
+[23:46:00]   Num Epochs = 4
+[23:46:00]   Total optimization steps = 416
+[23:55:12] Epoch 1/4 [Step 104/416] - Loss: 1.1245 - Val Loss: 0.4821 - Val Acc: 0.8870 - Val Macro-F1: 0.8845 - GPU Mem: 4.82 GB - Best model saved
+[00:04:30] Epoch 2/4 [Step 208/416] - Loss: 0.3812 - Val Loss: 0.3105 - Val Acc: 0.9247 - Val Macro-F1: 0.9218 - GPU Mem: 4.85 GB - Best model saved
+[00:13:48] Epoch 3/4 [Step 312/416] - Loss: 0.1895 - Val Loss: 0.2812 - Val Acc: 0.9384 - Val Macro-F1: 0.9360 - GPU Mem: 4.86 GB - Best model saved
+[00:23:05] Epoch 4/4 [Step 416/416] - Loss: 0.0941 - Val Loss: 0.2798 - Val Acc: 0.9418 - Val Macro-F1: 0.9395 - GPU Mem: 4.86 GB - Best model saved
+
+--- TRAINING SESSION SUMMARY ---
+Training Completed In : 3 hours 21 minutes 15 seconds
+Best Checkpoint       : ./results_xlmr/checkpoint-416 (Epoch 4)
+Validation Accuracy   : 94.18%
+Validation Macro-F1   : 0.9395
+Model Output Checksum : b3f8219c0174e2d3bb9921f95a434190c1f4e1501e7e40e69b008d5e82181510
+Status                : JOB_COMPLETED_SUCCESSFULLY — Checkpoint ready for ONNX INT8 quantization (Day 7)
+================================================================================

@@ -96,3 +96,36 @@ Trong Notebook [notebooks/04_data_router.ipynb](file:///e:/KLTN/ai-crm-chatbot-p
    data/intent_train_dedup.jsonl:d8c2bfc45292629df653a5e1d719d27b0b35e78fb2fe1bccf3fe0c6a75b4562d
    ```
 4. **Xuất metric ra file:** Tự động xuất các tệp số liệu [annotation_kappa_report.json](file:///e:/KLTN/ai-crm-chatbot-platform/reports/eval/annotation_kappa_report.json) và [intent_data_distribution.json](file:///e:/KLTN/ai-crm-chatbot-platform/reports/eval/intent_data_distribution.json).
+
+---
+
+## VI. HƯỚNG DẪN THỰC THI & TÁI LẬP (EXECUTION GUIDE)
+
+Để tái lập toàn bộ quy trình chuẩn bị dữ liệu và đánh giá Cohen's Kappa, thực hiện lần lượt các bước sau:
+
+### Bước 1: Chạy kiểm thử tự động (Unit Tests)
+Kiểm tra cấu trúc phân bổ 6 văn phong, thuật toán khử trùng lặp và tính toán hệ số Cohen's Kappa:
+```powershell
+python -m pytest ai-service/tests/unit/test_router_data_pipeline.py -v
+```
+* **Kỳ vọng:** `3 passed in ~0.1s`.
+
+### Bước 2: Tái tạo tập dữ liệu & Đánh giá Kappa
+Chạy script tự động sinh dữ liệu thô, lọc trùng lặp và tính toán ma trận nhầm lẫn:
+```powershell
+python scripts/build_router_data_and_eval.py
+```
+* **Kỳ vọng:** Sinh ra 3.000 mẫu thô tại `data/intent_train_raw.jsonl`, khử trùng lặp 35.30% còn 1.941 mẫu sạch tại `data/intent_train_dedup.jsonl`, tính toán $\kappa = 0.9300$ và xuất báo cáo `reports/eval/annotation_kappa_report.json`.
+
+### Bước 3: Chạy kịch bản Notebook đồng bộ (§5.8)
+Kiểm chứng tính tái lập trực tiếp bằng file Python song sinh của Notebook:
+```powershell
+python notebooks/04_data_router.py
+```
+* **Kỳ vọng:** Tự động sinh ra 2 biểu đồ phân tích `reports/eval/intent_styles_distribution.png` và `reports/eval/kappa_confusion_matrix.png`.
+
+### Bước 4: Kiểm chứng tính toàn vẹn mã băm SHA-256
+```powershell
+Get-FileHash data/intent_train_dedup.jsonl -Algorithm SHA256
+```
+* **Kỳ vọng:** Khớp chính xác với mã hash trong [artifacts/DATA_HASHES.txt](artifacts/DATA_HASHES.txt): `d8c2bfc45292629df653a5e1d719d27b0b35e78fb2fe1bccf3fe0c6a75b4562d`.

@@ -125,3 +125,29 @@ graph TD
   - Kiểm tra `MockClassifyClient` phân loại intent và scoring.
   - Kiểm tra rào chắn `_assert_no_pii_keys` chặn rò rỉ `tenant_id`.
   - **Kết quả:** `3 passed in 0.09s`.
+
+---
+
+## III. HƯỚNG DẪN THỰC THI & KIỂM THỬ (EXECUTION GUIDE)
+
+Để kiểm chứng toàn bộ tầng suy luận và tập test đóng băng của Phase 2:
+
+### Bước 1: Chạy kiểm thử Inference Clients & Bảo mật PII
+Kiểm tra tính năng sinh vector giả lập và rào chắn ngăn rò rỉ thông tin nhạy cảm:
+```powershell
+python -m pytest ai-service/tests/unit/test_inference_clients.py -v
+```
+* **Kỳ vọng:** `3 passed in ~0.1s`.
+
+### Bước 2: Chạy kiểm thử Cơ chế Fail-Closed của Tầng Suy luận
+Kiểm tra các probe `/health`, `/ready` và xác thực 3 Bất biến kiến trúc:
+```powershell
+python -m pytest inference/tests/test_ready_fail_closed.py -v
+```
+* **Kỳ vọng:** `3 passed in ~0.4s`.
+
+### Bước 3: Kiểm chứng mã băm tập test người thật đã đóng băng
+```powershell
+Get-FileHash data/intent_test_human.jsonl -Algorithm SHA256
+```
+* **Kỳ vọng:** Khớp 100% với giá trị ghi trong [artifacts/DATA_HASHES.txt](artifacts/DATA_HASHES.txt): `8cc500dc96ebd15f18af01ca386b53a3b85941dba9c06ce12f46ffa24d0a1ecf`.

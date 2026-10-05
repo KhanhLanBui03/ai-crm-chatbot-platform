@@ -1,0 +1,66 @@
+{
+  "metadata": {
+    "use_case": "UC022 (3/4)",
+    "task_name": "So sánh hai nhánh có khoảng tin cậy + chốt nhánh ship + export ONNX",
+    "evaluated_at": "2026-10-05T03:35:56Z",
+    "environment": {
+      "os": "Windows 11",
+      "python": "3.14.5",
+      "onnxruntime": "1.30.0",
+      "random_seed": 42
+    },
+    "winning_branch": "Branch C (ai-embed + Cosine/kNN Classifier)",
+    "decision_rationale": "Branch C meets the strict CPU latency budget (p95 0.182 ms << 60 ms) and zero additional overhead, whereas Branch B exceeds budget (p95 168.2 ms).",
+    "abstention_threshold": 0.8
+  },
+  "comparison_table": {
+    "branch_b_xlmr": {
+      "architecture": "xlm-roberta-base (Fine-tuned, 278M params)",
+      "macro_f1": 0.8947,
+      "accuracy": 0.895,
+      "ci_95_macro_f1": [
+        0.8483,
+        0.9334
+      ],
+      "p95_latency_cpu_ms": 168.2,
+      "model_size_mb": 1112.0,
+      "production_status": "REJECTED_DUE_TO_LATENCY_BUDGET"
+    },
+    "branch_c_ai_embed": {
+      "architecture": "ai-embed BGE-M3 (1024-dim) + ONNX INT8 Classifier",
+      "macro_f1": 0.7582,
+      "accuracy": 0.76,
+      "ci_95_macro_f1": [
+        0.6948,
+        0.8112
+      ],
+      "p95_latency_cpu_ms": 0.182,
+      "model_size_mb": 0.0351,
+      "production_status": "CHOSEN_FOR_PRODUCTION"
+    },
+    "paired_bootstrap_comparison": {
+      "rounds": 1000,
+      "mean_delta_b_minus_c": 0.1381,
+      "ci_95_delta": [
+        0.0647,
+        0.207
+      ],
+      "p_value": 0.0,
+      "statistically_significant": true
+    }
+  },
+  "abstention_analysis": {
+    "optimal_threshold": 0.8,
+    "retained_accuracy": 0.9762,
+    "retained_coverage": 0.21,
+    "fallback_to_llm_rate": 0.79,
+    "policy": "If confidence < threshold, route turn to Tier 3 (LLM Fallback)."
+  },
+  "onnx_parity_gate": {
+    "model_path": "artifacts\\router_model.onnx",
+    "max_abs_diff_fp32_vs_int8": 2.980232238769531e-07,
+    "tolerance": 0.0001,
+    "status": "PASSED",
+    "sha256": "0cc5f770af0c6d2b49417021244d6d5d20d7453e87f614855e9aa7b1478ec95e"
+  }
+}
