@@ -2,8 +2,10 @@
 
 import asyncio
 
+import httpx
 import pytest
 
+from src.ai.inference import clients
 from src.ai.inference.clients import (
     MockClassifyClient,
     MockEmbedClient,
@@ -64,3 +66,63 @@ def test_pii_security_assertion():
     nested_leaky = {"data": [{"contact_id": "456", "text": "Hỏi giá"}]}
     with pytest.raises(ValueError, match="VI PHẠM BẢO MẬT"):
         _assert_no_pii_keys(nested_leaky)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Client remote dùng CHUNG một AsyncClient — tạo mới mỗi lần gọi tốn ~200 ms (đo 05/10)
+# ══════════════════════════════════════════════════════════════════════════════
+
+URL = "http://ai-classify.test"
+
+
+def _install_fake(calls: list[str]) -> None:
+    """Đặt sẵn một AsyncClient có transport giả vào cache, cho loop đang chạy."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        return httpx.Response(200, json={"intent": "KB_SEARCH", "confidence": 0.9, "model_id": "m"})
+
+    key = (id(asyncio.get_running_loop()), URL)
+    clients._HTTP_CLIENTS[key] = httpx.AsyncClient(
+        base_url=URL, transport=httpx.MockTransport(handler)
+    )
+
+
+def test_remote_classify_dung_chung_mot_client():
+    async def _run():
+        calls: list[str] = []
+        _install_fake(calls)
+        c = clients.RemoteClassifyClient(base_url=URL)
+        first = clients._http(URL)
+        for _ in range(3):
+            res = await c.classify("giá gói pro")
+            assert res["intent"] == "KB_SEARCH"
+        assert calls == ["/v1/classify"] * 3
+        assert clients._http(URL) is first  # không tạo client mới giữa các lần gọi
+        await clients.aclose_http_clients()
+        assert clients._HTTP_CLIENTS == {}
+
+    asyncio.run(_run())
+
+
+def test_remote_client_chan_dinh_danh_truoc_khi_goi_mang():
+    async def _run():
+        calls: list[str] = []
+        _install_fake(calls)
+        with pytest.raises(ValueError, match="VI PHẠM BẢO MẬT"):
+            await clients.RemoteClassifyClient(base_url=URL).score_lead({"tenant_id": 1.0})
+        assert calls == []  # chặn trước, không request nào đi ra
+        await clients.aclose_http_clients()
+
+    asyncio.run(_run())
+
+
+def test_moi_event_loop_mot_client_rieng():
+    seen = []
+
+    async def _grab():
+        seen.append(clients._http(URL))
+        await clients.aclose_http_clients()
+
+    asyncio.run(_grab())
+    asyncio.run(_grab())
+    assert seen[0] is not seen[1]
