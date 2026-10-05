@@ -15,10 +15,13 @@ suy luận; đó là lý do pod sẵn sàng trong 2–5 giây thay vì 20–40 g
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from src.ai.config import get_settings
+from src.ai.exceptions import TenantContextMissingError
 from src.ai.telemetry.logging import setup_logging
 from src.api import eureka
 from src.api.v1.endpoints import health
@@ -60,7 +63,19 @@ def create_app() -> FastAPI:
     )
 
     # TODO: middleware gắn X-Trace-Id vào ContextVar cho mọi request
-    # TODO: exception handler dịch AiServiceError sang phản hồi HTTP
+    # TODO: exception handler cho các AiServiceError còn lại
+
+    @app.exception_handler(TenantContextMissingError)
+    async def _tenant_missing(_: Request, exc: TenantContextMissingError) -> JSONResponse:
+        # 401 theo hợp đồng, thân lỗi theo ErrorResponse. Không đoán tenant (ADR-0001).
+        return JSONResponse(
+            status_code=401,
+            content={
+                "code": "TENANT_CONTEXT_MISSING",
+                "message": str(exc),
+                "timestamp": datetime.now(UTC).isoformat(),
+            },
+        )
     # TODO: /metrics cho Prometheus (prometheus-client)
 
     # Bề mặt vận hành — KHÔNG đánh phiên bản. Docker Compose gọi /health, Prometheus gọi
