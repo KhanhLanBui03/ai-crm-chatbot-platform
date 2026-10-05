@@ -30,3 +30,21 @@ Regex chỉ là lớp ngoài cùng và là lớp yếu nhất. Bốn lớp còn 
 allow-list công cụ ba lớp, validate output bằng Pydantic, và khoá cache có
 ``tenant_id`` — mới là phần chịu lực.
 """
+
+from src.ai.guardrails.injection import (
+    SAFETY_FLAG_INJECTION,
+    InjectionResult,
+    detect_injection,
+)
+from src.ai.guardrails.normalize import normalize_vietnamese_text
+from src.ai.guardrails.pii import contains_pii, mask_pii
+
+__all__ = [
+    "normalize_vietnamese_text",
+    "detect_injection",
+    "InjectionResult",
+    "SAFETY_FLAG_INJECTION",
+    "mask_pii",
+    "contains_pii",
+]
+
