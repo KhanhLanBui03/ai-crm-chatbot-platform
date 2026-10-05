@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -94,36 +93,72 @@ def _find_path(rel_path: str) -> Path | None:
     return None
 
 
+_ROUTER_LOAD_ERROR: str | None = None
+
+
+def _load_sibling(module_name: str, path: Path) -> Any:
+    """Nạp module theo đường dẫn file.
+
+    Không dùng ``from src import ...``: test của ai-service nạp file này bằng đường dẫn,
+    và ở đó ``src`` là package của ai-service chứ không phải của inference.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def _init_router_model() -> None:
-    """Nạp ONNX InferenceSession và Embedder cho Router Nhánh C."""
-    global _ONNX_SESSION, _EMBEDDER, _ROUTER_INITIALIZED
+    """Nạp ONNX INT8 + embedder (JSON) cho router nhánh C.
+
+    Trước 05/10 hàm này cần ``joblib`` + pickle ``router_branch_c.joblib`` + code ai-service —
+    image ai-inference không có thứ nào, nên container âm thầm chạy luật từ khoá. Giờ chỉ cần
+    hai file ``artifacts/router_model.onnx`` và ``artifacts/router_embedder.json``; nạp hỏng
+    thì ghi lỗi vào ``_ROUTER_LOAD_ERROR`` để ``/ready`` trả 503 (fail-closed).
+    """
+    global _ONNX_SESSION, _EMBEDDER, _ROUTER_INITIALIZED, _ROUTER_LOAD_ERROR
     if _ROUTER_INITIALIZED:
         return
     _ROUTER_INITIALIZED = True
 
-    # Đảm bảo ai-service/src có trên sys.path để nạp SemanticDenseEmbedder unpickle
-    for parent in Path(__file__).resolve().parents:
-        cand_src = parent / "ai-service" / "src"
-        if cand_src.is_dir() and str(cand_src) not in sys.path:
-            sys.path.insert(0, str(cand_src))
-
     onnx_file = _find_path("artifacts/router_model.onnx")
-    joblib_file = _find_path("artifacts/router_branch_c.joblib")
+    emb_file = _find_path("artifacts/router_embedder.json")
+    if not onnx_file or not emb_file:
+        _ROUTER_LOAD_ERROR = (
+            f"Thiếu artifact router: router_model.onnx={onnx_file}, router_embedder.json={emb_file}"
+        )
+        logger.error(_ROUTER_LOAD_ERROR)
+        return
 
-    if onnx_file and joblib_file:
-        try:
-            import joblib
-            import onnxruntime as ort
-            _ONNX_SESSION = ort.InferenceSession(str(onnx_file), providers=["CPUExecutionProvider"])
-            artifact_c = joblib.load(joblib_file)
-            _EMBEDDER = artifact_c.get("embedder")
-            logger.info("Đã nạp ONNX Router INT8 thành công từ: %s", onnx_file)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Không thể nạp Router ONNX: %s. Tiếp tục với quy tắc rule-based.", exc)
+    try:
+        here = Path(__file__).resolve()
+        emb_mod = _load_sibling("inference_router_embedder", here.with_name("router_embedder.py"))
+        session_mod = _load_sibling("inference_session", here.parents[1] / "session.py")
+        embedder = emb_mod.RouterEmbedder.from_json(emb_file)
+        if sorted(embedder.classes) != sorted(INTENT_TAXONOMY):
+            raise ValueError(f"Lớp của embedder {embedder.classes} không khớp taxonomy 7 ý định")
+        # Ghim intra_op = OMP_NUM_THREADS (§5.4) thay vì để ONNX Runtime tự đọc số CPU của node
+        _ONNX_SESSION = session_mod.make_session(onnx_file)
+        _EMBEDDER = embedder
+        logger.info("Đã nạp router ONNX INT8 (%s) + embedder (%s)", onnx_file, emb_file)
+    except Exception as exc:  # noqa: BLE001 — mọi lỗi nạp đều dẫn tới /ready 503
+        _ROUTER_LOAD_ERROR = f"Không nạp được router: {type(exc).__name__}: {exc}"
+        logger.error(_ROUTER_LOAD_ERROR)
 
 
 def check_invariants() -> tuple[bool, str]:
-    """Kiểm tra Bất biến 1 (model_id) và Bất biến 2 (thứ tự cột đặc trưng) theo §3.4.2."""
+    """Kiểm tra Bất biến 1 (model_id) và Bất biến 2 (thứ tự cột đặc trưng) theo §3.4.2.
+
+    Thêm 05/10: router phải nạp được mô hình. Đặc tả UC022 4.1 — dịch vụ phân loại không
+    sẵn sàng thì /ready trả 503, KHÔNG chạy suy giảm bằng luật, vì định tuyến sai còn tệ
+    hơn không trả lời.
+    """
+    _init_router_model()
+    if _ROUTER_LOAD_ERROR is not None:
+        return False, f"ROUTER CHƯA SẴN SÀNG: {_ROUTER_LOAD_ERROR}"
+
     # 1. Bất biến 1: model_id
     expected_id = os.getenv("EXPECTED_MODEL_ID")
     current_id = get_model_id()
