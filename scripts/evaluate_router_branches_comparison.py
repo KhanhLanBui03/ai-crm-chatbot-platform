@@ -344,8 +344,9 @@ def main() -> None:
     onnx_int8_path = Path("artifacts/router_model.onnx")
 
     # Export LogisticRegression classifier to ONNX
+    # Export LogisticRegression classifier to ONNX với tên đồ thị cố định để đảm bảo tính tái lập (deterministic)
     initial_type = [("float_input", FloatTensorType([None, VECTOR_DIM]))]
-    onnx_model = convert_sklearn(clf_lr, initial_types=initial_type, target_opset=15)
+    onnx_model = convert_sklearn(clf_lr, name="intent_router_v1", initial_types=initial_type, target_opset=15)
     onnx_fp32_path.write_bytes(onnx_model.SerializeToString())
 
     # Dynamic Quantization sang INT8
@@ -378,11 +379,11 @@ def main() -> None:
     hashes_file = Path("artifacts/DATA_HASHES.txt")
     if hashes_file.is_file():
         content = hashes_file.read_text(encoding="utf-8")
-        entry = f"{onnx_hash}  artifacts/router_model.onnx\n"
-        if "artifacts/router_model.onnx" not in content:
-            with open(hashes_file, "a", encoding="utf-8") as f:
-                f.write(entry)
-            logger.info("Đã cập nhật mã băm ONNX vào artifacts/DATA_HASHES.txt")
+        entry = f"{onnx_hash}  artifacts/router_model.onnx"
+        lines = [line for line in content.splitlines() if "artifacts/router_model.onnx" not in line and line.strip()]
+        lines.append(entry)
+        hashes_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        logger.info("Đã cập nhật mã băm ONNX vào artifacts/DATA_HASHES.txt")
 
     # 8. Xuất Báo cáo So sánh JSON
     comparison_report = {

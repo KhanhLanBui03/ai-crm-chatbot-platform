@@ -81,7 +81,7 @@ Căn cứ vào **Quy tắc phá thế hòa Master Plan §5.9**:
 * **Kiểm định Cổng Parity:** Sai số tuyệt đối lớn nhất giữa xác suất của mô hình gốc Scikit-Learn và mô hình ONNX INT8 là:
   $$\max |P_{\text{sklearn}} - P_{\text{onnx}}| = 2.98 \times 10^{-7} \ll 10^{-4}$$
 * Cổng Parity chính thức được đóng dấu: **PASSED**.
-* Mã băm bảo toàn: `c70cfccbf70c9ea255aa3272a2192d251bc1dedf467c4157230b3874688da834` (đã ghi nhận tại [`artifacts/DATA_HASHES.txt`](../../artifacts/DATA_HASHES.txt)).
+* Mã băm bảo toàn: `0cc5f770af0c6d2b49417021244d6d5d20d7453e87f614855e9aa7b1478ec95e` (đã ghi nhận tại [`artifacts/DATA_HASHES.txt`](../../artifacts/DATA_HASHES.txt)).
 
 ---
 

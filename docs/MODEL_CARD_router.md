@@ -30,7 +30,7 @@ pipeline_tag: text-classification
 - **Ngày phát hành:** 2026-10-04
 - **Đơn vị phát triển:** Nhóm KLTN AI CRM Chatbot Platform (Track B — AI Service)
 - **Tệp phân phối runtime:** `artifacts/router_model.onnx`
-- **Mã băm SHA-256:** `c70cfccbf70c9ea255aa3272a2192d251bc1dedf467c4157230b3874688da834` (đã đóng băng tại [`artifacts/DATA_HASHES.txt`](../artifacts/DATA_HASHES.txt))
+- **Mã băm SHA-256:** `0cc5f770af0c6d2b49417021244d6d5d20d7453e87f614855e9aa7b1478ec95e` (đã đóng băng tại [`artifacts/DATA_HASHES.txt`](../artifacts/DATA_HASHES.txt))
 - **Định dạng:** ONNX Opset 15, Dynamic Quantization `QUInt8`
 - **Kích thước tệp:** 36.8 KB (35.94 KiB)
 - **Khung công tác suy luận:** ONNX Runtime (`onnxruntime >= 1.20.0`), CPU Execution Provider

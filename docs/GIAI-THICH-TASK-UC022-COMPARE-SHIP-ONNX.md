@@ -99,7 +99,7 @@ $$\text{Nếu } p95_{\text{CPU}} > 60\text{ ms} \implies \text{REJECTED. Phá th
 * **Kiểm định Cổng Parity Gate:** So sánh độ sai lệch xác suất dự đoán giữa mô hình Scikit-Learn nguyên bản và mô hình ONNX INT8 trên toàn bộ 200 mẫu test:
   $$\max |P_{\text{sklearn}} - P_{\text{onnx}}| = 2.98 \times 10^{-7} \ll 10^{-4}$$
 * **Kết quả:** Cổng Parity Gate chính thức **PASSED**.
-* Mã băm bảo mật SHA-256: `c70cfccbf70c9ea255aa3272a2192d251bc1dedf467c4157230b3874688da834` (đã ghi vào `artifacts/DATA_HASHES.txt`).
+* Mã băm bảo mật SHA-256: `0cc5f770af0c6d2b49417021244d6d5d20d7453e87f614855e9aa7b1478ec95e` (đã ghi vào `artifacts/DATA_HASHES.txt`).
 
 ---
 
