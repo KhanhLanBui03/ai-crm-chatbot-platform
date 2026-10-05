@@ -1,64 +1,138 @@
 {
   "metadata": {
     "use_case": "UC022 (3/4)",
-    "task_name": "So sánh hai nhánh có khoảng tin cậy + chốt nhánh ship + export ONNX",
-    "evaluated_at": "2026-10-05T03:35:56Z",
+    "evaluated_at": "2026-10-05T07:53:39Z",
     "environment": {
       "os": "Windows 11",
       "python": "3.14.5",
       "onnxruntime": "1.30.0",
       "random_seed": 42
     },
-    "winning_branch": "Branch C (ai-embed + Cosine/kNN Classifier)",
-    "decision_rationale": "Branch C meets the strict CPU latency budget (p95 0.182 ms << 60 ms) and zero additional overhead, whereas Branch B exceeds budget (p95 168.2 ms).",
-    "abstention_threshold": 0.8
+    "test_set_sha256": "8cc500dc96ebd15f18af01ca386b53a3b85941dba9c06ce12f46ffa24d0a1ecf",
+    "decision": "Nhánh B chưa được đánh giá trên tập test (không có file dự đoán thật). Nhánh C là nhánh DUY NHẤT đã đánh giá — ship nhánh C; chưa có cơ sở so sánh B–C.",
+    "note": "Mọi số liệu trong báo cáo này là số đo thật; nhánh không có số đo thì ghi null."
   },
-  "comparison_table": {
-    "branch_b_xlmr": {
-      "architecture": "xlm-roberta-base (Fine-tuned, 278M params)",
-      "macro_f1": 0.8947,
-      "accuracy": 0.895,
-      "ci_95_macro_f1": [
-        0.8483,
-        0.9334
-      ],
-      "p95_latency_cpu_ms": 168.2,
-      "model_size_mb": 1112.0,
-      "production_status": "REJECTED_DUE_TO_LATENCY_BUDGET"
+  "branch_c_ai_embed": {
+    "architecture": "Feature hashing char 3/4-gram + IDF (1024 chiều, SemanticDenseEmbedder — chưa phải BGE-M3) + LogisticRegression -> ONNX INT8",
+    "macro_f1": 0.6755,
+    "accuracy": 0.675,
+    "ci_95_macro_f1": [
+      0.6131,
+      0.7327
+    ],
+    "knn_reference_macro_f1": 0.7582,
+    "latency": {
+      "p50_ms_embed_plus_classifier": 0.181,
+      "p95_ms_embed_plus_classifier": 0.329,
+      "p95_ms_classifier_only": 0.053,
+      "samples": 600,
+      "machine": "Windows AMD64 / Intel64 Family 6 Model 154 Stepping 4, GenuineIntel"
     },
-    "branch_c_ai_embed": {
-      "architecture": "ai-embed BGE-M3 (1024-dim) + ONNX INT8 Classifier",
-      "macro_f1": 0.7582,
-      "accuracy": 0.76,
-      "ci_95_macro_f1": [
-        0.6948,
-        0.8112
-      ],
-      "p95_latency_cpu_ms": 0.182,
-      "model_size_mb": 0.0351,
-      "production_status": "CHOSEN_FOR_PRODUCTION"
-    },
-    "paired_bootstrap_comparison": {
-      "rounds": 1000,
-      "mean_delta_b_minus_c": 0.1381,
-      "ci_95_delta": [
-        0.0647,
-        0.207
-      ],
-      "p_value": 0.0,
-      "statistically_significant": true
-    }
+    "model_size_kb": 35.93
   },
+  "branch_b_xlmr": {
+    "status": "NOT_EVALUATED",
+    "predictions_file": null,
+    "macro_f1": null,
+    "accuracy": null,
+    "latency": null
+  },
+  "paired_bootstrap_b_vs_c": null,
   "abstention_analysis": {
-    "optimal_threshold": 0.8,
-    "retained_accuracy": 0.9762,
-    "retained_coverage": 0.21,
-    "fallback_to_llm_rate": 0.79,
-    "policy": "If confidence < threshold, route turn to Tier 3 (LLM Fallback)."
+    "curve": [
+      {
+        "tau": 0.1,
+        "retained_accuracy": 0.675,
+        "coverage": 1.0
+      },
+      {
+        "tau": 0.15,
+        "retained_accuracy": 0.675,
+        "coverage": 1.0
+      },
+      {
+        "tau": 0.2,
+        "retained_accuracy": 0.6784,
+        "coverage": 0.995
+      },
+      {
+        "tau": 0.25,
+        "retained_accuracy": 0.6784,
+        "coverage": 0.995
+      },
+      {
+        "tau": 0.3,
+        "retained_accuracy": 0.7021,
+        "coverage": 0.94
+      },
+      {
+        "tau": 0.35,
+        "retained_accuracy": 0.7399,
+        "coverage": 0.865
+      },
+      {
+        "tau": 0.4,
+        "retained_accuracy": 0.7935,
+        "coverage": 0.775
+      },
+      {
+        "tau": 0.45,
+        "retained_accuracy": 0.8209,
+        "coverage": 0.67
+      },
+      {
+        "tau": 0.5,
+        "retained_accuracy": 0.8496,
+        "coverage": 0.565
+      },
+      {
+        "tau": 0.55,
+        "retained_accuracy": 0.8585,
+        "coverage": 0.53
+      },
+      {
+        "tau": 0.6,
+        "retained_accuracy": 0.9111,
+        "coverage": 0.45
+      },
+      {
+        "tau": 0.65,
+        "retained_accuracy": 0.9241,
+        "coverage": 0.395
+      },
+      {
+        "tau": 0.7,
+        "retained_accuracy": 0.9365,
+        "coverage": 0.315
+      },
+      {
+        "tau": 0.75,
+        "retained_accuracy": 0.9434,
+        "coverage": 0.265
+      },
+      {
+        "tau": 0.8,
+        "retained_accuracy": 1.0,
+        "coverage": 0.21
+      },
+      {
+        "tau": 0.85,
+        "retained_accuracy": 1.0,
+        "coverage": 0.195
+      }
+    ],
+    "smallest_tau_reaching_0_95": 0.8,
+    "production_tau": 0.65,
+    "at_production_tau": {
+      "retained_accuracy": 0.9241,
+      "coverage": 0.395
+    }
   },
   "onnx_parity_gate": {
     "model_path": "artifacts\\router_model.onnx",
-    "max_abs_diff_fp32_vs_int8": 2.980232238769531e-07,
+    "re_exported": false,
+    "max_abs_diff_sklearn_vs_onnx_int8": 2.980232238769531e-07,
+    "label_agreement": 1.0,
     "tolerance": 0.0001,
     "status": "PASSED",
     "sha256": "0cc5f770af0c6d2b49417021244d6d5d20d7453e87f614855e9aa7b1478ec95e"

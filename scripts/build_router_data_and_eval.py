@@ -1,20 +1,19 @@
-"""Xây dựng tập dữ liệu huấn luyện UC022 và đánh giá gán nhãn chéo (Inter-Annotator Agreement).
+"""[R&D] Xây dựng tập dữ liệu huấn luyện UC022 từ TEMPLATE và khử trùng lặp gần giống.
 
-Yêu cầu kỹ thuật:
-1. Sinh 3.000 mẫu train theo phân bố:
-   - 25% Lịch sự đầy đủ (750)
-   - 25% Chat ngắn viết tắt (750)
-   - 20% Không dấu (600)
-   - 15% Lỗi chính tả nhẹ (450)
-   - 10% Pha tiếng Anh (300)
-   - 5% Emoji cảm xúc (150)
-   Bao quát 7 nhánh ý định: GREETING, KB_SEARCH, PRICING_POLICY, COMPLAINT_SUPPORT,
-   HANDOFF_HUMAN, TECH_ERROR, BUYING_INTENT.
-2. Khử trùng lặp gần giống (Near-duplicate Deduplication):
-   - Tỉ lệ bản sao gần giống trong tập thô ~28% (khớp đặc tả Master Plan "khoảng 30% là bản sao").
-   - Giữ lại tập sạch ~2.150 mẫu chất lượng cao, độc nhất sau khi khử trùng lặp.
-3. Gán nhãn chéo tập test 200 câu người thật giữa Dev A & Dev B, tính Cohen's Kappa κ.
-4. Đóng băng mã SHA-256 vào artifacts/DATA_HASHES.txt và xuất báo cáo vào reports/eval/.
+Việc script này làm — mô tả đúng như code chạy:
+1. Sinh câu train bằng TỔ HỢP TEMPLATE (``SLOTS`` + ``random.choice``, seed 42), KHÔNG gọi LLM,
+   theo 6 văn phong: polite_full 25% · short_abbrev 25% · no_accent 20% · typo 15% ·
+   en_mix 10% · emoji 5%, trên 7 ý định.
+2. Để đủ chỉ tiêu 3.000 mẫu thô, script CHỦ ĐỘNG CHÈN bản sao gần giống của câu đã có
+   (thêm từ đệm " ạ", " nhé"... hoặc khoảng trắng) — xem ``create_dataset_with_natural_duplicates``.
+   Vì vậy tỉ lệ khử trùng lặp ở bước 3 là hệ quả của số bản sao được chèn, KHÔNG phải số đo
+   về dữ liệu tự nhiên; không được trình bày như bằng chứng cho cảnh báo "~30% là bản sao".
+3. Khử trùng lặp gần giống: Jaccard trên character 3-gram, ngưỡng 0,88, trong từng ý định.
+4. Ghi SHA-256 tập sạch vào artifacts/DATA_HASHES.txt và phân bố vào reports/eval/.
+
+Cohen's Kappa KHÔNG còn tính ở đây: phiên bản cũ tự dựng nhãn "Dev A" từ nhãn vàng cộng 13 ca
+bất đồng viết cứng — đó là số liệu giả lập. Kappa thật đọc nhãn của hai người từ hai file
+riêng: ``scripts/compute_annotation_kappa.py``.
 """
 
 import hashlib
@@ -489,83 +488,6 @@ def deduplicate(samples: list[dict], threshold: float = 0.88) -> tuple[list[dict
     return cleaned, removed, stats
 
 
-def compute_cohens_kappa(human_test_path: Path) -> dict:
-    records = []
-    with open(human_test_path, encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                records.append(json.loads(line))
-
-    assert len(records) == 200, f"Kỳ vọng 200 câu test, thực tế có {len(records)}"
-
-    # 13 ca bất đồng thực tế giữa Dev A và Dev B
-    disagreements_map = {
-        12: ("PRICING_POLICY", "BUYING_INTENT", "Vừa hỏi giá vừa chốt mua"),
-        28: ("KB_SEARCH", "TECH_ERROR", "Lỗi thao tác vs tài liệu hướng dẫn"),
-        45: ("COMPLAINT_SUPPORT", "HANDOFF_HUMAN", "Khách phàn nàn đòi gặp quản lý"),
-        62: ("GREETING", "KB_SEARCH", "Lời chào kết hợp hỏi tính năng"),
-        77: ("BUYING_INTENT", "PRICING_POLICY", "Hỏi chiết khấu để ký hợp đồng"),
-        89: ("TECH_ERROR", "COMPLAINT_SUPPORT", "Chê bai vì hệ thống chậm"),
-        104: ("HANDOFF_HUMAN", "COMPLAINT_SUPPORT", "Phàn nàn và đòi gặp người thật"),
-        118: ("KB_SEARCH", "PRICING_POLICY", "Hỏi tính năng ZNS kèm chi phí"),
-        135: ("BUYING_INTENT", "HANDOFF_HUMAN", "Đòi gặp nhân viên để chốt hợp đồng"),
-        152: ("TECH_ERROR", "KB_SEARCH", "Lỗi do cấu hình webhook sai"),
-        167: ("PRICING_POLICY", "BUYING_INTENT", "Hỏi tài khoản chuyển tiền"),
-        181: ("COMPLAINT_SUPPORT", "TECH_ERROR", "Bực bội khi gặp lỗi 500"),
-        195: ("GREETING", "HANDOFF_HUMAN", "Chào kèm yêu cầu có người tiếp")
-    }
-
-    dev_a = []
-    dev_b = []
-    disagreement_details = []
-
-    for idx, item in enumerate(records, start=1):
-        true_label = item["intent"]
-        dev_b.append(true_label)
-
-        if idx in disagreements_map:
-            label_a, label_b, desc = disagreements_map[idx]
-            dev_a.append(label_a)
-            disagreement_details.append({
-                "item_id": idx,
-                "text": item["text"],
-                "dev_a_label": label_a,
-                "dev_b_label": label_b,
-                "consensus_label": true_label,
-                "resolution_notes": f"{desc}. Sau trao đổi: thống nhất nhãn '{true_label}' theo thứ tự ưu tiên nghiệp vụ trong ADR-0016."
-            })
-        else:
-            dev_a.append(true_label)
-
-    matrix = {row: {col: 0 for col in INTENTS} for row in INTENTS}
-    for la, lb in zip(dev_a, dev_b):
-        matrix[lb][la] += 1
-
-    total = len(records)
-    agree = sum(1 for la, lb in zip(dev_a, dev_b) if la == lb)
-    p_o = agree / total
-
-    cA = Counter(dev_a)
-    cB = Counter(dev_b)
-    p_e = sum((cA[cat] / total) * (cB[cat] / total) for cat in INTENTS)
-
-    kappa = (p_o - p_e) / (1.0 - p_e) if (1.0 - p_e) != 0 else 1.0
-
-    return {
-        "annotator_1": "Dev A (Platform / Java Core)",
-        "annotator_2": "Dev B (AI Service / Python)",
-        "sample_count": total,
-        "agreed_count": agree,
-        "disagreed_count": len(disagreement_details),
-        "observed_agreement_po": round(p_o, 4),
-        "chance_agreement_pe": round(p_e, 4),
-        "cohens_kappa": round(kappa, 4),
-        "interpretation": "Almost Perfect Agreement (Landis & Koch, 1977)",
-        "confusion_matrix": matrix,
-        "disagreements": disagreement_details,
-    }
-
-
 def main():
     print("=" * 70)
     print("1. SINH TẬP HUẤN LUYỆN 3.000 MẪU (THEO 6 VĂN PHONG)")
@@ -600,22 +522,9 @@ def main():
             f.write(json.dumps(s, ensure_ascii=False) + "\n")
     print(f"-> Đã ghi file: {clean_path}")
 
-    print("\n" + "=" * 70)
-    print("3. GÁN NHÃN CHÉO & TÍNH COHEN'S KAPPA TRÊN 200 CÂU TEST")
-    print("=" * 70)
-    human_test_path = Path("data/intent_test_human.jsonl")
-    kappa_data = compute_cohens_kappa(human_test_path)
-    print(f"Độ đồng thuận quan sát được Po: {kappa_data['observed_agreement_po'] * 100:.1f}%")
-    print(f"Độ đồng thuận ngẫu nhiên Pe  : {kappa_data['chance_agreement_pe'] * 100:.1f}%")
-    print(f"Chỉ số Cohen's Kappa κ       : {kappa_data['cohens_kappa']} ({kappa_data['interpretation']})")
-    print(f"Số ca bất đồng được giải quyết: {kappa_data['disagreed_count']} ca")
-
     eval_dir = Path("reports/eval")
     eval_dir.mkdir(parents=True, exist_ok=True)
-    kappa_file = eval_dir / "annotation_kappa_report.json"
-    with open(kappa_file, "w", encoding="utf-8") as f:
-        json.dump(kappa_data, f, ensure_ascii=False, indent=2)
-    print(f"-> Đã xuất báo cáo Kappa: {kappa_file}")
+    # Cohen's Kappa: xem scripts/compute_annotation_kappa.py (đọc nhãn thật của hai người)
 
     dist_file = eval_dir / "intent_data_distribution.json"
     clean_style_dist = Counter(s["style"] for s in clean_samples)
@@ -634,7 +543,7 @@ def main():
     print(f"-> Đã xuất báo cáo phân bố: {dist_file}")
 
     print("\n" + "=" * 70)
-    print("4. ĐÓNG BĂNG MÃ HASH SHA-256")
+    print("3. ĐÓNG BĂNG MÃ HASH SHA-256")
     print("=" * 70)
     clean_hash = hashlib.sha256(clean_path.read_bytes()).hexdigest()
     hashes_file = Path("artifacts/DATA_HASHES.txt")
