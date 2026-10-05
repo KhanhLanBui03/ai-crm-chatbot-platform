@@ -72,6 +72,63 @@ _ACCENTED_VOWEL_PATTERNS = [
 _PUNCT_REPEAT_PATTERN = re.compile(r"([?!])\1+")
 _DOT_REPEAT_PATTERN = re.compile(r"\.{4,}")
 
+# Bảng chuẩn hoá từ viết tắt / teencode thông dụng trong hội thoại khách hàng Việt Nam
+_TEENCODE_MAP: dict[str, str] = {
+    # Không
+    "ko": "không",
+    "kô": "không",
+    "khg": "không",
+    "khong": "không",
+    "hok": "không",
+    "hem": "không",
+    "k": "không",
+    # Được
+    "đc": "được",
+    "dc": "được",
+    # Sản phẩm
+    "sp": "sản phẩm",
+    # Nhân viên
+    "nv": "nhân viên",
+    "nvien": "nhân viên",
+    # Như thế nào / thế nào
+    "ntn": "như thế nào",
+    "tnao": "thế nào",
+    # Tin nhắn / Phản hồi
+    "ib": "nhắn tin",
+    "inb": "nhắn tin",
+    "rep": "phản hồi",
+    # Quản trị viên
+    "ad": "admin",
+    # Chưa
+    "chx": "chưa",
+    # Thích
+    "thik": "thích",
+    "thjk": "thích",
+    # Bây giờ
+    "bh": "bây giờ",
+    "bjo": "bây giờ",
+    "bgiờ": "bây giờ",
+    # Mình
+    "mk": "mình",
+}
+
+# Regex bắt teencode độc lập giữa ranh giới từ (\b), ưu tiên từ dài trước
+_TEENCODE_REGEX = re.compile(
+    r"(?i)\b(" + "|".join(re.escape(k) for k in sorted(_TEENCODE_MAP.keys(), key=len, reverse=True)) + r")\b"
+)
+
+
+def _replace_teencode(m: re.Match[str]) -> str:
+    raw = m.group(0)
+    lower = raw.lower()
+    repl = _TEENCODE_MAP.get(lower, raw)
+    if raw.isupper():
+        return repl.upper()
+    if raw[0].isupper():
+        return repl.capitalize()
+    return repl
+
+
 # Khoảng trắng và ngắt dòng
 _LINE_WHITESPACE_PATTERN = re.compile(r"[ \t]*\n[ \t]*")
 _MULTI_SPACE_PATTERN = re.compile(r"[ \t]+")
@@ -81,12 +138,13 @@ _MULTI_NEWLINE_PATTERN = re.compile(r"\n{3,}")
 def normalize_vietnamese_text(text: str) -> str:
     """Chuẩn hoá văn bản tiếng Việt toàn diện cho Guardrails và Retrieval.
     
-    Quy trình 5 bước:
+    Quy trình 6 bước:
     1. Lọc sạch ký tự zero-width và ký tự ẩn.
     2. Chuẩn hoá Unicode về chuẩn NFC (tránh phân rã NFD làm lỗi so khớp chuỗi).
     3. Thống nhất quy tắc đặt dấu thanh (chuyển hoà/toà/thuỷ -> hòa/tòa/thủy).
     4. Gộp các ký tự chữ lặp quá mức (kể cả teencode kéo dài) và dấu câu lặp.
-    5. Chuẩn hoá khoảng trắng và ngắt dòng.
+    5. Chuẩn hoá từ viết tắt / teencode phổ biến (ko -> không, đc -> được, sp -> sản phẩm).
+    6. Chuẩn hoá khoảng trắng và ngắt dòng.
     """
     if not text:
         return ""
@@ -102,7 +160,7 @@ def normalize_vietnamese_text(text: str) -> str:
     s = _OPEN_OE_PATTERN.sub(_replace_open_oe, s)
     s = _OPEN_UY_PATTERN.sub(_replace_open_uy, s)
 
-    # Bước 4: Gộp ký tự chữ lặp quá mức (ví dụ: "đượcccc" -> "được")
+    # Bước 4: Gộp ký tự chữ lặp quá mức (ví dụ: "đượcccc" -> "được", "koooo" -> "ko")
     s = _CHAR_REPEAT_PATTERN.sub(r"\1", s)
     for p, repl in _ACCENTED_VOWEL_PATTERNS:
         s = p.sub(repl, s)
@@ -111,7 +169,10 @@ def normalize_vietnamese_text(text: str) -> str:
     s = _PUNCT_REPEAT_PATTERN.sub(r"\1", s)
     s = _DOT_REPEAT_PATTERN.sub("...", s)
 
-    # Bước 5: Chuẩn hoá khoảng trắng và ngắt dòng
+    # Bước 5: Chuẩn hoá từ viết tắt / teencode (ko -> không, đc -> được, sp -> sản phẩm)
+    s = _TEENCODE_REGEX.sub(_replace_teencode, s)
+
+    # Bước 6: Chuẩn hoá khoảng trắng và ngắt dòng
     s = _LINE_WHITESPACE_PATTERN.sub("\n", s)
     s = _MULTI_NEWLINE_PATTERN.sub("\n\n", s)
     s = _MULTI_SPACE_PATTERN.sub(" ", s)

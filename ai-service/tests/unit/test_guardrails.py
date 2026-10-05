@@ -40,6 +40,15 @@ def test_normalize_punct_repetition():
     assert normalized == "Giá bao nhiêu thế?! Gửi lại giúp mình..."
 
 
+def test_normalize_teencode_and_slang():
+    # Chuẩn hoá từ viết tắt / teencode thông dụng
+    assert normalize_vietnamese_text("ko có gì") == "không có gì"
+    assert normalize_vietnamese_text("Ko có gì đâu") == "Không có gì đâu"
+    assert normalize_vietnamese_text("tôi k biết sp này ntn") == "tôi không biết sản phẩm này như thế nào"
+    assert normalize_vietnamese_text("có đc giảm giá ko shop?") == "có được giảm giá không shop?"
+    assert normalize_vietnamese_text("nhờ ad hỗ trợ rep ib giúp mk") == "nhờ admin hỗ trợ phản hồi nhắn tin giúp mình"
+
+
 def test_normalize_whitespace_and_empty():
     assert normalize_vietnamese_text("") == ""
     assert normalize_vietnamese_text("   \n\n\n  xin   chào   \n\n\n\n  bạn   ") == "xin chào\n\nbạn"
