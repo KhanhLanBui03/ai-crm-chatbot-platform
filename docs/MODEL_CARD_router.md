@@ -112,8 +112,7 @@ max |ΔP| = 2,98 × 10⁻⁷ < 10⁻⁴, khớp nhãn 200/200 — **PASSED**.
 
 ### 4.5. So sánh với nhánh B (XLM-R)
 
-**Chưa có.** Không có checkpoint nhánh B trong repo và chưa có dự đoán trên tập test (log Kaggle
-trong `docs/report/` mâu thuẫn nội tại, chưa xác minh). Script so sánh
+**Chưa có.** Nhánh B **chưa từng chạy trên Kaggle** (xác nhận 2026-10-05). Log `kaggle_xlmr_training_launch.log` trước đây trong repo là log dựng sẵn, không phải đầu ra thật — đã xoá. Script so sánh
 chỉ tính nhánh B khi có `reports/eval/router_branch_b_predictions.jsonl` do notebook 05 xuất ra.
 
 ---

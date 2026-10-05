@@ -24,6 +24,9 @@ Rà soát code ngày 2026-10-05 cho thấy ba điểm mà phần còn lại củ
 Số đo thật của artifact đang ship (2026-10-05, 200 câu test người thật): Macro-F1 tầng 2 = 0,676
 (KTC 95% [0,613 ; 0,733]); cả router 3 tầng = 0,712. Chi tiết: `docs/MODEL_CARD_router.md`.
 
+4. **Nhánh B chưa từng chạy trên Kaggle.** Mục 6 dẫn tới `kaggle_xlmr_training_launch.log` như "log
+   xác nhận phiên chạy" — log đó dựng sẵn, không phải đầu ra thật, và đã bị xoá ngày 2026-10-05.
+
 Phần thân ADR dưới đây giữ nguyên như đã viết ngày 2026-09-24 để lưu vết quyết định.
 
 ---

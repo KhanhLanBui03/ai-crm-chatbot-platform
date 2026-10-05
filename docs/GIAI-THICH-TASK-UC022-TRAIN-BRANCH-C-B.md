@@ -82,15 +82,11 @@ COMPLAINT_SUPPORT     0.9375    0.5357      0.6818            28
 
 * **Mục tiêu:** Fine-tune `xlm-roberta-base` (278 triệu tham số) trên 1.941 mẫu train với 4 epochs.
 * **Chi phí thời gian:**
-  * Thời gian máy tính toán: **3 giờ 21 phút** trên 1 x Nvidia Tesla T4 (Kaggle).
-  * Thời gian nhân lực: **0 giờ** (chạy nền qua đêm không tốn thời gian dev ban ngày).
+  * Kế hoạch: chạy nền qua đêm trên 1 × T4 Kaggle (0 giờ công người). **Chưa thực hiện.**
 * **Trạng thái thật (2026-10-05): CHƯA CÓ KẾT QUẢ.**
-  * Log `kaggle_xlmr_training_launch.log` có số liệu 4 epoch (Val Macro-F1 0,9395) nhưng **mâu thuẫn
-  nội tại**: 4 epoch trải từ 23:46 đến 00:23 (37 phút) trong khi tổng kết ghi 3 giờ 21 phút; đầu log
-  ghi `RUNNING`, cuối log ghi `JOB_COMPLETED`. Chưa xác minh được trên Kaggle.
-  * Checkpoint `artifacts/router_branch_b_xlmr_best.pt` không tồn tại trong repo.
-  * Kể cả nếu log là thật, 0,9395 là Macro-F1 trên tập **validation tách từ dữ liệu template**, không
-    phải trên 200 câu test người thật — không so sánh trực tiếp được với nhánh C.
+  * Nhánh B **chưa từng chạy trên Kaggle** (xác nhận 2026-10-05). Log `kaggle_xlmr_training_launch.log` trước đây trong repo là log dựng sẵn, không phải đầu ra thật — đã xoá.
+  * Các số "3 giờ 21 phút", "Validation Accuracy 94,18%", "Val Macro-F1 0,9395" trong bản trước
+    lấy từ log đó — **không có thật**.
   * Để đưa nhánh B vào so sánh: chạy notebook 05, xuất `reports/eval/router_branch_b_predictions.jsonl`
     (`{"id": ..., "pred": ...}` cho đủ 200 câu test) và p95 CPU vào `router_branch_b_latency.json`.
 

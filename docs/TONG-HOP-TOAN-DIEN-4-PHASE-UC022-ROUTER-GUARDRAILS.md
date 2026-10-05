@@ -50,7 +50,7 @@ Chi tiết: [`GIAI-THICH-TASK-UC022-TRAIN-BRANCH-C-B.md`](GIAI-THICH-TASK-UC022-
 Embedder băm không phải vector ngữ nghĩa; lập luận "dùng chung lời gọi `ai-embed` với RAG" (ADR-0018)
 chỉ đúng khi huấn luyện lại trên vector BGE-M3 thật.
 
-**Nhánh B (XLM-R):** chưa có kết quả trên tập test, không có checkpoint trong repo. Log `kaggle_xlmr_training_launch.log` có số liệu 4 epoch (Val Macro-F1 0,9395) nhưng **mâu thuẫn nội tại**: 4 epoch trải từ 23:46 đến 00:23 (37 phút) trong khi tổng kết ghi 3 giờ 21 phút; đầu log ghi `RUNNING`, cuối log ghi `JOB_COMPLETED`. Chưa xác minh được trên Kaggle.
+**Nhánh B (XLM-R):** chưa có kết quả. Nhánh B **chưa từng chạy trên Kaggle** (xác nhận 2026-10-05). Log `kaggle_xlmr_training_launch.log` trước đây trong repo là log dựng sẵn, không phải đầu ra thật — đã xoá.
 
 ---
 
