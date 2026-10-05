@@ -18,7 +18,8 @@ _ZERO_WIDTH_PATTERN = re.compile(
 )
 
 # Bảng chuẩn hoá thống nhất kiểu đặt dấu thanh tiếng Việt (chuẩn mới: hòa, tòa, thủy, khỏe)
-# Chỉ áp dụng cho các âm tiết mở (kết thúc bằng nguyên âm), không áp dụng khi có phụ âm cuối (như toàn, hoàn, khoản)
+# Chỉ áp dụng cho các âm tiết mở (kết thúc bằng nguyên âm), không áp dụng khi có phụ âm cuối
+# (như toàn, hoàn, khoản)
 _VOWEL_ACCENT_PAIRS = {
     "à": "òa", "á": "óa", "ả": "ỏa", "ã": "õa", "ạ": "ọa",
     "è": "òe", "é": "óe", "ẻ": "ỏe", "ẽ": "õe", "ẹ": "ọe",
@@ -29,44 +30,42 @@ _OPEN_OA_PATTERN = re.compile(r"(?i)\b([b-df-zđ]*)o([àáảãạ])\b")
 _OPEN_OE_PATTERN = re.compile(r"(?i)\b([b-df-zđ]*)o([èéẻẽẹ])\b")
 _OPEN_UY_PATTERN = re.compile(r"(?i)\b([b-df-zđ]*)u([ỳýỷỹỵ])\b")
 
-def _replace_open_oa(m: re.Match[str]) -> str:
-    cons = m.group(1)
-    acc = m.group(2).lower()
-    replacement = _VOWEL_ACCENT_PAIRS[acc]
-    if m.group(0)[0].isupper():
-        return cons.capitalize() + replacement
-    return cons + replacement
 
-def _replace_open_oe(m: re.Match[str]) -> str:
+def _replace_open_syllable(m: re.Match[str]) -> str:
     cons = m.group(1)
-    acc = m.group(2).lower()
-    replacement = _VOWEL_ACCENT_PAIRS[acc]
-    if m.group(0)[0].isupper():
-        return cons.capitalize() + replacement
-    return cons + replacement
-
-def _replace_open_uy(m: re.Match[str]) -> str:
-    cons = m.group(1)
-    acc = m.group(2).lower()
-    replacement = _VOWEL_ACCENT_PAIRS[acc]
+    # "qu" là một phụ âm đầu, "u" trong đó không phải nguyên âm: "quý", "quỹ" giữ nguyên
+    # (không thì thành "qúy", "qũy" — "Quý khách" có trong gần như mọi câu trả lời CRM).
+    if cons.lower().endswith("q"):
+        return m.group(0)
+    replacement = _VOWEL_ACCENT_PAIRS[m.group(2).lower()]
     if m.group(0)[0].isupper():
         return cons.capitalize() + replacement
     return cons + replacement
 
 
-# Gộp ký tự chữ thường lặp quá 2 lần (ví dụ: "chàoooooo" -> "chào", "đẹpppp" -> "đẹp")
-# Tránh gộp các từ viết hoa viết tắt như CCCD, IEEE, HTTP
-_CHAR_REPEAT_PATTERN = re.compile(r"([a-z\u00E0-\u1EF9])\1{2,}")
+# Gộp ký tự chữ thường lặp từ 3 lần trở lên ("chàoooooo" -> "chào", "đẹpppp" -> "đẹp").
+# Ngưỡng 3 chứ không phải 2: tiếng Anh và từ mượn có nhiều chữ đôi hợp lệ
+# (Facebook, Google, free, feedback, cái xoong). Không gộp chữ hoa (CCCD, IEEE).
+_CHAR_REPEAT_PATTERN = re.compile(r"([a-zà-ỹ])\1{2,}")
 
-# Gộp các nguyên âm không dấu đi liền sau nguyên âm có dấu (teencode: "quáaaa" -> "quá")
+# Gộp nguyên âm kéo dài sau nguyên âm có dấu ("quáaaa" -> "quá"). Cũng đòi từ 2 ký tự
+# lặp trở lên (tổng >= 3) vì cùng lý do trên. Phải chạy TRƯỚC _CHAR_REPEAT_PATTERN:
+# chạy sau thì "quáaaa" đã thành "quáa" và không còn khớp.
 _ACCENTED_VOWEL_PATTERNS = [
-    (re.compile(r"([aáàảãạăắằẳẵặâấầẩẫậ])a+", re.IGNORECASE), r"\1"),
-    (re.compile(r"([eéèẻẽẹêếềểễệ])e+", re.IGNORECASE), r"\1"),
-    (re.compile(r"([iíìỉĩị])i+", re.IGNORECASE), r"\1"),
-    (re.compile(r"([oóòỏõọôốồổỗộơớờởỡợ])o+", re.IGNORECASE), r"\1"),
-    (re.compile(r"([uúùủũụưứừửữự])u+", re.IGNORECASE), r"\1"),
-    (re.compile(r"([yýỳỷỹỵ])y+", re.IGNORECASE), r"\1"),
+    (re.compile(r"([aáàảãạăắằẳẵặâấầẩẫậ])a{2,}", re.IGNORECASE), r"\1"),
+    (re.compile(r"([eéèẻẽẹêếềểễệ])e{2,}", re.IGNORECASE), r"\1"),
+    (re.compile(r"([iíìỉĩị])i{2,}", re.IGNORECASE), r"\1"),
+    (re.compile(r"([oóòỏõọôốồổỗộơớờởỡợ])o{2,}", re.IGNORECASE), r"\1"),
+    (re.compile(r"([uúùủũụưứừửữự])u{2,}", re.IGNORECASE), r"\1"),
+    (re.compile(r"([yýỳỷỹỵ])y{2,}", re.IGNORECASE), r"\1"),
 ]
+
+# Email và URL đi nguyên vẹn qua bước 3–5: "www" không được gộp thành "w", và
+# "ad@shop.vn" không được biến thành "admin@shop.vn" (đổi luôn cả dữ liệu PII).
+_PROTECTED_PATTERN = re.compile(
+    r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
+    r"|(?:https?://|www\.)\S+"
+)
 
 # Gộp dấu câu lặp quá mức (ví dụ: "????" -> "?", "!!!!!" -> "!", "....." -> "...")
 _PUNCT_REPEAT_PATTERN = re.compile(r"([?!])\1+")
@@ -81,7 +80,7 @@ _TEENCODE_MAP: dict[str, str] = {
     "khong": "không",
     "hok": "không",
     "hem": "không",
-    "k": "không",
+    "k": "không",  # "50 k" (nghìn) và "K" viết hoa được giữ — xem _replace_teencode
     # Được
     "đc": "được",
     "dc": "được",
@@ -104,23 +103,30 @@ _TEENCODE_MAP: dict[str, str] = {
     # Thích
     "thik": "thích",
     "thjk": "thích",
-    # Bây giờ
-    "bh": "bây giờ",
+    # Bây giờ — KHÔNG có "bh": trong CRM "bh" thường là "bảo hành"
     "bjo": "bây giờ",
     "bgiờ": "bây giờ",
-    # Mình
-    "mk": "mình",
+    # KHÔNG có "mk": trong hỗ trợ kỹ thuật "quên mk" là "quên mật khẩu", không phải "mình".
+    # Từ viết tắt hai nghĩa thì để nguyên — router đã học trên văn bản thô, đoán sai
+    # nghĩa còn tệ hơn không đoán.
 }
 
 # Regex bắt teencode độc lập giữa ranh giới từ (\b), ưu tiên từ dài trước
 _TEENCODE_REGEX = re.compile(
-    r"(?i)\b(" + "|".join(re.escape(k) for k in sorted(_TEENCODE_MAP.keys(), key=len, reverse=True)) + r")\b"
+    r"(?i)\b("
+    + "|".join(re.escape(k) for k in sorted(_TEENCODE_MAP, key=len, reverse=True))
+    + r")\b"
 )
+_NUMBER_BEFORE = re.compile(r"\d\s*$")
 
 
 def _replace_teencode(m: re.Match[str]) -> str:
     raw = m.group(0)
     lower = raw.lower()
+    if lower == "k":
+        # "K" viết hoa là tên riêng (vitamin K, gói K); "50 k", "50k" là nghìn đồng.
+        if raw == "K" or _NUMBER_BEFORE.search(m.string, 0, m.start()):
+            return raw
     repl = _TEENCODE_MAP.get(lower, raw)
     if raw.isupper():
         return repl.upper()
@@ -133,6 +139,29 @@ def _replace_teencode(m: re.Match[str]) -> str:
 _LINE_WHITESPACE_PATTERN = re.compile(r"[ \t]*\n[ \t]*")
 _MULTI_SPACE_PATTERN = re.compile(r"[ \t]+")
 _MULTI_NEWLINE_PATTERN = re.compile(r"\n{3,}")
+
+
+def _normalize_segment(s: str) -> str:
+    """Bước 3–5 cho một đoạn văn bản không chứa email/URL."""
+    if not s:
+        return s
+
+    # Bước 3: Thống nhất kiểu dấu thanh (chỉ áp dụng âm tiết mở: hoà/toà/thuỷ -> hòa/tòa/thủy)
+    s = _OPEN_OA_PATTERN.sub(_replace_open_syllable, s)
+    s = _OPEN_OE_PATTERN.sub(_replace_open_syllable, s)
+    s = _OPEN_UY_PATTERN.sub(_replace_open_syllable, s)
+
+    # Bước 4: Gộp ký tự chữ lặp quá mức (ví dụ: "quáaaa" -> "quá", "đượcccc" -> "được")
+    for p, repl in _ACCENTED_VOWEL_PATTERNS:
+        s = p.sub(repl, s)
+    s = _CHAR_REPEAT_PATTERN.sub(r"\1", s)
+
+    # Gộp dấu chấm, hỏi, cảm thán lặp
+    s = _PUNCT_REPEAT_PATTERN.sub(r"\1", s)
+    s = _DOT_REPEAT_PATTERN.sub("...", s)
+
+    # Bước 5: Chuẩn hoá từ viết tắt / teencode (ko -> không, đc -> được, sp -> sản phẩm)
+    return _TEENCODE_REGEX.sub(_replace_teencode, s)
 
 
 def normalize_vietnamese_text(text: str) -> str:
@@ -155,22 +184,15 @@ def normalize_vietnamese_text(text: str) -> str:
     # Bước 2: Chuẩn hoá Unicode NFC
     s = unicodedata.normalize("NFC", s)
 
-    # Bước 3: Thống nhất kiểu dấu thanh (chỉ áp dụng âm tiết mở: hoà/toà/thuỷ -> hòa/tòa/thủy)
-    s = _OPEN_OA_PATTERN.sub(_replace_open_oa, s)
-    s = _OPEN_OE_PATTERN.sub(_replace_open_oe, s)
-    s = _OPEN_UY_PATTERN.sub(_replace_open_uy, s)
-
-    # Bước 4: Gộp ký tự chữ lặp quá mức (ví dụ: "đượcccc" -> "được", "koooo" -> "ko")
-    s = _CHAR_REPEAT_PATTERN.sub(r"\1", s)
-    for p, repl in _ACCENTED_VOWEL_PATTERNS:
-        s = p.sub(repl, s)
-
-    # Gộp dấu chấm, hỏi, cảm thán lặp
-    s = _PUNCT_REPEAT_PATTERN.sub(r"\1", s)
-    s = _DOT_REPEAT_PATTERN.sub("...", s)
-
-    # Bước 5: Chuẩn hoá từ viết tắt / teencode (ko -> không, đc -> được, sp -> sản phẩm)
-    s = _TEENCODE_REGEX.sub(_replace_teencode, s)
+    # Bước 3–5 chạy trên từng đoạn nằm giữa email/URL, email/URL giữ nguyên văn
+    parts: list[str] = []
+    last = 0
+    for m in _PROTECTED_PATTERN.finditer(s):
+        parts.append(_normalize_segment(s[last:m.start()]))
+        parts.append(m.group(0))
+        last = m.end()
+    parts.append(_normalize_segment(s[last:]))
+    s = "".join(parts)
 
     # Bước 6: Chuẩn hoá khoảng trắng và ngắt dòng
     s = _LINE_WHITESPACE_PATTERN.sub("\n", s)
