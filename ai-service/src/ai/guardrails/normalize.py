@@ -18,25 +18,45 @@ _ZERO_WIDTH_PATTERN = re.compile(
 )
 
 # Bảng chuẩn hoá thống nhất kiểu đặt dấu thanh tiếng Việt (chuẩn mới: hòa, tòa, thủy, khỏe)
-# Thay thế kiểu dấu cũ (hoà, toà, thuỷ, khoẻ) về kiểu dấu chuẩn thống nhất
-_ACCENT_MAP = {
-    # oà -> hòa
-    "oà": "òa", "oá": "óa", "oả": "ỏa", "oã": "õa", "oạ": "ọa",
-    "Oà": "Òa", "Oá": "Óa", "Oả": "Ỏa", "Oã": "Õa", "Oạ": "Ọa",
-    # oè -> khỏe
-    "oè": "òe", "oé": "óe", "oẻ": "ỏe", "oẽ": "õe", "oẹ": "ọe",
-    "Oè": "Òe", "Oé": "Óe", "Oẻ": "Ỏe", "Oẽ": "Õe", "Oẹ": "Ọe",
-    # uỳ -> thủy
-    "uỳ": "ùy", "uý": "úy", "uỷ": "ủy", "uỹ": "ũy", "uỵ": "ụy",
-    "Uỳ": "Ùy", "Uý": "Úy", "Uỷ": "Ủy", "Uỹ": "Ũy", "Uỵ": "Ụy",
+# Chỉ áp dụng cho các âm tiết mở (kết thúc bằng nguyên âm), không áp dụng khi có phụ âm cuối (như toàn, hoàn, khoản)
+_VOWEL_ACCENT_PAIRS = {
+    "à": "òa", "á": "óa", "ả": "ỏa", "ã": "õa", "ạ": "ọa",
+    "è": "òe", "é": "óe", "ẻ": "ỏe", "ẽ": "õe", "ẹ": "ọe",
+    "ỳ": "ùy", "ý": "úy", "ỷ": "ủy", "ỹ": "ũy", "ỵ": "ụy",
 }
 
-_ACCENT_REGEX = re.compile(
-    "|".join(re.escape(k) for k in _ACCENT_MAP.keys())
-)
+_OPEN_OA_PATTERN = re.compile(r"(?i)\b([b-df-zđ]*)o([àáảãạ])\b")
+_OPEN_OE_PATTERN = re.compile(r"(?i)\b([b-df-zđ]*)o([èéẻẽẹ])\b")
+_OPEN_UY_PATTERN = re.compile(r"(?i)\b([b-df-zđ]*)u([ỳýỷỹỵ])\b")
 
-# Gộp ký tự chữ lặp quá 2 lần (ví dụ: "chàoooooo" -> "chào", "đẹpppp" -> "đẹp")
-_CHAR_REPEAT_PATTERN = re.compile(r"([^\W\d_])\1{2,}", re.IGNORECASE)
+def _replace_open_oa(m: re.Match[str]) -> str:
+    cons = m.group(1)
+    acc = m.group(2).lower()
+    replacement = _VOWEL_ACCENT_PAIRS[acc]
+    if m.group(0)[0].isupper():
+        return cons.capitalize() + replacement
+    return cons + replacement
+
+def _replace_open_oe(m: re.Match[str]) -> str:
+    cons = m.group(1)
+    acc = m.group(2).lower()
+    replacement = _VOWEL_ACCENT_PAIRS[acc]
+    if m.group(0)[0].isupper():
+        return cons.capitalize() + replacement
+    return cons + replacement
+
+def _replace_open_uy(m: re.Match[str]) -> str:
+    cons = m.group(1)
+    acc = m.group(2).lower()
+    replacement = _VOWEL_ACCENT_PAIRS[acc]
+    if m.group(0)[0].isupper():
+        return cons.capitalize() + replacement
+    return cons + replacement
+
+
+# Gộp ký tự chữ thường lặp quá 2 lần (ví dụ: "chàoooooo" -> "chào", "đẹpppp" -> "đẹp")
+# Tránh gộp các từ viết hoa viết tắt như CCCD, IEEE, HTTP
+_CHAR_REPEAT_PATTERN = re.compile(r"([a-z\u00E0-\u1EF9])\1{2,}")
 
 # Gộp các nguyên âm không dấu đi liền sau nguyên âm có dấu (teencode: "quáaaa" -> "quá")
 _ACCENTED_VOWEL_PATTERNS = [
@@ -77,8 +97,10 @@ def normalize_vietnamese_text(text: str) -> str:
     # Bước 2: Chuẩn hoá Unicode NFC
     s = unicodedata.normalize("NFC", s)
 
-    # Bước 3: Thống nhất kiểu dấu thanh
-    s = _ACCENT_REGEX.sub(lambda m: _ACCENT_MAP[m.group(0)], s)
+    # Bước 3: Thống nhất kiểu dấu thanh (chỉ áp dụng âm tiết mở: hoà/toà/thuỷ -> hòa/tòa/thủy)
+    s = _OPEN_OA_PATTERN.sub(_replace_open_oa, s)
+    s = _OPEN_OE_PATTERN.sub(_replace_open_oe, s)
+    s = _OPEN_UY_PATTERN.sub(_replace_open_uy, s)
 
     # Bước 4: Gộp ký tự chữ lặp quá mức (ví dụ: "đượcccc" -> "được")
     s = _CHAR_REPEAT_PATTERN.sub(r"\1", s)
