@@ -27,8 +27,8 @@ CHIỀU PHỤ THUỘC
           ├──► ai/service.py ──► rag · orchestrator · mcp_client · extraction · scoring
     worker┘                  └──► db · events · telemetry · inference · integrations
 
-TODO: các phương thức của facade — bám theo 10 endpoint §2.5 và hai topic §2.6:
-    answer_turn()      UC022/023/025/028   POST /v1/ai/chat
+Các phương thức của facade — bám theo 10 endpoint §2.5 và hai topic §2.6:
+    answer_turn()      UC022/023/025/028   POST /v1/ai/chat     ĐÃ CÓ (UC022; RAG chưa nối)
     extract_signal()   UC029               POST /v1/ai/extract
     score_lead()       UC030               POST /v1/ai/lead-score
     index_document()   UC018/019           POST /v1/ai/kb/documents
@@ -40,3 +40,41 @@ TODO: các phương thức của facade — bám theo 10 endpoint §2.5 và hai 
     usage_summary()    UC006/039           GET /v1/ai/usage
     summarize()        UC026               (bất đồng bộ, từ crm.conversation.closed)
 """
+
+from src.ai.config import get_settings
+from src.ai.inference.clients import ClassifyClient, get_classify_client
+from src.ai.orchestrator.turn import (
+    KnowledgeAnswerer,
+    LogTurnRecorder,
+    PendingKnowledgeAnswerer,
+    TurnRecorder,
+    run_turn,
+)
+from src.ai.schemas import ChatRequest, ChatResponse
+
+
+async def answer_turn(
+    *,
+    tenant_id: str,
+    request: ChatRequest,
+    classifier: ClassifyClient | None = None,
+    answerer: KnowledgeAnswerer | None = None,
+    recorder: TurnRecorder | None = None,
+) -> ChatResponse:
+    """Một lượt hội thoại: guardrails -> phân loại -> định tuyến -> trả lời -> ghi (UC022).
+
+    ``tenant_id`` đến từ header đã xác thực (``api/deps.py``), không bao giờ từ ``request``.
+    Ba phụ thuộc để trống thì lấy bản mặc định; test truyền bản giả vào.
+    """
+    settings = get_settings()
+    return await run_turn(
+        tenant_id=tenant_id,
+        request=request,
+        classifier=classifier or get_classify_client(),
+        answerer=answerer or PendingKnowledgeAnswerer(),
+        recorder=recorder or LogTurnRecorder(),
+        fast_path_threshold=settings.fast_path_threshold,
+        abstention_threshold=settings.router_abstention_threshold,
+        classify_timeout_s=settings.classify_timeout_s,
+        classify_retries=settings.classify_retries,
+    )

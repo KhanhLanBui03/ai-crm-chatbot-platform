@@ -57,6 +57,16 @@ class Settings(BaseSettings):
     # Bắt buộc bằng 0 để tái lập thí nghiệm (kế hoạch mục 8.1)
     llm_temperature: float = 0.0
 
+    # ── Định tuyến ý định (UC022) ────────────────────────────────────────
+    # Đường nhanh: confidence >= ngưỡng VÀ ý định thuộc nhóm đi nhanh — trả mẫu câu, 0 LLM.
+    fast_path_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
+    # Bỏ phiếu trắng (ADR-0019 §3.3): dưới ngưỡng thì hỏi lại thay vì đoán ý khách.
+    # Phải khớp ROUTER_ABSTENTION_THRESHOLD của ai-classify.
+    router_abstention_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
+    # Đặc tả UC022: hạn chờ 1.000 ms, thử lại một lần.
+    classify_timeout_s: float = Field(default=1.0, gt=0.0)
+    classify_retries: int = Field(default=1, ge=0)
+
     # ── RAG ──────────────────────────────────────────────────────────────
     embedding_model: str = "BAAI/bge-m3"
     embedding_dim: int = 1024

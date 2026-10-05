@@ -1,9 +1,12 @@
 """Kiểm thử tính toàn vẹn của tập dữ liệu huấn luyện UC022 và chỉ số Cohen's Kappa."""
 
 import hashlib
+import importlib.util
 import json
 from collections import Counter
 from pathlib import Path
+
+import pytest
 
 
 def test_intent_train_raw_distribution():
@@ -41,7 +44,8 @@ def test_intent_train_dedup_integrity():
             if line.strip():
                 records.append(json.loads(line))
 
-    # Tỉ lệ loại bỏ phải nằm trong khoảng 25% - 40% (khớp đặc tả khoảng 30% bản sao)
+    # Tỉ lệ loại bỏ phản ánh số bản sao mà build_router_data_and_eval.py CHỦ ĐỘNG chèn để đủ
+    # 3.000 mẫu thô — đây là kiểm tra hồi quy của pipeline, không phải số đo dữ liệu tự nhiên.
     raw_count = 3000
     clean_count = len(records)
     removed_count = raw_count - clean_count
@@ -56,13 +60,93 @@ def test_intent_train_dedup_integrity():
     assert f"data/intent_train_dedup.jsonl:{file_hash}" in hashes_path.read_text(encoding="utf-8")
 
 
-def test_cohens_kappa_evaluation():
-    """Kiểm tra chỉ số Cohen's Kappa đạt chuẩn Almost Perfect Agreement (>= 0.85)."""
-    report_path = Path("reports/eval/annotation_kappa_report.json")
-    assert report_path.exists(), "Không tìm thấy reports/eval/annotation_kappa_report.json"
+# ══════════════════════════════════════════════════════════════════════════════
+# COHEN'S KAPPA — scripts/compute_annotation_kappa.py đọc nhãn THẬT của hai người.
+# Không kiểm "kappa >= 0,85" hay "đúng 13 ca bất đồng": đó là kết quả, không phải hành vi —
+# và bản cũ đạt được hai điều đó chỉ vì nhãn Dev A bị dựng từ nhãn vàng.
+# ══════════════════════════════════════════════════════════════════════════════
 
-    data = json.loads(report_path.read_text(encoding="utf-8"))
-    assert data["sample_count"] == 200
-    assert data["cohens_kappa"] >= 0.85, f"Chỉ số Kappa chưa đạt: {data['cohens_kappa']}"
-    assert data["disagreed_count"] == 13
-    assert len(data["disagreements"]) == 13
+_spec = importlib.util.spec_from_file_location("kappa", "scripts/compute_annotation_kappa.py")
+kappa = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(kappa)
+
+_ITEMS = [
+    {"id": 1, "text": "chào shop", "intent": "GREETING"},
+    {"id": 2, "text": "giá gói pro", "intent": "PRICING_POLICY"},
+    {"id": 3, "text": "app bị crash", "intent": "TECH_ERROR"},
+    {"id": 4, "text": "cho gặp người thật", "intent": "HANDOFF_HUMAN"},
+]
+
+
+def test_kappa_khop_cong_thuc():
+    # Ví dụ tính tay: p_o = 3/4; mỗi người 2 nhãn A/B -> p_e = 0,5; kappa = 0,5
+    r = kappa.cohens_kappa(["GREETING", "GREETING", "KB_SEARCH", "KB_SEARCH"],
+                           ["GREETING", "KB_SEARCH", "KB_SEARCH", "KB_SEARCH"])
+    assert r["p_o"] == 0.75
+    assert abs(r["p_e"] - 0.5) < 1e-12
+    assert abs(r["kappa"] - 0.5) < 1e-12
+
+
+def test_kappa_khop_sklearn():
+    from sklearn.metrics import cohen_kappa_score
+
+    a = ["GREETING", "KB_SEARCH", "TECH_ERROR", "TECH_ERROR", "BUYING_INTENT", "KB_SEARCH"]
+    b = ["GREETING", "KB_SEARCH", "COMPLAINT_SUPPORT", "TECH_ERROR", "PRICING_POLICY", "KB_SEARCH"]
+    assert abs(kappa.cohens_kappa(a, b)["kappa"] - cohen_kappa_score(a, b)) < 1e-12
+
+
+def _write_csv(path: Path, labels: dict[int, str]) -> None:
+    lines = ["id,text,intent"] + [f"{i},câu {i},{lab}" for i, lab in labels.items()]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8-sig")
+
+
+def test_bao_cao_tu_hai_phieu_rieng(tmp_path: Path):
+    _write_csv(tmp_path / "a.csv",
+               {1: "GREETING", 2: "PRICING_POLICY", 3: "TECH_ERROR", 4: "HANDOFF_HUMAN"})
+    _write_csv(tmp_path / "b.csv",
+               {1: "GREETING", 2: "BUYING_INTENT", 3: "TECH_ERROR", 4: "HANDOFF_HUMAN"})
+    rep = kappa.build_report(
+        _ITEMS,
+        kappa.load_annotations(tmp_path / "a.csv"),
+        kappa.load_annotations(tmp_path / "b.csv"),
+        sources={},
+    )
+    assert rep["sample_count"] == 4 and rep["disagreed_count"] == 1
+    assert rep["disagreements"][0] == {
+        "id": 2, "text": "giá gói pro", "dev_a": "PRICING_POLICY",
+        "dev_b": "BUYING_INTENT", "current_gold": "PRICING_POLICY",
+    }
+
+
+@pytest.mark.parametrize("labels, msg", [
+    ({1: "GREETING", 2: ""}, "chưa điền"),
+    ({1: "GREETING", 2: "PRICING"}, "không thuộc"),
+])
+def test_phieu_sai_bi_tu_choi(tmp_path: Path, labels: dict[int, str], msg: str):
+    _write_csv(tmp_path / "x.csv", labels)
+    with pytest.raises(kappa.AnnotationError, match=msg):
+        kappa.load_annotations(tmp_path / "x.csv")
+
+
+def test_phieu_thieu_cau_bi_tu_choi(tmp_path: Path):
+    _write_csv(tmp_path / "a.csv", {1: "GREETING", 2: "PRICING_POLICY", 3: "TECH_ERROR"})
+    full = {1: "GREETING", 2: "PRICING_POLICY", 3: "TECH_ERROR", 4: "HANDOFF_HUMAN"}
+    with pytest.raises(kappa.AnnotationError, match="thiếu id"):
+        kappa.build_report(_ITEMS, kappa.load_annotations(tmp_path / "a.csv"), full, sources={})
+
+
+def test_phieu_mu_khong_lo_nhan_vang(tmp_path: Path):
+    kappa.make_sheets(_ITEMS, tmp_path)
+    content = (tmp_path / "dev_a.csv").read_text(encoding="utf-8-sig")
+    assert "PRICING_POLICY" not in content and "GREETING" not in content
+    # Thứ tự xáo trộn, khác nhau giữa hai người — vị trí câu không được lộ nhãn
+    many = [{"id": i, "text": f"câu {i}", "intent": "GREETING"} for i in range(1, 41)]
+    kappa.make_sheets(many, tmp_path / "m")
+    ids_a = (tmp_path / "m" / "dev_a.csv").read_text(encoding="utf-8-sig").splitlines()[1:]
+    ids_b = (tmp_path / "m" / "dev_b.csv").read_text(encoding="utf-8-sig").splitlines()[1:]
+    assert [r.split(",")[0] for r in ids_a] != [str(i) for i in range(1, 41)]
+    assert ids_a != ids_b and sorted(ids_a) == sorted(ids_b)
+    # Chạy lần hai không ghi đè phiếu đã có
+    (tmp_path / "dev_a.csv").write_text("da gan nhan", encoding="utf-8")
+    kappa.make_sheets(_ITEMS, tmp_path)
+    assert (tmp_path / "dev_a.csv").read_text(encoding="utf-8") == "da gan nhan"

@@ -77,6 +77,10 @@ services:
       <<: *inference-env
       MODEL_ROLE: classify
       OMP_NUM_THREADS: "2"
+    # Môi trường (C): mount artifact thay vì COPY vào image — giữ image nhỏ và giống bản
+    # production (lấy từ S3). Thiếu router_model.onnx / router_embedder.json thì /ready = 503.
+    volumes:
+      - ../artifacts:/app/artifacts:ro
     deploy:
       resources:
         limits: { cpus: "2", memory: 4G }

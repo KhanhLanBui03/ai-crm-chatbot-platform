@@ -76,27 +76,51 @@ class ClassifyClient(Protocol):
 # 1. REMOTE INFERENCE CLIENT (HTTP sang container inference)
 # ══════════════════════════════════════════════════════════════════════════════
 
+# MỘT httpx.AsyncClient dùng chung cho mỗi (event loop, base_url) — KHÔNG tạo mới mỗi lần gọi.
+# Đo 05/10: tạo AsyncClient tốn ~200 ms (nạp chứng chỉ SSL) và chiếm event loop, nên client
+# tạo-mỗi-lần cho p95 phân loại 205–265 ms (ngân sách 60 ms) và 5 request đồng thời mất ~1 s;
+# giữ kết nối thì p95 còn ~3,6 ms. Gắn theo event loop vì connection pool của httpx không
+# dùng được sang loop khác (test chạy nhiều asyncio.run).
+_HTTP_CLIENTS: dict[tuple[int, str], httpx.AsyncClient] = {}
+
+
+def _http(base_url: str) -> httpx.AsyncClient:
+    import asyncio
+
+    key = (id(asyncio.get_running_loop()), base_url)
+    client = _HTTP_CLIENTS.get(key)
+    if client is None or client.is_closed:
+        client = httpx.AsyncClient(base_url=base_url)
+        _HTTP_CLIENTS[key] = client
+    return client
+
+
+async def aclose_http_clients() -> None:
+    """Đóng mọi kết nối — gọi trong lifespan lúc tắt."""
+    clients = list(_HTTP_CLIENTS.values())
+    _HTTP_CLIENTS.clear()
+    for c in clients:
+        await c.aclose()
+
+
+async def _post(
+    base_url: str, path: str, payload: dict[str, Any], timeout: float
+) -> dict[str, Any]:
+    _assert_no_pii_keys(payload)
+    resp = await _http(base_url).post(path, json=payload, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
+
+
 class RemoteEmbedClient:
     def __init__(self, base_url: str | None = None) -> None:
         self.base_url = base_url or os.getenv("INFERENCE_EMBED_URL", "http://ai-embed:8080")
 
     async def embed(self, text: str) -> list[float]:
-        payload = {"text": text}
-        _assert_no_pii_keys(payload)
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(f"{self.base_url}/v1/embed", json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["embedding"]
+        return (await _post(self.base_url, "/v1/embed", {"text": text}, 10.0))["embedding"]
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        payload = {"texts": texts}
-        _assert_no_pii_keys(payload)
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(f"{self.base_url}/v1/embed/batch", json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["embeddings"]
+        return (await _post(self.base_url, "/v1/embed/batch", {"texts": texts}, 30.0))["embeddings"]
 
 
 class RemoteRerankClient:
@@ -105,12 +129,7 @@ class RemoteRerankClient:
 
     async def rerank(self, query: str, candidates: list[dict[str, str]]) -> list[dict[str, Any]]:
         payload = {"query": query, "candidates": candidates}
-        _assert_no_pii_keys(payload)
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(f"{self.base_url}/v1/rerank", json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["results"]
+        return (await _post(self.base_url, "/v1/rerank", payload, 15.0))["results"]
 
 
 class RemoteClassifyClient:
@@ -118,20 +137,10 @@ class RemoteClassifyClient:
         self.base_url = base_url or os.getenv("INFERENCE_CLASSIFY_URL", "http://ai-classify:8080")
 
     async def classify(self, text: str) -> dict[str, Any]:
-        payload = {"text": text}
-        _assert_no_pii_keys(payload)
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{self.base_url}/v1/classify", json=payload)
-            resp.raise_for_status()
-            return resp.json()
+        return await _post(self.base_url, "/v1/classify", {"text": text}, 5.0)
 
     async def score_lead(self, features: dict[str, float]) -> dict[str, Any]:
-        payload = {"features": features}
-        _assert_no_pii_keys(payload)
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{self.base_url}/v1/lead-score", json=payload)
-            resp.raise_for_status()
-            return resp.json()
+        return await _post(self.base_url, "/v1/lead-score", {"features": features}, 5.0)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

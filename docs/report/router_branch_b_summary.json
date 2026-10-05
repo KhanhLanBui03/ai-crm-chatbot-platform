@@ -1,0 +1,57 @@
+{
+  "model": "xlm-roberta-base",
+  "hyperparameters": {
+    "max_length": 128,
+    "batch_size": 16,
+    "learning_rate": 2e-05,
+    "epochs": 4,
+    "weight_decay": 0.01,
+    "seed": 42
+  },
+  "data_sha256": {
+    "intent_train_dedup.jsonl": "d8c2bfc45292629df653a5e1d719d27b0b35e78fb2fe1bccf3fe0c6a75b4562d",
+    "intent_test_human.jsonl": "8cc500dc96ebd15f18af01ca386b53a3b85941dba9c06ce12f46ffa24d0a1ecf"
+  },
+  "train_size": 1649,
+  "validation_size": 292,
+  "train_minutes": 38.8,
+  "validation": {
+    "eval_loss": 0.16155755519866943,
+    "eval_accuracy": 0.976027397260274,
+    "eval_macro_f1": 0.9749651558688219,
+    "eval_runtime": 17.3194,
+    "eval_samples_per_second": 16.86,
+    "eval_steps_per_second": 0.289,
+    "epoch": 4.0
+  },
+  "test_200_human": {
+    "accuracy": 0.725,
+    "macro_f1": 0.721
+  },
+  "latency_cpu": {
+    "p95_cpu_ms": 72.35,
+    "p50_cpu_ms": 34.92,
+    "variant": "int8_dynamic",
+    "fp32": {
+      "p50_ms": 56.81,
+      "p95_ms": 91.77,
+      "samples": 200
+    },
+    "int8_dynamic": {
+      "p50_ms": 34.92,
+      "p95_ms": 72.35,
+      "samples": 200
+    },
+    "cpu_threads": 2,
+    "model_size_mb": 1077.0,
+    "measured_on": "LAPTOP-SHG7O1F4 CPU · Intel64 Family 6 Model 154 Stepping 4, GenuineIntel · torch 2.14.1+cpu",
+    "note": "batch 1, gồm tokenize; CPU Kaggle khác CPU production — đo lại trên máy đích nếu cần"
+  },
+  "environment": {
+    "python": "3.11.15",
+    "torch": "2.14.1+cpu",
+    "transformers": "4.46.3",
+    "gpu": null
+  },
+  "finished_at_utc": "2026-10-05T16:54:31Z"
+}

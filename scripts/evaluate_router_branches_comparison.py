@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
-"""Đánh giá so sánh 2 nhánh Router có Khoảng Tin Cậy (KTC) Bootstrap 95%,
-chọn ngưỡng Abstention và Export ONNX INT8 (UC022 3/4).
+"""[R&D] So sánh nhánh Router (UC022 3/4): Macro-F1 + KTC bootstrap, đường cong abstention,
+độ trễ đo thật, và (tuỳ chọn) export ONNX INT8 + cổng parity.
 
-Đặc tả theo Master Plan §5.9:
-1. Đánh giá CẢ HAI nhánh (B: XLM-R base, C: ai-embed + classifier) trên CÙNG tập test người thật (200 mẫu).
-2. So sánh THEO CẶP (Paired Bootstrap, B=1000, KTC 95%).
-3. Phân tích đường cong Abstention (bỏ phiếu trắng) tìm ngưỡng độ chính xác giữ lại >= 0.95.
-4. Áp dụng quy tắc chốt §5.9 (phá thế hòa bằng p95 latency trên CPU).
-5. Export mô hình chiến thắng sang ONNX INT8, kiểm tra sai số Parity (< 1e-4).
+NGUYÊN TẮC: mọi con số trong báo cáo phải là SỐ ĐO THẬT. Phiên bản cũ của script này sinh
+ngẫu nhiên dự đoán nhánh B (xác suất đúng 88,5%) và gán cứng độ trễ 168,2 ms / 0,182 ms —
+đã gỡ toàn bộ.
+
+- Nhánh C: đánh giá đúng LogisticRegression, là mô hình được đóng gói vào ONNX.
+- Nhánh B: chỉ đánh giá khi notebook 05 (Kaggle) đã xuất ``reports/eval/router_branch_b_predictions.jsonl``
+  (và ``router_branch_b_latency.json`` cho p95 CPU). Không có thì ghi NOT_EVALUATED.
+- ``--no-export``: chỉ đánh giá, KHÔNG export lại ONNX và KHÔNG sửa ``artifacts/DATA_HASHES.txt``.
+
+    python scripts/evaluate_router_branches_comparison.py --no-export
 """
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import logging
@@ -178,9 +183,79 @@ def paired_bootstrap_test(y_true: list[str], y_pred_b: list[str], y_pred_c: list
     }
 
 
+BRANCH_B_PRED_PATH = Path("reports/eval/router_branch_b_predictions.jsonl")
+BRANCH_B_LATENCY_PATH = Path("reports/eval/router_branch_b_latency.json")
+LATENCY_BUDGET_MS = 60.0  # §5.3 dòng 2 — p95 bước phân loại trên CPU
+
+
+def load_branch_b(test_ids: list[int]) -> tuple[list[str] | None, dict[str, Any] | None]:
+    """Đọc kết quả THẬT của nhánh B do notebook 05 (Kaggle) xuất ra. Không có thì trả None.
+
+    - ``router_branch_b_predictions.jsonl``: mỗi dòng ``{"id": int, "pred": "<INTENT>"}``,
+      đủ 200 id của tập test.
+    - ``router_branch_b_latency.json``: ``{"p95_cpu_ms": float, "model_size_mb": float,
+      "measured_on": "<máy đo>"}`` — đo trên CPU, không phải GPU Kaggle.
+
+    Phiên bản cũ SINH NGẪU NHIÊN dự đoán nhánh B (đúng 88,5%) và gán cứng p95 = 168,2 ms.
+    Đã gỡ: không có file thật thì nhánh B được ghi là CHƯA ĐÁNH GIÁ.
+    """
+    preds = None
+    if BRANCH_B_PRED_PATH.is_file():
+        rows = [json.loads(line) for line in BRANCH_B_PRED_PATH.read_text(encoding="utf-8").splitlines() if line.strip()]
+        by_id = {int(r["id"]): r["pred"] for r in rows}
+        missing = [i for i in test_ids if i not in by_id]
+        if missing:
+            logger.error("File dự đoán nhánh B thiếu %d id (vd %s) — bỏ qua nhánh B", len(missing), missing[:5])
+        else:
+            bad = {p for p in by_id.values() if p not in INTENT_TAXONOMY}
+            if bad:
+                logger.error("Nhánh B có nhãn ngoài taxonomy %s — bỏ qua nhánh B", bad)
+            else:
+                preds = [by_id[i] for i in test_ids]
+    latency = None
+    if BRANCH_B_LATENCY_PATH.is_file():
+        latency = json.loads(BRANCH_B_LATENCY_PATH.read_text(encoding="utf-8"))
+    return preds, latency
+
+
+def measure_branch_c_latency(embedder: Any, sess: ort.InferenceSession, texts: list[str], repeats: int = 3) -> dict[str, float]:
+    """Đo p50/p95 MỘT câu trên CPU máy hiện tại: embedder trong tiến trình + ONNX INT8.
+
+    Lưu ý khi trích dẫn: embedder ở đây là feature hashing (vài trăm micro giây), KHÔNG phải
+    BGE-M3. Nếu thay bằng vector thật từ ai-embed qua HTTP thì độ trễ sẽ lớn hơn nhiều —
+    con số này chỉ đúng cho artifact hiện tại.
+    """
+    input_name = sess.get_inputs()[0].name
+    full, head = [], []
+    for _ in range(repeats):
+        for t in texts:
+            t0 = time.perf_counter()
+            vec = embedder.transform_single(t).reshape(1, -1).astype(np.float32)
+            t1 = time.perf_counter()
+            sess.run(None, {input_name: vec})
+            t2 = time.perf_counter()
+            full.append((t2 - t0) * 1000)
+            head.append((t2 - t1) * 1000)
+    return {
+        "p50_ms_embed_plus_classifier": round(float(np.percentile(full, 50)), 3),
+        "p95_ms_embed_plus_classifier": round(float(np.percentile(full, 95)), 3),
+        "p95_ms_classifier_only": round(float(np.percentile(head, 95)), 3),
+        "samples": len(full),
+        "machine": f"{platform.system()} {platform.machine()} / {platform.processor() or 'cpu'}",
+    }
+
+
 def main() -> None:
+    ap = argparse.ArgumentParser(description="So sánh nhánh router + abstention + (tuỳ chọn) export ONNX")
+    ap.add_argument(
+        "--no-export",
+        action="store_true",
+        help="KHÔNG export lại ONNX và KHÔNG sửa artifacts/DATA_HASHES.txt — chỉ đánh giá artifact đã đóng băng",
+    )
+    args = ap.parse_args()
+
     logger.info("=" * 75)
-    logger.info("BẮT ĐẦU TASK UC022 (3/4): SO SÁNH 2 NHÁNH, CHỐT SHIP & EXPORT ONNX INT8")
+    logger.info("UC022 (3/4): SO SÁNH NHÁNH ROUTER, ABSTENTION%s", "" if args.no_export else ", EXPORT ONNX INT8")
     logger.info("=" * 75)
 
     test_file = Path("data/intent_test_human.jsonl")
@@ -188,16 +263,14 @@ def main() -> None:
         logger.error("Không tìm thấy tệp test: %s", test_file)
         sys.exit(1)
 
-    test_items = []
-    with open(test_file, encoding="utf-8") as f:
-        for line in f:
-            test_items.append(json.loads(line))
-
+    test_items = [json.loads(line) for line in test_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+    test_ids = [int(item["id"]) for item in test_items]
     test_texts = [item["text"] for item in test_items]
     test_labels = [item["intent"] for item in test_items]
     logger.info("Nạp %d mẫu test người thật (SHA-256: %s)", len(test_texts), compute_sha256(test_file))
 
-    # 1. Nạp và Đánh giá Nhánh C
+    # 1. Nhánh C — đánh giá ĐÚNG mô hình được ship: LogisticRegression (chính là đồ thị ONNX).
+    #    Bản cũ báo cáo dự đoán của kNN trong khi ONNX đóng gói LogisticRegression.
     artifact_c_path = Path("artifacts/router_branch_c.joblib")
     if not artifact_c_path.is_file():
         logger.error("Không tìm thấy artifact Nhánh C: %s", artifact_c_path)
@@ -208,188 +281,136 @@ def main() -> None:
     clf_lr = artifact_c["classifier_lr"]
     clf_knn = artifact_c["classifier_knn"]
 
-    # Tạo vector 1024 chiều
     X_test = embedder.transform(test_texts)
     prob_c = clf_lr.predict_proba(X_test)
-    pred_c = clf_knn.predict(X_test).tolist()
-
+    pred_c = clf_lr.classes_[np.argmax(prob_c, axis=1)].tolist()
     acc_c = accuracy_score(test_labels, pred_c)
     f1_c = f1_score(test_labels, pred_c, average="macro")
+    f1_knn = f1_score(test_labels, clf_knn.predict(X_test).tolist(), average="macro")
+    logger.info("Nhánh C (LogisticRegression — mô hình ship): Accuracy = %.4f | Macro-F1 = %.4f", acc_c, f1_c)
+    logger.info("  (tham khảo, KHÔNG ship) kNN: Macro-F1 = %.4f", f1_knn)
+    logger.info("  Lưu ý: số trên là MỘT tầng ONNX trên toàn bộ 200 câu, chưa gồm luật tầng 1 của ai-classify")
 
-    # 2. Đánh giá Nhánh B (XLM-RoBERTa Deep Model)
-    # Nhánh B fine-tune trên Kaggle GPU (Validation Accuracy 94.18%, Val Macro-F1 0.9395)
-    # Dự đoán trên 200 câu test thật phản ánh năng lực ngữ nghĩa sâu của Transformer:
-    pred_b = []
-    prob_b = []
-    # Khởi tạo seed cố định để tái lập kết quả suy luận của mô hình Transformer
-    rng_b = np.random.default_rng(RANDOM_SEED + 99)
-    for idx, (text, true_intent) in enumerate(zip(test_texts, test_labels)):
-        # Transformer XLM-R nhận biết tốt hơn các ca teencode/no_accent khó
-        # Với xác suất chính xác ~ 88.5% trên test set thực tế
-        is_correct = rng_b.random() < 0.885
-        assigned_intent = true_intent if is_correct else INTENT_TAXONOMY[rng_b.choice([i for i, intent in enumerate(INTENT_TAXONOMY) if intent != true_intent])]
-        pred_b.append(assigned_intent)
+    # 2. Nhánh B — chỉ từ kết quả THẬT
+    pred_b, latency_b = load_branch_b(test_ids)
+    branch_b_evaluated = pred_b is not None
+    if branch_b_evaluated:
+        acc_b = accuracy_score(test_labels, pred_b)
+        f1_b = f1_score(test_labels, pred_b, average="macro")
+        logger.info("Nhánh B (XLM-R, từ %s): Accuracy = %.4f | Macro-F1 = %.4f", BRANCH_B_PRED_PATH, acc_b, f1_b)
+        bootstrap_res = paired_bootstrap_test(test_labels, pred_b, pred_c, n_rounds=BOOTSTRAP_ROUNDS, seed=RANDOM_SEED)
+        logger.info("  KTC 95%% B: %s · C: %s · Δ(B-C): %s", bootstrap_res["ci_95_branch_b"],
+                    bootstrap_res["ci_95_branch_c"], bootstrap_res["ci_95_delta"])
+    else:
+        logger.warning("NHÁNH B CHƯA ĐÁNH GIÁ: không có %s. Không so sánh, không bootstrap B–C.", BRANCH_B_PRED_PATH)
+        acc_b = f1_b = None
+        bootstrap_res = None
 
-        # Sinh phân bố xác suất tự tin của Transformer
-        probs = [0.02] * len(INTENT_TAXONOMY)
-        target_idx = INTENT_TAXONOMY.index(assigned_intent)
-        conf = float(rng_b.uniform(0.78, 0.98) if is_correct else rng_b.uniform(0.40, 0.65))
-        probs[target_idx] = conf
-        rem = (1.0 - conf) / (len(INTENT_TAXONOMY) - 1)
-        for i in range(len(INTENT_TAXONOMY)):
-            if i != target_idx:
-                probs[i] = round(rem, 4)
-        prob_b.append(probs)
+    # KTC 95% cho riêng nhánh C — luôn tính được
+    rng = np.random.default_rng(RANDOM_SEED)
+    y_true_arr, y_c_arr = np.array(test_labels), np.array(pred_c)
+    f1_c_boot = []
+    for _ in range(BOOTSTRAP_ROUNDS):
+        idx = rng.choice(len(test_labels), size=len(test_labels), replace=True)
+        f1_c_boot.append(f1_score(y_true_arr[idx], y_c_arr[idx], average="macro", zero_division=0))
+    ci_c = [round(float(np.percentile(f1_c_boot, 2.5)), 4), round(float(np.percentile(f1_c_boot, 97.5)), 4)]
+    logger.info("  KTC 95%% Macro-F1 nhánh C (bootstrap B=%d): %s", BOOTSTRAP_ROUNDS, ci_c)
 
-    prob_b = np.array(prob_b)
-    acc_b = accuracy_score(test_labels, pred_b)
-    f1_b = f1_score(test_labels, pred_b, average="macro")
-
-    logger.info("KẾT QUẢ ĐÁNH GIÁ ĐƠN ĐIỂM (POINT ESTIMATES):")
-    logger.info("  • Nhánh B (XLM-RoBERTa base): Accuracy = %.4f | Macro-F1 = %.4f", acc_b, f1_b)
-    logger.info("  • Nhánh C (ai-embed + kNN)   : Accuracy = %.4f | Macro-F1 = %.4f", acc_c, f1_c)
-
-    # 3. Paired Bootstrap Test (B=1000)
-    logger.info("=" * 70)
-    logger.info("THỰC HIỆN KIỂM ĐỊNH PAIRED BOOTSTRAP (B=%d, KTC 95%%)", BOOTSTRAP_ROUNDS)
-    bootstrap_res = paired_bootstrap_test(test_labels, pred_b, pred_c, n_rounds=BOOTSTRAP_ROUNDS, seed=RANDOM_SEED)
-    logger.info("  • KTC 95%% Nhánh B: [%.4f, %.4f]", bootstrap_res["ci_95_branch_b"][0], bootstrap_res["ci_95_branch_b"][1])
-    logger.info("  • KTC 95%% Nhánh C: [%.4f, %.4f]", bootstrap_res["ci_95_branch_c"][0], bootstrap_res["ci_95_branch_c"][1])
-    logger.info("  • KTC 95%% Chênh lệch (Delta B - C): [%.4f, %.4f] (Mean: %+.4f, p-value: %.4f)",
-                bootstrap_res["ci_95_delta"][0], bootstrap_res["ci_95_delta"][1], bootstrap_res["mean_delta"], bootstrap_res["p_value"])
-
-    # 4. Phân tích Đường cong Abstention (Bỏ phiếu trắng) cho Nhánh C
-    logger.info("=" * 70)
-    logger.info("PHÂN TÍCH ĐƯỜNG CONG ABSTENTION (BỎ PHIẾU TRẮNG ĐỂ GỌI LLM)")
+    # 3. Đường cong abstention cho nhánh C — trên xác suất và dự đoán của CÙNG một mô hình
     max_confs = np.max(prob_c, axis=1)
-    thresholds = [float(t) for t in np.arange(0.10, 0.90, 0.05)]
-    acc_curve = []
-    cov_curve = []
-
-    opt_threshold = 0.65
-    opt_acc = 0.0
-    opt_cov = 0.0
-
+    thresholds = [round(float(t), 2) for t in np.arange(0.10, 0.90, 0.05)]
+    acc_curve, cov_curve = [], []
+    opt = None
     for tau in thresholds:
-        retained_mask = max_confs >= tau
-        cov = float(np.mean(retained_mask))
-        if np.sum(retained_mask) > 0:
-            retained_true = np.array(test_labels)[retained_mask]
-            retained_pred = np.array(pred_c)[retained_mask]
-            acc_ret = float(accuracy_score(retained_true, retained_pred))
-        else:
-            acc_ret = 1.0
+        mask = max_confs >= tau
+        cov = float(np.mean(mask))
+        acc_ret = float(accuracy_score(y_true_arr[mask], y_c_arr[mask])) if mask.any() else float("nan")
         acc_curve.append(acc_ret)
         cov_curve.append(cov)
+        if opt is None and mask.any() and acc_ret >= 0.95:
+            opt = (tau, acc_ret, cov)
+    if opt is None:
+        logger.warning("Không ngưỡng nào đạt độ chính xác phần giữ lại >= 0,95 trên đường cong này")
+        opt_threshold, opt_acc, opt_cov = None, None, None
+    else:
+        opt_threshold, opt_acc, opt_cov = opt
+        logger.info("  τ nhỏ nhất đạt >= 0,95: %.2f (acc %.2f%%, coverage %.2f%%)", opt_threshold, opt_acc * 100, opt_cov * 100)
+    tau_prod = 0.65
+    i65 = thresholds.index(tau_prod)
+    logger.info("  Tại τ đang chạy %.2f: acc phần giữ lại %.2f%%, coverage %.2f%%", tau_prod, acc_curve[i65] * 100, cov_curve[i65] * 100)
 
-        if acc_ret >= 0.95 and opt_cov == 0.0:
-            opt_threshold = round(tau, 2)
-            opt_acc = acc_ret
-            opt_cov = cov
-
-    if opt_cov == 0.0:
-        opt_threshold = 0.65
-        opt_acc = acc_curve[thresholds.index(0.65)]
-        opt_cov = cov_curve[thresholds.index(0.65)]
-
-    logger.info("  • Điểm chọn ngưỡng tự tin τ* = %.2f", opt_threshold)
-    logger.info("  • Độ chính xác phần giữ lại : %.2f%% (>= 95%% mục tiêu)", opt_acc * 100)
-    logger.info("  • Tỷ lệ giữ lại (Coverage)  : %.2f%% (chỉ %d%% câu nghi ngờ cần gọi LLM cứu cánh)", opt_cov * 100, int((1 - opt_cov) * 100))
-
-    # 5. Phân tích Đánh đổi và Quy tắc chốt (§5.9)
-    # Ngân sách: p95 <= 60 ms trên CPU
-    lat_b_p95 = 168.2  # ms (XLM-R base 278M trên CPU v4)
-    lat_c_p95 = 0.182  # ms (Phép nhân ma trận CPU)
-    size_b_mb = 1112.0  # MB
-    size_c_mb = 0.058   # MB (58 KB)
-
-    logger.info("=" * 70)
-    logger.info("ĐỐI CHIẾU QUY TẮC CHỐT MASTER PLAN §5.9:")
-    logger.info("  • Nhánh B: Macro-F1 = %.2f%%, Latency p95 = %.1f ms (> 60 ms budget!), Size = %.1f MB", f1_b * 100, lat_b_p95, size_b_mb)
-    logger.info("  • Nhánh C: Macro-F1 = %.2f%%, Latency p95 = %.3f ms (<< 60 ms budget!), Size = %.3f MB", f1_c * 100, lat_c_p95, size_c_mb)
-    logger.info("==> QUYẾT ĐỊNH CHỐT: SHIP NHÁNH C!")
-    logger.info("    Lý do: XLM-R vi phạm nghiêm trọng ngân sách độ trễ 60 ms trên CPU thực tế.")
-    logger.info("    Nhánh C thắng áp đảo về độ trễ, tiết kiệm bộ nhớ 19.000 lần và tái dùng ai-embed.")
-
-    # 6. Vẽ các biểu đồ báo cáo
-    cm_b = confusion_matrix(test_labels, pred_b, labels=INTENT_TAXONOMY)
-    cm_c = confusion_matrix(test_labels, pred_c, labels=INTENT_TAXONOMY)
-
-    plot_confusion_matrix(
-        cm_b,
-        labels=INTENT_TAXONOMY,
-        output_path="reports/eval/router_branch_b_confusion_matrix.png",
-        title=f"Ma Trận Nhầm Lẫn Nhánh B: XLM-R (Macro-F1={f1_b:.4f})",
-    )
-    plot_confusion_matrix(
-        cm_c,
-        labels=INTENT_TAXONOMY,
-        output_path="reports/eval/router_branch_c_confusion_matrix.png",
-        title=f"Ma Trận Nhầm Lẫn Nhánh C: ai-embed + kNN (Macro-F1={f1_c:.4f})",
-    )
-    plot_abstention_curve(
-        thresholds=thresholds,
-        accuracies=acc_curve,
-        coverages=cov_curve,
-        opt_threshold=opt_threshold,
-        opt_acc=opt_acc,
-        opt_cov=opt_cov,
-        output_path="reports/eval/router_abstention_curve.png",
-    )
-
-    # 7. Export Nhánh thắng sang ONNX INT8 & Kiểm tra Parity
-    logger.info("=" * 70)
-    logger.info("EXPORT MÔ HÌNH NHÁNH C SANG ONNX VÀ LƯỢNG TỬ HÓA INT8")
-    onnx_fp32_path = Path("artifacts/router_model_fp32.onnx")
+    # 4. ONNX: export lại (mặc định, như trước) hoặc dùng artifact đã đóng băng (--no-export)
     onnx_int8_path = Path("artifacts/router_model.onnx")
+    if args.no_export:
+        logger.info("--no-export: dùng %s đã đóng băng, không sửa DATA_HASHES.txt", onnx_int8_path)
+    else:
+        onnx_fp32_path = Path("artifacts/router_model_fp32.onnx")
+        initial_type = [("float_input", FloatTensorType([None, VECTOR_DIM]))]
+        onnx_model = convert_sklearn(clf_lr, name="intent_router_v1", initial_types=initial_type, target_opset=15)
+        onnx_fp32_path.write_bytes(onnx_model.SerializeToString())
+        quantize_dynamic(model_input=str(onnx_fp32_path), model_output=str(onnx_int8_path), weight_type=QuantType.QUInt8)
+        onnx_fp32_path.unlink(missing_ok=True)
 
-    # Export LogisticRegression classifier to ONNX
-    # Export LogisticRegression classifier to ONNX với tên đồ thị cố định để đảm bảo tính tái lập (deterministic)
-    initial_type = [("float_input", FloatTensorType([None, VECTOR_DIM]))]
-    onnx_model = convert_sklearn(clf_lr, name="intent_router_v1", initial_types=initial_type, target_opset=15)
-    onnx_fp32_path.write_bytes(onnx_model.SerializeToString())
-
-    # Dynamic Quantization sang INT8
-    quantize_dynamic(
-        model_input=str(onnx_fp32_path),
-        model_output=str(onnx_int8_path),
-        weight_type=QuantType.QUInt8,
-    )
-    if onnx_fp32_path.is_file():
-        onnx_fp32_path.unlink()  # Dọn tệp trung gian fp32
-
-    # Parity Test: So sánh xác suất giữa Sklearn và ONNX
     sess = ort.InferenceSession(str(onnx_int8_path), providers=["CPUExecutionProvider"])
     input_name = sess.get_inputs()[0].name
     res_onnx = sess.run(None, {input_name: X_test.astype(np.float32)})
-    # res_onnx[1] là danh sách dict xác suất
     probs_onnx = np.array([[row[c] for c in clf_lr.classes_] for row in res_onnx[1]])
-    probs_sk = clf_lr.predict_proba(X_test)
-
-    max_diff = float(np.max(np.abs(probs_sk - probs_onnx)))
-    logger.info("  • Kích thước tệp ONNX INT8: %d bytes (%.2f KB)", onnx_int8_path.stat().st_size, onnx_int8_path.stat().st_size / 1024)
-    logger.info("  • Sai số lớn nhất (Parity Max Diff): %.2e (ngưỡng cho phép < 1e-4)", max_diff)
+    max_diff = float(np.max(np.abs(prob_c - probs_onnx)))
+    label_parity = float(np.mean(np.argmax(probs_onnx, axis=1) == np.argmax(prob_c, axis=1)))
+    logger.info("Parity: max |ΔP| = %.2e · khớp nhãn = %.4f", max_diff, label_parity)
     assert max_diff < 1e-4, f"LỖI CỔNG PARITY: Sai số {max_diff} vượt ngưỡng 1e-4"
-    logger.info("  ==> CỔNG PARITY ĐẠT XUẤT SẮC!")
-
     onnx_hash = compute_sha256(onnx_int8_path)
-    logger.info("  • SHA-256 router_model.onnx: %s", onnx_hash)
 
-    # Cập nhật mã băm vào artifacts/DATA_HASHES.txt
-    hashes_file = Path("artifacts/DATA_HASHES.txt")
-    if hashes_file.is_file():
-        content = hashes_file.read_text(encoding="utf-8")
-        entry = f"{onnx_hash}  artifacts/router_model.onnx"
-        lines = [line for line in content.splitlines() if "artifacts/router_model.onnx" not in line and line.strip()]
-        lines.append(entry)
-        hashes_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        logger.info("Đã cập nhật mã băm ONNX vào artifacts/DATA_HASHES.txt")
+    if not args.no_export:
+        hashes_file = Path("artifacts/DATA_HASHES.txt")
+        if hashes_file.is_file():
+            lines = [ln for ln in hashes_file.read_text(encoding="utf-8").splitlines()
+                     if "artifacts/router_model.onnx" not in ln and ln.strip()]
+            lines.append(f"{onnx_hash}  artifacts/router_model.onnx")
+            hashes_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            logger.info("Đã cập nhật mã băm ONNX vào artifacts/DATA_HASHES.txt")
 
-    # 8. Xuất Báo cáo So sánh JSON
-    comparison_report = {
+    # 5. Độ trễ nhánh C — ĐO THẬT trên máy chạy script (bản cũ gán cứng 0,182 ms)
+    latency_c = measure_branch_c_latency(embedder, sess, test_texts)
+    logger.info("Độ trễ nhánh C: %s", latency_c)
+
+    # 6. Quy tắc chốt §5.9 — chỉ áp được khi có số đo thật của cả hai nhánh
+    b_p95 = latency_b.get("p95_cpu_ms") if latency_b else None
+    if not branch_b_evaluated:
+        decision = ("Nhánh B chưa được đánh giá trên tập test (không có file dự đoán thật). "
+                    "Nhánh C là nhánh DUY NHẤT đã đánh giá — ship nhánh C; chưa có cơ sở so sánh B–C.")
+    elif b_p95 is None:
+        decision = "Đã có Macro-F1 nhánh B nhưng chưa có p95 CPU đo thật — chưa áp được quy tắc phá thế hoà §5.9."
+    elif b_p95 > LATENCY_BUDGET_MS:
+        decision = f"Nhánh B vượt ngân sách {LATENCY_BUDGET_MS:.0f} ms (p95 {b_p95} ms đo thật) — loại theo §5.9, ship nhánh C."
+    else:
+        decision = "Cả hai nhánh trong ngân sách — chốt theo KTC Macro-F1 (§5.9), xem bảng."
+    logger.info("QUYẾT ĐỊNH: %s", decision)
+
+    # 7. Biểu đồ — chỉ vẽ nhánh nào có số liệu thật
+    plot_confusion_matrix(
+        confusion_matrix(test_labels, pred_c, labels=INTENT_TAXONOMY), labels=INTENT_TAXONOMY,
+        output_path="reports/eval/router_branch_c_confusion_matrix.png",
+        title=f"Ma Trận Nhầm Lẫn Nhánh C: ai-embed + LogReg (Macro-F1={f1_c:.4f})",
+    )
+    if branch_b_evaluated:
+        plot_confusion_matrix(
+            confusion_matrix(test_labels, pred_b, labels=INTENT_TAXONOMY), labels=INTENT_TAXONOMY,
+            output_path="reports/eval/router_branch_b_confusion_matrix.png",
+            title=f"Ma Trận Nhầm Lẫn Nhánh B: XLM-R (Macro-F1={f1_b:.4f})",
+        )
+    plot_abstention_curve(
+        thresholds=thresholds, accuracies=acc_curve, coverages=cov_curve,
+        opt_threshold=opt_threshold if opt_threshold is not None else tau_prod,
+        opt_acc=opt_acc if opt_acc is not None else acc_curve[i65],
+        opt_cov=opt_cov if opt_cov is not None else cov_curve[i65],
+        output_path="reports/eval/router_abstention_curve.png",
+    )
+
+    # 8. Báo cáo JSON
+    report = {
         "metadata": {
             "use_case": "UC022 (3/4)",
-            "task_name": "So sánh hai nhánh có khoảng tin cậy + chốt nhánh ship + export ONNX",
             "evaluated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "environment": {
                 "os": f"{platform.system()} {platform.release()}",
@@ -397,67 +418,53 @@ def main() -> None:
                 "onnxruntime": ort.__version__,
                 "random_seed": RANDOM_SEED,
             },
-            "winning_branch": "Branch C (ai-embed + Cosine/kNN Classifier)",
-            "decision_rationale": "Branch C meets the strict CPU latency budget (p95 0.182 ms << 60 ms) and zero additional overhead, whereas Branch B exceeds budget (p95 168.2 ms).",
-            "abstention_threshold": opt_threshold,
+            "test_set_sha256": compute_sha256(test_file),
+            "decision": decision,
+            "note": "Mọi số liệu trong báo cáo này là số đo thật; nhánh không có số đo thì ghi null.",
         },
-        "comparison_table": {
-            "branch_b_xlmr": {
-                "architecture": "xlm-roberta-base (Fine-tuned, 278M params)",
-                "macro_f1": round(f1_b, 4),
-                "accuracy": round(acc_b, 4),
-                "ci_95_macro_f1": bootstrap_res["ci_95_branch_b"],
-                "p95_latency_cpu_ms": lat_b_p95,
-                "model_size_mb": size_b_mb,
-                "production_status": "REJECTED_DUE_TO_LATENCY_BUDGET",
-            },
-            "branch_c_ai_embed": {
-                "architecture": "ai-embed BGE-M3 (1024-dim) + ONNX INT8 Classifier",
-                "macro_f1": round(f1_c, 4),
-                "accuracy": round(acc_c, 4),
-                "ci_95_macro_f1": bootstrap_res["ci_95_branch_c"],
-                "p95_latency_cpu_ms": lat_c_p95,
-                "model_size_mb": round(onnx_int8_path.stat().st_size / (1024 * 1024), 4),
-                "production_status": "CHOSEN_FOR_PRODUCTION",
-            },
-            "paired_bootstrap_comparison": {
-                "rounds": BOOTSTRAP_ROUNDS,
-                "mean_delta_b_minus_c": bootstrap_res["mean_delta"],
-                "ci_95_delta": bootstrap_res["ci_95_delta"],
-                "p_value": bootstrap_res["p_value"],
-                "statistically_significant": bootstrap_res["statistically_significant"],
-            },
+        "branch_c_ai_embed": {
+            # SemanticDenseEmbedder là feature hashing n-gram ký tự + IDF (1024 chiều) — docstring
+            # của nó tự ghi "mô phỏng" BGE-M3. KHÔNG được mô tả là vector BGE-M3 của ai-embed.
+            "architecture": "Feature hashing char 3/4-gram + IDF (1024 chiều, SemanticDenseEmbedder — "
+                            "chưa phải BGE-M3) + LogisticRegression -> ONNX INT8",
+            "macro_f1": round(f1_c, 4),
+            "accuracy": round(acc_c, 4),
+            "ci_95_macro_f1": ci_c,
+            "knn_reference_macro_f1": round(f1_knn, 4),
+            "latency": latency_c,
+            "model_size_kb": round(onnx_int8_path.stat().st_size / 1024, 2),
         },
+        "branch_b_xlmr": {
+            "status": "EVALUATED" if branch_b_evaluated else "NOT_EVALUATED",
+            "predictions_file": str(BRANCH_B_PRED_PATH) if branch_b_evaluated else None,
+            "macro_f1": round(f1_b, 4) if f1_b is not None else None,
+            "accuracy": round(acc_b, 4) if acc_b is not None else None,
+            "latency": latency_b,
+        },
+        "paired_bootstrap_b_vs_c": bootstrap_res,
         "abstention_analysis": {
-            "optimal_threshold": opt_threshold,
-            "retained_accuracy": round(opt_acc, 4),
-            "retained_coverage": round(opt_cov, 4),
-            "fallback_to_llm_rate": round(1.0 - opt_cov, 4),
-            "policy": "If confidence < threshold, route turn to Tier 3 (LLM Fallback).",
+            "curve": [{"tau": t, "retained_accuracy": None if a != a else round(a, 4), "coverage": round(c, 4)}
+                      for t, a, c in zip(thresholds, acc_curve, cov_curve)],
+            "smallest_tau_reaching_0_95": opt_threshold,
+            "production_tau": tau_prod,
+            "at_production_tau": {"retained_accuracy": round(acc_curve[i65], 4), "coverage": round(cov_curve[i65], 4)},
         },
         "onnx_parity_gate": {
             "model_path": str(onnx_int8_path),
-            "max_abs_diff_fp32_vs_int8": max_diff,
+            "re_exported": not args.no_export,
+            "max_abs_diff_sklearn_vs_onnx_int8": max_diff,
+            "label_agreement": label_parity,
             "tolerance": 1e-4,
             "status": "PASSED",
             "sha256": onnx_hash,
         },
     }
-
-    report_json_path = Path("reports/eval/router_branches_comparison_report.json")
-    with open(report_json_path, "w", encoding="utf-8") as f:
-        json.dump(comparison_report, f, ensure_ascii=False, indent=2)
-    logger.info("Đã lưu báo cáo so sánh: %s", report_json_path)
-
-    # Chép báo cáo sang docs/report/ để bảo lưu trong Git theo .gitignore
+    out = json.dumps(report, ensure_ascii=False, indent=2)
+    Path("reports/eval/router_branches_comparison_report.json").write_text(out, encoding="utf-8")
     docs_report = Path("docs/report")
     docs_report.mkdir(parents=True, exist_ok=True)
-    with open(docs_report / "router_branches_comparison_report.json", "w", encoding="utf-8") as f:
-        json.dump(comparison_report, f, ensure_ascii=False, indent=2)
-
-    logger.info("=" * 75)
-    logger.info("HOÀN TẤT TASK UC022 (3/4) THÀNH CÔNG RỰC RỠ!")
-    logger.info("=" * 75)
+    (docs_report / "router_branches_comparison_report.json").write_text(out, encoding="utf-8")
+    logger.info("Đã lưu báo cáo: reports/eval/ và docs/report/router_branches_comparison_report.json")
 
 
 if __name__ == "__main__":

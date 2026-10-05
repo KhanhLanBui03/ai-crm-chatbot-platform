@@ -21,6 +21,13 @@ llm_calls = Counter(
     labelnames=("model", "route", "outcome"),
 )
 
+# KPI §1.6 ">= 55% lượt không gọi LLM" = sum(llm_called="false") / sum(tất cả)
+chat_turns = Counter(
+    "ai_chat_turns_total",
+    "Số lượt /v1/ai/chat theo nhánh xử lý",
+    labelnames=("branch", "llm_called"),  # branch: 7 giá trị V204 · llm_called: true|false
+)
+
 tool_calls = Counter(
     "ai_tool_calls_total",
     "Số lượt gọi tool qua MCP",

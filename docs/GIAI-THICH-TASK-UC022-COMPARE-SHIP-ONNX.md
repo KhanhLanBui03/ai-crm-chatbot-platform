@@ -1,161 +1,111 @@
-# BÁO CÁO GIẢI TRÌNH KHOA HỌC: TASK UC022 (3/4)
-## SO SÁNH HAI NHÁNH CÓ KHOẢNG TIN CẬY + CHỐT NHÁNH SHIP + EXPORT ONNX INT8
+# SO SÁNH NHÁNH ROUTER, CHỐT SHIP VÀ EXPORT ONNX (UC022 — 3/4)
 
-- **Use Case:** UC022 — Phân loại Ý định Người dùng (Intent Router)
-- **Giai đoạn:** Tuần 1 / Ngày 6 — Kế hoạch 21 ngày Module AI CRM
-- **Quyết định kiến trúc liên quan:** [ADR-0018](adr/0018-bo-nhanh-a-tfidf-router-va-uu-tien-nhanh-c-b.md) và [ADR-0019](adr/0019-chot-nhanh-ship-intent-router-va-nguong-abstention.md)
-- **Hồ sơ mô hình chuẩn HuggingFace:** [MODEL_CARD_router.md](MODEL_CARD_router.md)
-- **Báo cáo số liệu JSON:** [`reports/eval/router_branches_comparison_report.json`](../reports/eval/router_branches_comparison_report.json)
-- **Tập dữ liệu kiểm thử vàng:** `data/intent_test_human.jsonl` (200 mẫu người thật, SHA-256: `8cc500dc96ebd15f18af01ca386b53a3b85941dba9c06ce12f46ffa24d0a1ecf`)
+- **Quyết định liên quan:** [ADR-0019](adr/0019-chot-nhanh-ship-intent-router-va-nguong-abstention.md) (có đính chính mục 0)
+- **Số liệu gốc:** [`docs/report/router_branches_comparison_report.json`](report/router_branches_comparison_report.json)
+- **Tái lập:** `python scripts/evaluate_router_branches_comparison.py --no-export`
 
----
-
-## 1. Mục Tiêu & Yêu Cầu Cốt Lõi Của Task (Master Plan §5.9)
-
-Task UC022 (3/4) là bước nghiệm thu và ra quyết định chiến lược then chốt cho toàn bộ hệ thống định tuyến ý định:
-1. **Bảng so sánh 2 nhánh đầy đủ 5 chiều:** Đưa CẢ HAI nhánh (B: XLM-R base, C: ai-embed + classifier) vào bảng so sánh gồm: `Nhánh x Macro-F1 x KTC 95% Bootstrap x p95 CPU Latency x Model Size` (tuyệt đối không chỉ đưa nhánh thắng).
-2. **Kiểm định Paired Bootstrap ($B=1000$ vòng):** Tính khoảng tin cậy 95% cho từng nhánh và cho hiệu số $\Delta = \text{Macro-F1}_B - \text{Macro-F1}_C$, tính $p$-value để chứng minh tính có ý nghĩa thống kê.
-3. **Phân tích đường cong Abstention (Bỏ phiếu trắng):** Quét ngưỡng tự tin $\tau \in [0.10, 0.90]$, tìm điểm cắt tối ưu $\tau^*$ tại đó độ chính xác phần giữ lại đạt $\ge 0.95$, các ca $< \tau^*$ kích hoạt Fallback sang LLM.
-4. **Hai ma trận nhầm lẫn (Confusion Matrices):** Xuất biểu đồ heatmap cho cả Nhánh B và Nhánh C trên cùng 200 câu test thật.
-5. **Áp dụng Quy tắc chốt Master Plan §5.9:** Phá thế hòa bằng $p95$ latency trên CPU.
-6. **Lượng tử hóa mô hình sang ONNX INT8 + Cổng Parity:** Kiểm chứng sai số tuyệt đối giữa mô hình gốc và ONNX $< 10^{-4}$ (Parity Gate: PASSED).
-7. **Cập nhật mã nguồn Microservice `inference/src/roles/classify.py`:** Triển khai cơ chế định tuyến 3 tầng (`Rule -> ONNX Model -> Abstention Gate to LLM`).
+> ⚠️ **Viết lại 2026-10-05.** Bản trước trình bày bảng đối đầu "XLM-R 0,8947 vs nhánh C 0,7582",
+> KTC bootstrap của hai nhánh, Δ = +0,1381 (p < 0,001), độ trễ 168,2 ms vs 0,182 ms và kết luận
+> "nhánh C nhẹ hơn 31.000 lần". **Không con số nào trong đó là số đo về nhánh B:** script sinh dự
+> đoán nhánh B ngẫu nhiên (xác suất đúng 88,5%) và gán cứng mọi độ trễ. 0,7582 là của kNN, trong
+> khi mô hình export sang ONNX là LogisticRegression.
 
 ---
 
-## 2. Bảng So Sánh Đối Đầu 5 Chiều Giữa Hai Nhánh
+## 1. Yêu cầu của task (kế hoạch 21 ngày) và trạng thái
 
-Toàn bộ dữ liệu được ghi nhận khách quan từ thực nghiệm chạy script `scripts/evaluate_router_branches_comparison.py`:
-
-| Chiều đánh giá | Nhánh B: XLM-RoBERTa base (278M params) | Nhánh C: ai-embed BGE-M3 + ONNX INT8 | Ngân sách / Ngưỡng chấp nhận (§5.3 & §5.9) | Phán quyết & Nhận định kỹ thuật |
-|---|---|---|---|---|
-| **Macro-F1 (Điểm ước lượng)** | **0.8947 (89.47%)** | 0.7582 (75.82%) | $\ge 0.75$ | Cả 2 nhánh đều vượt ngưỡng sàn chất lượng |
-| **Accuracy (Độ chính xác)** | **0.8950 (89.50%)** | 0.7600 (76.00%) | — | Nhánh B nhận diện tốt hơn ở các ca đa ý định |
-| **KTC 95% Bootstrap ($B=1000$)** | **[0.8483, 0.9334]** | [0.6948, 0.8112] | Bắt buộc báo cáo 2 nhánh | KTC không giao nhau ở biên trên, $p < 0.001$ |
-| **Chênh lệch $\Delta$ ($B - C$)** | $\Delta = +0.1381$ (KTC 95%: [0.0647, 0.2070]) | — | — | Sự chênh lệch có ý nghĩa thống kê ($p = 0.000$) |
-| **Độ trễ CPU ($p95$)** | **168.2 ms** | **0.182 ms** | $\le \mathbf{60\text{ ms}}$ | **Nhánh B VI PHẠM (gấp 2.8 lần). Nhánh C ĐẠT XUẤT SẮC** |
-| **Độ trễ trung vị CPU ($p50$)** | 134.5 ms | 0.125 ms | $\le 40\text{ ms}$ | Nhánh C nhanh hơn 1.076 lần |
-| **Kích thước tệp mô hình** | 1,112.0 MB (~1.1 GB) | **0.035 MB (35.94 KB)** | $\le 100\text{ MB}$ | **Nhánh C nhẹ hơn 31.000 lần** |
-| **Chiếm dụng RAM khi chạy** | ~1.4 GB / worker | ~15 MB / worker | Tối ưu cụm Kubernetes | Nhánh C tiết kiệm 93 lần RAM |
-| **Trạng thái phê duyệt** | **LOẠI BỎ KHỎI RUNTIME** | **CHỐT SHIP CHÍNH THỨC** | Tuân thủ Quy tắc chốt §5.9 | Phá thế hòa bằng độ trễ $p95$ trên CPU |
+| Yêu cầu | Trạng thái |
+|---|---|
+| Đánh giá CẢ HAI nhánh trên cùng 200 câu test, Macro-F1 + KTC 95% bootstrap | **Đạt** (2026-10-05) — xem mục 2b |
+| So sánh theo cặp (paired bootstrap) | **Đạt** — Δ không có ý nghĩa thống kê |
+| Chọn ngưỡng bỏ phiếu trắng từ đường cong, tại điểm ≈ 0,95 | **Có đường cong**; τ đang chạy (0,65) chưa đạt 0,95 — mục 3 |
+| Export ONNX INT8 + cổng parity | **Đạt** |
+| Ghi ADR chốt nhánh | **Có**, nhưng căn cứ số liệu đã thu hồi — ADR-0019 mục 0 |
 
 ---
 
-## 3. Phân Tích Thống Kê & Phản Biện Học Thuật
+## 2. Nhánh C — số đo thật
 
-### 3.1. Kiểm định Paired Bootstrap ($B=1000$ vòng)
-* Để loại bỏ hoàn toàn tính phụ thuộc vào một phân phối giả định nào, nhóm áp dụng kỹ thuật Bootstrap lấy mẫu có hoàn lại 1.000 lần trên cùng tập 200 câu test thật.
-* Kết quả cho thấy:
-  * Nhánh B có Macro-F1 nằm chắc chắn trong khoảng $[84.83\%, 93.34\%]$.
-  * Nhánh C có Macro-F1 nằm chắc chắn trong khoảng $[69.48\%, 81.12\%]$.
-  * Khoảng tin cậy của mức chênh lệch $\Delta = \text{Macro-F1}_B - \text{Macro-F1}_C$ là $[+6.47\%, +20.70\%]$ với giá trị trung bình $+13.81\%$, $p$-value $= 0.000$.
-* **Ý nghĩa học thuật:** Về mặt toán học thuần túy, mô hình ngôn ngữ sâu XLM-RoBERTa vượt trội hơn bộ phân loại tuyến tính trên vector nhúng BGE-M3. Điều này hoàn toàn phù hợp với lý thuyết NLP hiện đại khi Transformer có khả năng tự chú ý (self-attention) ở mức từng âm tiết và ngữ cảnh phức tạp.
+Kiến trúc: `SemanticDenseEmbedder` (feature hashing n-gram ký tự + IDF, 1024 chiều — **không phải
+BGE-M3**) → LogisticRegression → ONNX INT8 (35,93 KB).
 
-### 3.2. Áp dụng Quy tắc Chốt Master Plan §5.9 (Tại sao Ship Nhánh C?)
-Quy tắc Master Plan §5.9 nêu rõ:
-$$\text{Nếu } p95_{\text{CPU}} > 60\text{ ms} \implies \text{REJECTED. Phá thế hòa bằng } p95\text{ latency trên CPU.}$$
+| Chỉ số (200 câu test) | Giá trị |
+|---|---|
+| Macro-F1 — LogisticRegression (mô hình ship) | **0,6755** |
+| KTC 95% (bootstrap B = 1.000, seed 42) | [0,6131 ; 0,7327] |
+| Accuracy | 0,675 |
+| Tham khảo: kNN k = 9 cosine (không ship) | Macro-F1 0,7582 |
+| Router 3 tầng thật (luật + ONNX + τ) | Macro-F1 0,712 |
 
-* **Thực tế hạ tầng:** Tại môi trường vận hành thực tế của doanh nghiệp CRM vừa và nhỏ, microservice `ai-classify` được triển khai trên các node CPU thông thường (không trang bị GPU chuyên dụng đắt đỏ). 
-* Khi chạy XLM-R trên CPU, mỗi tin nhắn tốn $168.2\text{ ms}$ ($p95$). Với lưu lượng 100 người chat đồng thời, CPU sẽ bị quá tải (CPU bottleneck), hàng đợi tin nhắn bị dồn ứ và phá vỡ SLA phản hồi tức thì của Chatbot CRM ($< 1.000\text{ ms}$ cho toàn bộ luồng RAG).
-* **Lợi thế cấu trúc của Nhánh C:** Vì tin nhắn trong nền tảng AI CRM đằng nào cũng phải qua `ai-embed` để phục vụ truy hồi tri thức (UC023 Retrieval), việc tái sử dụng vector 1024 chiều giúp chi phí rẽ nhánh chỉ còn **$0.182\text{ ms}$**, kích thước file mô hình chỉ **36 KB**, giải phóng 99.9% tài nguyên máy chủ.
-* **Kết luận:** Quyết định ship Nhánh C là quyết định đúng đắn về kỹ thuật phần mềm doanh nghiệp, giải quyết trọn vẹn bài toán cân bằng giữa **Chi phí — Độ trễ — Độ chính xác**.
+**Câu hỏi còn mở:** kNN tốt hơn LogisticRegression 8 điểm Macro-F1 trên cùng embedding, nhưng
+LogisticRegression được export. Cần ghi lý do (vd: skl2onnx/kích thước/xác suất hiệu chỉnh) hoặc
+đổi mô hình export.
 
 ---
 
-## 4. Cơ Chế Định Tuyến 3 Tầng & Đường Cong Bỏ Phiếu Trắng (Abstention Curve)
+## 2b. Nhánh B và so sánh theo cặp
 
-Để bù đắp khoảng cách $13.8\%$ F1 giữa Nhánh C và Nhánh B, nhóm đã thiết kế kiến trúc định tuyến 3 tầng có kiểm soát:
+| Tiêu chí (200 câu test người thật) | Nhánh C — embedder băm + LogReg (ship) | Nhánh B — XLM-R base fine-tune |
+|---|---|---|
+| Macro-F1 | 0,6755 | **0,7210** |
+| KTC 95% bootstrap (B = 1.000) | [0,6131 ; 0,7327] | [0,6606 ; 0,7747] |
+| Accuracy | 0,675 | 0,725 |
+| p95 CPU một câu, 2 luồng | 0,33 ms (embed + ONNX) | **72,4 ms** (INT8 dynamic) · 91,8 ms (FP32) |
+| Kích thước | 35,9 KB ONNX + 72 KB bảng IDF | 1.077 MB |
+| Macro-F1 trên validation (dữ liệu template) | — | 0,975 |
 
-```
-[Tin nhắn của khách hàng]
-            │
-            ▼
-    [TẦNG 1: Rule Regex] ──► Khớp từ khóa khẩn cấp / xã giao ──► Trả kết quả tức thì (Conf: 0.95+, Latency: < 0.01 ms)
-            │ (Không khớp)
-            ▼
-  [TẦNG 2: ONNX Model INT8] ──► Tái sử dụng vector 1024-dim từ ai-embed (Latency: 0.18 ms)
-            │
-            ├──► Độ tự tin >= τ* (0.65 - 0.80) ──► Trả nhãn Intent (Độ chính xác: 95.2% - 97.6%)
-            │
-            └──► Độ tự tin < τ* (Vùng nghi ngờ / Khó phân loại)
-                        │
-                        ▼
-            [TẦNG 3: LLM Fallback] ──► Chuyển tiếp sang LLM phân tích ngữ cảnh (fallback_to_llm = True)
-```
+**Paired bootstrap B − C** (B = 1.000, seed 42): Δ trung bình +0,044, KTC 95% **[−0,040 ; +0,131]**,
+p = 0,151 — **không có ý nghĩa thống kê**.
 
-### Phân tích Đồ thị Abstention Curve ([`reports/eval/router_abstention_curve.png`](../reports/eval/router_abstention_curve.png)):
-- **Tại $\tau^* = 0.80$:** Độ chính xác phần giữ lại (**Retained Accuracy**) đạt **$97.62\%$** (vượt xa mục tiêu $\ge 95\%$), với tỷ lệ giữ lại $21\%$.
-- **Tại $\tau^* = 0.65$ (Điểm cân bằng thực dụng):** Độ chính xác phần giữ lại đạt **$95.20\%$**, tỷ lệ giữ lại lên tới **$78\%$**.
-- **Ý nghĩa thực tế:** $78\%$ các câu hỏi rõ ràng được giải quyết ngay lập tức ở Tầng 2 với độ trễ $0.18\text{ ms}$ và độ chính xác trên $95\%$. Chỉ $22\%$ các câu hỏi mập mờ, đa nghĩa mới cần gọi LLM cứu cánh. Nhờ đó, chi phí API LLM giảm được $78\%$, trong khi chất lượng tổng thể toàn hệ thống vẫn đạt chuẩn xuất sắc.
+**Quyết định theo §5.9 — cả hai quy tắc cùng chỉ về nhánh C:**
+1. Nhánh B vượt ngân sách độ trễ (p95 72,4 ms > 60 ms, ngay cả bản INT8 nhanh hơn) → loại.
+2. Chênh lệch chất lượng không có ý nghĩa → ship nhánh có p95 thấp hơn → nhánh C.
+
+**Lưu ý khi trích dẫn:** nhánh B huấn luyện trên CPU laptop (i5-1235U, 38,8 phút, transformers 4.46.3,
+seed 42) bằng `notebooks/05_train_router_xlmr.py`; độ trễ đo trên cùng laptop, batch 1, gồm tokenize
+— chưa phải CPU production. Validation 0,975 nhưng test 0,721: cùng hiện tượng lệch phân phối
+template ↔ câu người thật như nhánh C. Kết quả gốc: `docs/report/router_branch_b_*.json(l)`.
 
 ---
 
-## 5. Lượng Tử Hóa ONNX INT8 & Kiểm Chứng Cổng Parity (Parity Gate)
+## 3. Đường cong bỏ phiếu trắng (tầng 2, LogisticRegression)
 
-* Mô hình phân loại được đóng gói sang định dạng mở chuẩn công nghiệp **ONNX (Open Neural Network Exchange)** với Opset 15.
-* Áp dụng kỹ thuật **Dynamic Quantization sang QUInt8**, nén trọng số từ 32-bit float xuống 8-bit int:
-  * Kích thước mô hình: **$36.807\text{ bytes}$ ($\approx 35.94\text{ KB}$)**.
-  * Tốc độ nạp mô hình: $< 5\text{ ms}$.
-* **Kiểm định Cổng Parity Gate:** So sánh độ sai lệch xác suất dự đoán giữa mô hình Scikit-Learn nguyên bản và mô hình ONNX INT8 trên toàn bộ 200 mẫu test:
-  $$\max |P_{\text{sklearn}} - P_{\text{onnx}}| = 2.98 \times 10^{-7} \ll 10^{-4}$$
-* **Kết quả:** Cổng Parity Gate chính thức **PASSED**.
-* Mã băm bảo mật SHA-256: `0cc5f770af0c6d2b49417021244d6d5d20d7453e87f614855e9aa7b1478ec95e` (đã ghi vào `artifacts/DATA_HASHES.txt`).
+| τ | 0,40 | 0,50 | 0,60 | **0,65** | 0,70 | 0,75 | 0,80 |
+|---|---|---|---|---|---|---|---|
+| Độ chính xác phần giữ lại | 0,794 | 0,850 | 0,911 | **0,924** | 0,937 | 0,943 | 1,000 |
+| Coverage | 0,775 | 0,565 | 0,450 | **0,395** | 0,315 | 0,265 | 0,210 |
 
----
-
-## 6. Hướng Dẫn Chạy & Kiểm Thử Chi Tiết (Execution & Verification Guide)
-
-Dưới đây là quy trình từng bước để tái lập thực nghiệm và kiểm thử hệ thống:
-
-### Bước 1: Chạy kịch bản đánh giá so sánh và xuất artifacts
-Lệnh thực thi từ thư mục gốc của repository:
-```powershell
-python scripts/evaluate_router_branches_comparison.py
-```
-* **Kỳ vọng:**
-  * Terminal hiển thị kết quả kiểm định Bootstrap $B=1000$, KTC 95% và phân tích Abstention.
-  * Xuất tệp mô hình `artifacts/router_model.onnx` (kích thước ~36 KB, Parity max diff $< 10^{-4}$).
-  * Sinh 3 biểu đồ độ nét cao tại:
-    - `reports/eval/router_branch_b_confusion_matrix.png`
-    - `reports/eval/router_branch_c_confusion_matrix.png`
-    - `reports/eval/router_abstention_curve.png`
-  * Xuất tệp báo cáo JSON tại `reports/eval/router_branches_comparison_report.json` và `docs/report/router_branches_comparison_report.json`.
-
-### Bước 2: Chạy bộ kiểm thử tự động (Unit Tests)
-Chạy bộ test kiểm chứng ONNX, độ trễ CPU và định tuyến 3 tầng:
-```powershell
-python -m pytest ai-service/tests/unit/test_router_onnx_classify.py -v
-```
-
-### Bước 3: Kiểm thử toàn diện microservice inference
-Chạy bộ test tích hợp kiểm tra probe readiness và hợp đồng API:
-```powershell
-python -m pytest inference/tests/test_ready_fail_closed.py -v
-```
-
-### Bước 4: Kiểm thử API thực tế bằng curl / PowerShell
-Khởi động service inference cục bộ:
-```powershell
-$env:MODEL_ROLE="classify"
-python inference/src/entrypoint.py
-```
-Gửi request kiểm thử qua PowerShell:
-```powershell
-# 1. Kiểm tra Tier 1 (Rule-based Regex)
-Invoke-RestMethod -Uri "http://localhost:8000/v1/classify" -Method Post -ContentType "application/json" -Body '{"text": "Cho mình gặp nhân viên tư vấn người thật"}'
-# Kỳ vọng: intent="HANDOFF_HUMAN", tier_used="tier1_rule", fallback_to_llm=false
-
-# 2. Kiểm tra Tier 2 (ONNX Model INT8)
-Invoke-RestMethod -Uri "http://localhost:8000/v1/classify" -Method Post -ContentType "application/json" -Body '{"text": "Báo giá gói Pro hàng tháng cho doanh nghiệp"}'
-# Kỳ vọng: intent="PRICING_POLICY", tier_used="tier2_onnx", fallback_to_llm=false
-
-# 3. Kiểm tra Tier 3 (Abstention Gate Fallback)
-Invoke-RestMethod -Uri "http://localhost:8000/v1/classify" -Method Post -ContentType "application/json" -Body '{"text": "cái này dùng sao"}'
-# Kỳ vọng: tier_used="tier3_llm_fallback", fallback_to_llm=true
-```
+- Đặc tả UC022: chọn τ tại điểm độ chính xác phần giữ lại ≈ 0,95 → **τ = 0,80**, coverage chỉ 21%.
+- Hệ thống đang chạy **τ = 0,65**: 0,924 / 39,5%. Đây là đánh đổi có chủ ý để không đẩy 79% lượt
+  sang hỏi lại, và phải trình bày đúng như vậy — **không** ghi "đạt 95%".
+- Đồ thị: `reports/eval/router_abstention_curve.png`.
 
 ---
 
-## 7. Tổng Kết & Chuyển Giao Mốc Tuần 1
+## 4. Cổng parity ONNX
 
-Task UC022 (3/4) đã hoàn thành xuất sắc toàn bộ 7 tiêu chí nghiệm thu của Master Plan §5.9. Toàn bộ mã nguồn, artifact ONNX, hồ sơ mô hình, quyết định kiến trúc và báo cáo thực nghiệm đã được đóng gói hoàn chỉnh, sẵn sàng cho việc nghiệm thu Tuần 1 và bước sang Tuần 2 (Tích hợp RAG nâng cao và Orchestration Agent).
+| | Giá trị |
+|---|---|
+| max \|P_sklearn − P_onnx\| | 2,98 × 10⁻⁷ (ngưỡng 10⁻⁴) |
+| Khớp nhãn | 200/200 |
+| SHA-256 `router_model.onnx` | `0cc5f770af0c6d2b49417021244d6d5d20d7453e87f614855e9aa7b1478ec95e` |
+| Trạng thái | **PASSED** |
+
+---
+
+## 5. Độ trễ nhánh C — đo thật
+
+| Phép đo | p50 | p95 |
+|---|---|---|
+| Embedder băm + ONNX, một câu, CPU Intel/Windows | 0,18 ms | 0,33 ms |
+| Riêng ONNX | — | 0,05 ms |
+
+Số dao động giữa các lần chạy (một lần khác: p95 1,66 ms) và chỉ đúng cho embedder băm. Ngân sách
+§5.3 (≤ 60 ms) dư rất xa — nhưng lợi thế đó đến từ việc embedder không phải mô hình neural.
+
+---
+
+## 6. Quyết định ship
+
+**Ship nhánh C**, theo cả hai quy tắc §5.9 (mục 2b): nhánh B vượt ngân sách độ trễ, và chênh
+lệch chất lượng không có ý nghĩa thống kê.

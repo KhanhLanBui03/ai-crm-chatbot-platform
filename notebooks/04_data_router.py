@@ -141,7 +141,10 @@ print(f"  - Tỉ lệ làm sạch (Dedup Rate) : {dedup_rate:.2f}%")
 # - $\kappa \ge 0.81$: Almost Perfect Agreement (Đồng thuận gần như tuyệt đối).
 
 # %%
+# Kappa THẬT: nhãn của hai người từ data/annotations/dev_a.csv và dev_b.csv.
+# Chạy trước: python scripts/compute_annotation_kappa.py
 report_path = eval_dir / "annotation_kappa_report.json"
+assert report_path.exists(), "Chưa có báo cáo Kappa — hai người gán nhãn rồi chạy scripts/compute_annotation_kappa.py"
 with open(report_path, encoding="utf-8") as f:
     kappa_data = json.load(f)
 
@@ -151,7 +154,7 @@ print(f"  - Số ca đồng thuận tuyệt đối : {kappa_data['agreed_count']
 print(f"  - Tỉ lệ đồng thuận ngẫu nhiên: {kappa_data['chance_agreement_pe']*100:.1f}%")
 print(f"  - Chỉ số Cohen's Kappa κ     : {kappa_data['cohens_kappa']}")
 print(f"  - Đánh giá học thuật         : {kappa_data['interpretation']}")
-print(f"  - Số ca bất đồng đã giải quyết: {kappa_data['disagreed_count']} ca")
+print(f"  - Số ca bất đồng (đưa ra họp thống nhất): {kappa_data['disagreed_count']} ca")
 
 # %% [markdown]
 # ### Ma trận Nhầm lẫn Gán nhãn (Confusion Matrix: Dev A vs Dev B)
@@ -161,7 +164,7 @@ intents = [
     "GREETING", "KB_SEARCH", "PRICING_POLICY",
     "COMPLAINT_SUPPORT", "HANDOFF_HUMAN", "TECH_ERROR", "BUYING_INTENT"
 ]
-cm = kappa_data["confusion_matrix"]
+cm = kappa_data["confusion_matrix_rows_dev_a_cols_dev_b"]
 matrix_data = [[cm[row][col] for col in intents] for row in intents]
 
 fig, ax = plt.subplots(figsize=(8, 7))
@@ -179,9 +182,9 @@ ax.set_xticks(range(len(intents)))
 ax.set_yticks(range(len(intents)))
 ax.set_xticklabels(intents, rotation=35, ha='left', fontsize=8.5)
 ax.set_yticklabels(intents, fontsize=8.5)
-plt.title("Ma trận Nhầm lẫn Gán nhãn: Dev A (Cột) vs Dev B (Dòng)\n(Chỉ số Cohen's Kappa κ = 0.9300)", fontsize=11, fontweight='bold', pad=25)
-plt.xlabel("Nhãn phân loại bởi Dev A", fontsize=10, labelpad=10)
-plt.ylabel("Nhãn phân loại bởi Dev B (Ground Truth)", fontsize=10)
+plt.title(f"Ma trận Nhầm lẫn Gán nhãn: Dev A (Dòng) vs Dev B (Cột)\n(Chỉ số Cohen's Kappa κ = {kappa_data['cohens_kappa']})", fontsize=11, fontweight='bold', pad=25)
+plt.xlabel("Nhãn phân loại bởi Dev B", fontsize=10, labelpad=10)
+plt.ylabel("Nhãn phân loại bởi Dev A", fontsize=10)
 plt.tight_layout()
 
 cm_chart_path = eval_dir / "kappa_confusion_matrix.png"
