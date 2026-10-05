@@ -9,156 +9,150 @@ tags:
 - intent-detection
 - onnx
 - quantization-int8
-- bge-m3
 - crm
-- customer-support
 pipeline_tag: text-classification
 ---
 
 # MODEL CARD — Intent Router (UC022)
 
-> **Mô hình định tuyến ý định hội thoại khách hàng 7 nhánh (3-Tier Intent Router)**  
-> **Kiến trúc:** BGE-M3 Semantic Embeddings (1024-dim) + ONNX INT8 Linear Classifier  
-> **Hệ thống:** Nền tảng AI CRM Chatbot Platform (KLTN Đại học Bách Khoa)
+> **Mô hình định tuyến ý định 7 nhánh — tầng 2 của router 3 tầng**
+> **Kiến trúc thật:** feature hashing n-gram ký tự + IDF (1024 chiều) → LogisticRegression → ONNX INT8
+> **Hệ thống:** Nền tảng AI CRM Chatbot Platform (KLTN)
+
+> ⚠️ **Đính chính 2026-10-05.** Bản trước của model card này ghi kiến trúc "BGE-M3 Semantic
+> Embeddings", Macro-F1 0,7582, so sánh với một nhánh B XLM-R (0,8947, p95 168,2 ms) và
+> Cohen's Kappa 0,892. Các con số đó **không phải số đo**: nhánh B được sinh ngẫu nhiên trong
+> script, Kappa được dựng từ nhãn vàng, 0,7582 là của kNN (không được ship), và embedder là
+> feature hashing chứ không phải BGE-M3. Toàn bộ số liệu dưới đây đo lại ngày 2026-10-05 bằng
+> `python scripts/evaluate_router_branches_comparison.py --no-export`
+> (báo cáo: [`docs/report/router_branches_comparison_report.json`](report/router_branches_comparison_report.json)).
 
 ---
 
-## 1. Thông tin Mô hình (Model Details)
+## 1. Thông tin mô hình
 
-- **Tên mô hình:** `intent-router-v1` (Branch C Production Release)
-- **Phiên bản:** `v1.0.0-onnx-int8`
-- **Ngày phát hành:** 2026-10-04
-- **Đơn vị phát triển:** Nhóm KLTN AI CRM Chatbot Platform (Track B — AI Service)
-- **Tệp phân phối runtime:** `artifacts/router_model.onnx`
-- **Mã băm SHA-256:** `0cc5f770af0c6d2b49417021244d6d5d20d7453e87f614855e9aa7b1478ec95e` (đã đóng băng tại [`artifacts/DATA_HASHES.txt`](../artifacts/DATA_HASHES.txt))
-- **Định dạng:** ONNX Opset 15, Dynamic Quantization `QUInt8`
-- **Kích thước tệp:** 36.8 KB (35.94 KiB)
-- **Khung công tác suy luận:** ONNX Runtime (`onnxruntime >= 1.20.0`), CPU Execution Provider
-
----
-
-## 2. Mục đích Sử dụng & Phạm vi Áp dụng (Intended Uses & Scope)
-
-### 2.1. Mục đích chính (Primary Uses)
-- Phân loại tức thì phát ngôn của khách hàng thành 1 trong **7 nhánh ý định kinh doanh chuẩn** (Master Plan §5.9):
-  1. `GREETING`: Chào hỏi, xã giao, cảm ơn, tạm biệt.
-  2. `KB_SEARCH`: Tra cứu tài liệu tri thức, hỏi đáp thông tin sản phẩm/dịch vụ (điều hướng sang RAG).
-  3. `PRICING_POLICY`: Hỏi bảng giá, gói cước, chi phí định kỳ, chính sách ưu đãi chiết khấu.
-  4. `COMPLAINT_SUPPORT`: Phàn nàn chất lượng dịch vụ, khiếu nại thời gian chờ, thái độ nhân viên.
-  5. `HANDOFF_HUMAN`: Yêu cầu chuyển máy gặp trực tiếp nhân viên tư vấn / tổng đài viên người thật.
-  6. `TECH_ERROR`: Báo sự cố kỹ thuật phần mềm, lỗi kết nối, lỗi ứng dụng.
-  7. `BUYING_INTENT`: Thể hiện nhu cầu đặt mua ngay, chốt hợp đồng, nâng cấp tài khoản trả phí.
-
-### 2.2. Kiến trúc Định tuyến 3 Tầng (3-Tier Architecture)
-Mô hình hoạt động tại **Tầng 2** trong quy trình định tuyến khép kín:
-1. **Tầng 1 (Rule-based Regex):** Bắt nhanh các từ khóa khẩn cấp (`HANDOFF_HUMAN`, `TECH_ERROR`) hoặc xã giao thuần túy (`GREETING`) với độ tự tin $0.95+$.
-2. **Tầng 2 (ONNX Model INT8):** Tái sử dụng vector biểu diễn ngữ nghĩa 1024 chiều từ `ai-embed` (`BAAI/bge-m3`) để suy luận xác suất phân bố trên 7 nhãn.
-3. **Tầng 3 (Abstention Gate Fallback):** Nếu độ tự tin của mô hình $< \tau^*$ ($\tau^* = 0.65$), hệ thống tự động bỏ phiếu trắng (`fallback_to_llm = True`) và chuyển câu nói sang mô hình ngôn ngữ lớn (LLM) để suy luận ngữ cảnh sâu.
-
-### 2.3. Phạm vi không áp dụng (Out-of-Scope)
-- Không dùng để sinh nội dung câu trả lời tự động cho khách hàng.
-- Không dùng cho ngôn ngữ ngoài Tiếng Việt và Tiếng Anh (không tối ưu hóa cho tiếng Trung, Nhật, Hàn).
+- **Tên:** `intent-router-v1` (nhánh C)
+- **Tệp runtime:** `artifacts/router_model.onnx`
+- **SHA-256:** `0cc5f770af0c6d2b49417021244d6d5d20d7453e87f614855e9aa7b1478ec95e` (đóng băng tại [`artifacts/DATA_HASHES.txt`](../artifacts/DATA_HASHES.txt))
+- **Định dạng:** ONNX opset 15, dynamic quantization `QUInt8`, 35,93 KB
+- **Bộ phân loại trong ONNX:** `LogisticRegression` (7 lớp × 1024 chiều)
+- **Embedder:** `SemanticDenseEmbedder` ([`ai-service/src/ai/inference/embedder.py`](../ai-service/src/ai/inference/embedder.py)) —
+  từ + n-gram ký tự 3/4, băm MD5/SHA-1 vào 1024 chiều, trọng số IDF học trên tập train, chuẩn hoá L2.
+  **Đây không phải vector BGE-M3 của `ai-embed`**; docstring của nó tự ghi là "mô phỏng".
+  Về bản chất đây là một biểu diễn túi-n-gram kiểu TF-IDF đã băm.
 
 ---
 
-## 3. Dữ liệu Huấn luyện & Đánh giá (Data & Preprocessing)
+## 2. Mục đích và phạm vi
 
-- **Dữ liệu huấn luyện đã khử trùng lặp:** `data/intent_train_dedup.jsonl` (SHA-256: `d8c2bfc45292629df653a5e1d719d27b0b35e78fb2fe1bccf3fe0c6a75b4562d`).
-  - Gồm các mẫu sinh có kiểm soát bao phủ 6 dạng văn phong thực tế: chuẩn mực (`standard`), chat ngắn viết tắt (`short_abbrev`), không dấu (`no_accent`), gõ vội sai chính tả (`typo`), đa ý định (`multi_intent`), pha trộn tiếng Anh (`en_mix`).
-- **Tập kiểm thử người thật (Golden Test Set):** `data/intent_test_human.jsonl` (SHA-256: `8cc500dc96ebd15f18af01ca386b53a3b85941dba9c06ce12f46ffa24d0a1ecf`).
-  - Gồm đúng 200 câu do con người gán nhãn độc lập (chỉ số thống nhất Cohen's Kappa $\kappa = 0.892$).
+Phân loại câu khách hàng vào 7 ý định: `GREETING`, `KB_SEARCH`, `PRICING_POLICY`,
+`COMPLAINT_SUPPORT`, `HANDOFF_HUMAN`, `TECH_ERROR`, `BUYING_INTENT`.
 
----
+Mô hình chạy ở **tầng 2** của `ai-classify` ([`inference/src/roles/classify.py`](../inference/src/roles/classify.py)):
 
-## 4. Kết quả Thực nghiệm & So sánh 2 Nhánh (Benchmarks)
+1. **Tầng 1 — luật từ khoá:** khớp thì trả nhãn với confidence 0,93–0,98, không gọi mô hình.
+2. **Tầng 2 — mô hình này.**
+3. **Cổng bỏ phiếu trắng:** confidence < τ = 0,65 thì gắn `fallback_to_llm = True`;
+   `ai-service` định tuyến lượt đó sang nhánh hỏi lại (CLARIFY).
 
-Thực hiện kiểm định thực nghiệm Paired Bootstrap $B = 1000$ vòng lặp theo đặc tả Master Plan §5.9:
-
-### 4.1. Bảng đối đầu 5 chiều (Benchmark Table)
-
-| Nhánh khảo sát | Kiến trúc | Macro-F1 (Điểm ước lượng) | KTC 95% Bootstrap ($B=1000$) | Độ trễ CPU ($p95$) | Dung lượng Model | Trạng thái Chốt |
-|---|---|---|---|---|---|---|
-| **Nhánh B** | `xlm-roberta-base` (278M params) | **0.8947** | [0.8483, 0.9334] | 168.2 ms | 1,112.0 MB | **LOẠI BỎ** (Vi phạm ngân sách $\le 60\text{ ms}$) |
-| **Nhánh C (Ship)** | `ai-embed` + ONNX INT8 | 0.7582 | [0.6948, 0.8112] | **0.182 ms** | **0.035 MB (36 KB)** | **CHỐT VẬN HÀNH** (Thắng áp đảo độ trễ) |
-
-* **Kiểm định Paired Bootstrap:** $\Delta = \text{Macro-F1}_B - \text{Macro-F1}_C = +0.1381$, KTC 95%: $[0.0647, 0.2070]$, $p$-value $< 0.001$.
-* **Quy tắc phá thế hòa (§5.9):** Nhánh B vi phạm nghiêm trọng ngân sách $60\text{ ms}$ trên CPU thực tế. Nhánh C thắng áp đảo nhờ lợi thế cấu trúc: độ trễ thêm chỉ $0.182\text{ ms}$, tiết kiệm RAM 93 lần và dung lượng nhẹ hơn 31.000 lần.
-
-### 4.2. Phân tích Đường cong Bỏ Phiếu Trắng (Abstention Analysis)
-Đồ thị phân tích: [`reports/eval/router_abstention_curve.png`](../reports/eval/router_abstention_curve.png)
-- Tại ngưỡng tự tin **$\tau^* = 0.80$**: Độ chính xác phần giữ lại đạt **$97.62\%$** (vượt xa mục tiêu $\ge 95\%$), độ bao phủ $21\%$.
-- Tại ngưỡng thực dụng **$\tau^* = 0.65$**: Độ chính xác đạt **$95.20\%$**, độ bao phủ đạt **$78\%$** (chỉ cần điều hướng $22\%$ các ca khó sang LLM).
-
-### 4.3. Kiểm định Cổng Parity (Parity Gate)
-- So sánh sai số xác suất giữa Scikit-Learn gốc và ONNX INT8:
-  $$\max |P_{\text{sklearn}} - P_{\text{onnx}}| = 2.98 \times 10^{-7} < 10^{-4}$$
-- **Trạng thái:** **PASSED**.
+Không dùng để sinh câu trả lời. Chưa đánh giá trên ngôn ngữ ngoài tiếng Việt / tiếng Anh pha trộn.
 
 ---
 
-## 5. Độ trễ & Tiêu hao Tài nguyên (Latency & Resources)
+## 3. Dữ liệu
 
-Đo đạc trên môi trường CPU Intel Core i7 / AMD Ryzen (không cần GPU):
-- **Độ trễ trung vị ($p50$):** $0.125\text{ ms}$ (125 micro-giây)
-- **Độ trễ phân vị cao ($p95$):** $0.182\text{ ms}$ (182 micro-giây)
-- **Thông lượng (Throughput):** $\approx 5.500\text{ req/s}$ trên 1 CPU core đơn lẻ.
-- **Mức tiêu hao bộ nhớ (RAM):** $\approx 15\text{ MB}$ khi nạp vào bộ nhớ.
-
----
-
-## 6. Giới hạn Kỹ thuật & Khía cạnh Đạo đức (Limitations & Ethics)
-
-1. **Phụ thuộc vào vector `ai-embed`:** Mô hình Nhánh C không nhận văn bản thô trực tiếp mà nhận vector 1024 chiều. Nếu `ai-embed` offline, hệ thống tự động kích hoạt Rule-based Fallback.
-2. **Thiên vị nhãn phổ biến:** Trong các câu hội thoại ngắn không rõ ngữ cảnh (dưới 3 từ), mô hình có xu hướng thiên về `KB_SEARCH` hoặc `GREETING`. Cơ chế Abstention Gate ($\tau < 0.65$) giải quyết triệt để vấn đề này bằng cách gửi câu mơ hồ lên LLM.
-3. **Bảo mật dữ liệu:** Vector 1024 chiều là biểu diễn toán học một chiều, không thể giải mã ngược lại danh tính (PII) người dùng, đảm bảo tuân thủ GDPR và an toàn thông tin doanh nghiệp.
+- **Train:** `data/intent_train_dedup.jsonl` — 1.941 câu, SHA-256 `d8c2bfc4…4562d`.
+  Sinh bằng **tổ hợp template** (`scripts/build_router_data_and_eval.py`, seed 42), không gọi LLM.
+  Phân bố văn phong sau khử trùng lặp: `short_abbrev` 639 · `no_accent` 426 · `polite_full` 384 ·
+  `typo` 249 · `en_mix` 172 · `emoji` 71. Tập thô 3.000 câu gồm các bản sao do chính script chèn
+  vào; tỉ lệ khử trùng lặp 35,3% vì vậy không phải số đo về dữ liệu tự nhiên.
+- **Test:** `data/intent_test_human.jsonl` — 200 câu, 28–30 câu mỗi ý định, SHA-256 `8cc500dc…a1ecf`.
+- **Đồng thuận gán nhãn (Cohen's Kappa):** **chưa đo.** Hai người gán nhãn độc lập vào
+  `data/annotations/dev_a.csv` và `dev_b.csv`, rồi chạy `python scripts/compute_annotation_kappa.py`.
 
 ---
 
-## 7. Hướng dẫn Chạy & Kiểm thử Chi tiết (How to Run & Verify)
+## 4. Kết quả trên 200 câu test
 
-### 7.1. Chạy đánh giá so sánh và tái lập KTC 95%
-Thực thi script tái lập toàn bộ kết quả thực nghiệm:
+### 4.1. Riêng mô hình (tầng 2 trên toàn bộ 200 câu)
+
+| Chỉ số | Giá trị |
+|---|---|
+| Macro-F1 | **0,6755** |
+| Accuracy | 0,675 |
+| KTC 95% Macro-F1 (bootstrap B = 1.000) | [0,6131 ; 0,7327] |
+| Tham khảo: kNN trên cùng embedding (không ship) | Macro-F1 0,7582 |
+
+kNN cho Macro-F1 cao hơn mô hình đang ship. Lý do chọn LogisticRegression để export chưa được ghi
+trong ADR nào — cần quyết định: giữ, hoặc export kNN / huấn luyện lại.
+
+### 4.2. Cả router 3 tầng (luật + mô hình + cổng τ), đúng như `ai-classify` chạy
+
+| Chỉ số | Giá trị |
+|---|---|
+| Macro-F1 nhãn router | **0,712** |
+| Tầng 1 (luật) | 72 câu, đúng 79% |
+| Tầng 2, confidence ≥ 0,65 | 49 câu, đúng 92% |
+| Dưới τ (chuyển sang hỏi lại) | 79 câu (39,5%), nhãn đoán đúng 52% |
+
+### 4.3. Đường cong bỏ phiếu trắng (riêng tầng 2)
+
+| τ | 0,40 | 0,50 | 0,60 | **0,65** | 0,70 | 0,75 | 0,80 |
+|---|---|---|---|---|---|---|---|
+| Độ chính xác phần giữ lại | 0,794 | 0,850 | 0,911 | **0,924** | 0,937 | 0,943 | 1,000 |
+| Coverage | 0,775 | 0,565 | 0,450 | **0,395** | 0,315 | 0,265 | 0,210 |
+
+τ nhỏ nhất đạt độ chính xác phần giữ lại ≥ 0,95 là **0,80** (coverage 21%). Hệ thống đang chạy
+τ = 0,65 (0,924 / 39,5%) — thấp hơn mục tiêu 0,95 của đặc tả UC022. Đồ thị:
+`reports/eval/router_abstention_curve.png`.
+
+### 4.4. Cổng parity (scikit-learn ↔ ONNX INT8)
+
+max |ΔP| = 2,98 × 10⁻⁷ < 10⁻⁴, khớp nhãn 200/200 — **PASSED**.
+
+### 4.5. So sánh với nhánh B (XLM-R)
+
+**Chưa có.** Không có checkpoint nhánh B trong repo và chưa có dự đoán trên tập test (log Kaggle
+trong `docs/report/` mâu thuẫn nội tại, chưa xác minh). Script so sánh
+chỉ tính nhánh B khi có `reports/eval/router_branch_b_predictions.jsonl` do notebook 05 xuất ra.
+
+---
+
+## 5. Độ trễ
+
+Đo trên một CPU Intel (Windows, AMD64), 200 câu × 3 lượt, embedder trong tiến trình + ONNX:
+
+| | p50 | p95 |
+|---|---|---|
+| Embedder + phân loại | 0,18 ms | 0,33 ms |
+| Riêng phân loại ONNX | — | 0,05 ms |
+
+Con số dao động giữa các lần chạy (một lần khác đo p95 1,66 ms) và **chỉ đúng cho embedder băm
+hiện tại**. Nếu thay bằng vector BGE-M3 thật từ `ai-embed` qua HTTP, độ trễ do chặng nhúng chi phối.
+Chưa đo RAM và thông lượng.
+
+---
+
+## 6. Giới hạn
+
+1. **Embedder không ngữ nghĩa:** hai câu đồng nghĩa nhưng khác từ có vector xa nhau. Đây là lý do
+   chính khiến chỉ 39,5% câu vượt τ.
+2. **Lệch phân phối train/test:** train sinh từ template, test là câu người thật. Luật đạt 100% trên
+   train chỉ đạt 87% trên test (thí nghiệm siết luật 05/10).
+3. **Confidence của tầng 1 không hiệu chỉnh:** luật gán 0,93–0,98 cố định nhưng chỉ đúng 79%.
+4. **Router không dùng ngữ cảnh hội thoại** — mỗi câu được phân loại độc lập.
+
+---
+
+## 7. Tái lập
+
 ```powershell
-python scripts/evaluate_router_branches_comparison.py
-```
+# Đánh giá, KHÔNG export lại ONNX và KHÔNG sửa DATA_HASHES.txt
+python scripts/evaluate_router_branches_comparison.py --no-export
 
-### 7.2. Chạy bộ kiểm thử tự động (Unit Tests)
-```powershell
+# Kiểm thử
 python -m pytest ai-service/tests/unit/test_router_onnx_classify.py -v
-```
 
-### 7.3. Sử dụng mô hình trực tiếp qua Python SDK
-```python
-import joblib
-import onnxruntime as ort
-import numpy as np
-
-# 1. Nạp embedder và mô hình ONNX
-embedder = joblib.load("artifacts/router_branch_c.joblib")["embedder"]
-sess = ort.InferenceSession("artifacts/router_model.onnx", providers=["CPUExecutionProvider"])
-
-# 2. Vector hóa câu nói người dùng
-text = "Gói CRM cho công ty 50 nhân sự giá bao nhiêu?"
-vec = embedder.transform_single(text).reshape(1, -1).astype(np.float32)
-
-# 3. Suy luận phân loại
-input_name = sess.get_inputs()[0].name
-res = sess.run(None, {input_name: vec})
-predicted_intent = res[0][0]
-probabilities = res[1][0]
-
-print(f"Ý định dự đoán: {predicted_intent}")
-print(f"Độ tự tin: {probabilities[predicted_intent]:.4f}")
-```
-
-### 7.4. Kiểm thử qua API REST của Microservice `ai-classify`
-```powershell
-# Khởi chạy microservice
-$env:MODEL_ROLE="classify"
-python inference/src/entrypoint.py
-
-# Gửi request HTTP POST
-curl -X POST "http://localhost:8000/v1/classify" `
-  -H "Content-Type: application/json" `
-  -d '{"text": "Cho mình gặp nhân viên tư vấn trực tiếp"}'
+# Kappa (sau khi hai người đã gán nhãn)
+python scripts/compute_annotation_kappa.py
 ```

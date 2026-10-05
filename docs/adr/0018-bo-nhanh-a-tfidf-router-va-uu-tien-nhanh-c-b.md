@@ -1,9 +1,30 @@
 # ADR-0018 — Bỏ nhánh A (TF-IDF + LinearSVC), ưu tiên nhánh C (ai-embed) và nhánh B (XLM-R)
 
-- **Trạng thái:** Chấp nhận
+- **Trạng thái:** Chấp nhận — **có đính chính 2026-10-05** (xem mục 0)
 - **Ngày:** 2026-09-24
 - **Làn sở hữu:** Track B (AI Service)
 - **Quan hệ:** Tiếp nối [ADR-0015](0015-cau-truc-src-hai-tang-theo-master-plan-v8.md), [ADR-0016](0016-ten-role-runtime-va-cho-dat-nhan-ket-qua-lead.md) và [ADR-0017](0017-chot-bon-mau-thuan-hop-dong-va-siet-cong-ci.md)
+
+---
+
+## 0. Đính chính 2026-10-05 — hiện thực KHÁC với quyết định
+
+Rà soát code ngày 2026-10-05 cho thấy ba điểm mà phần còn lại của ADR này mô tả không đúng:
+
+1. **Nhánh C KHÔNG dùng vector BGE-M3 của `ai-embed`.** Artifact `artifacts/router_branch_c.joblib`
+   dùng `SemanticDenseEmbedder` (`ai-service/src/ai/inference/embedder.py`): từ + n-gram ký tự,
+   băm vào 1024 chiều, trọng số IDF. Docstring của nó tự ghi là "mô phỏng". Về bản chất đây là
+   biểu diễn kiểu TF-IDF đã băm — tức gần với chính **nhánh A** mà ADR này loại.
+2. Vì vậy các lập luận ở mục 3.1 ("dùng chung một lời gọi embedding với RAG", "chi phí thêm
+   bằng không") và mục 3.2 ("kế thừa không gian ngữ nghĩa của bge-m3") **chưa đúng với artifact
+   đang ship**. Chúng chỉ thành đúng khi nhánh C được huấn luyện lại trên vector BGE-M3 thật.
+3. Nhận định "TF-IDF chỉ đạt F1 ~0,72 trên câu không dấu/teencode" (dẫn trong ADR-0019) không có
+   số đo đi kèm trong repo — nhánh A không được huấn luyện.
+
+Số đo thật của artifact đang ship (2026-10-05, 200 câu test người thật): Macro-F1 tầng 2 = 0,676
+(KTC 95% [0,613 ; 0,733]); cả router 3 tầng = 0,712. Chi tiết: `docs/MODEL_CARD_router.md`.
+
+Phần thân ADR dưới đây giữ nguyên như đã viết ngày 2026-09-24 để lưu vết quyết định.
 
 ---
 

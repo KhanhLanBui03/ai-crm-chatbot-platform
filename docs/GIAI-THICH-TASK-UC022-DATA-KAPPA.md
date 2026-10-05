@@ -1,131 +1,117 @@
-# TÀI LIỆU KHOA HỌC: DỮ LIỆU HUẤN LUYỆN VÀ GÁN NHÃN CHÉO (UC022 - 1/4)
+# DỮ LIỆU HUẤN LUYỆN VÀ GÁN NHÃN CHÉO (UC022 — 1/4)
 
-> **Mục tiêu:** Tài liệu này tổng hợp phương pháp luận, kết quả thực nghiệm và hồ sơ minh chứng khoa học cho **Task UC022 (1/4) — Dữ liệu huấn luyện + Gán nhãn chéo** trong Kế hoạch 21 ngày Module AI CRM.
-
----
-
-## I. TỔNG QUAN PHƯƠNG PHÁP & Ý NGHĨA HỌC THUẬT
-
-Để mô hình phân loại 7 nhánh ý định (**UC022 Router**) không bị "học vẹt", hoạt động bền bỉ trước ngôn ngữ giao tiếp đời thực của người Việt và đạt độ tin cậy khoa học cao trong Luận văn tốt nghiệp, quy trình chuẩn bị dữ liệu tuân thủ nghiêm ngặt 3 trụ cột:
-
-1. **Ma trận phân bổ 6 văn phong thực tế (Style Matrix):** Không chỉ huấn luyện trên các câu văn mẫu chỉn chu, dữ liệu phải phản ánh chân thực các biến thể: viết tắt, không dấu, teencode, sai chính tả, pha tiếng Anh và kèm emoji.
-2. **Khử trùng lặp gần giống (Near-duplicate Deduplication):** Loại bỏ triệt để các câu tương đồng cấu trúc cao để tránh hiện tượng rò rỉ dữ liệu (Data Leakage) và thổi phồng độ chính xác ảo.
-3. **Thẩm định liên người gán nhãn (Inter-Annotator Agreement — Cohen's Kappa):** Hai thành viên đồ án (Dev A & Dev B) tiến hành gán nhãn độc lập trên tập test 200 câu người thật, đo lường hệ số đồng thuận $\kappa$, và tổ chức phiên họp thống nhất (Consensus Meeting) để giải quyết các ca bất đồng.
+> Tài liệu này mô tả **đúng như code đang chạy** cho task UC022 (1/4) của kế hoạch 21 ngày.
+>
+> ⚠️ **Viết lại 2026-10-05.** Bản trước báo Cohen's Kappa κ = 0,9300 (và nơi khác 0,887 / 0,892)
+> kèm 13 ca bất đồng "đã họp thống nhất". Con số đó **không có thật**: script cũ lấy nhãn vàng làm
+> nhãn Dev B và dựng nhãn Dev A bằng cách sửa 13 câu viết cứng trong code. Không có buổi gán nhãn
+> độc lập nào. Bản trước cũng trình bày tỉ lệ khử trùng lặp 35,3% như bằng chứng cho cảnh báo
+> "~30% là bản sao" — trong khi chính script đã chèn các bản sao đó vào.
 
 ---
 
-## II. MA TRẬN 6 VĂN PHONG TRONG TẬP HUẤN LUYỆN (3.000 MẪU THÔ)
+## I. Ba việc của task và trạng thái
 
-Tập dữ liệu thô [data/intent_train_raw.jsonl](file:///e:/KLTN/ai-crm-chatbot-platform/data/intent_train_raw.jsonl) được xây dựng với đúng **3.000 mẫu**, phân bổ chính xác theo tỷ lệ bắt buộc qua 7 nhánh ý định:
-
-| STT | Văn phong | Tỉ lệ mục tiêu | Số lượng mẫu | Đặc điểm ngôn ngữ & Ví dụ điển hình |
-|:---:|---|:---:|:---:|---|
-| 1 | **Lịch sự đầy đủ (`polite_full`)** | **25%** | 750 | Câu chuẩn ngữ pháp, có kính ngữ mở đầu và kết thúc: *"Dạ em kính chào anh chị, phiền anh chị hướng dẫn em cách cấu hình Zalo OA với ạ."* |
-| 2 | **Chat ngắn viết tắt (`short_abbrev`)** | **25%** | 750 | Teencode, ngôn ngữ chat nhanh: *"ad oi", "ib gia goi pro di b", "crm ket noi dc webhook k z", "k log in dc"* |
-| 3 | **Tiếng Việt KHÔNG DẤU (`no_accent`)** | **20%** | 600 | Gõ nhanh không dấu trên điện thoại: *"cho minh hoi gia goi pro bao nhieu mot thang", "he thong bi loi roi ad"* |
-| 4 | **Lỗi chính tả nhẹ (`typo`)** | **15%** | 450 | Lỗi gõ vội Telex/VNI, sai âm đầu/cuối: *"báo ja e gói pro zới", "hướng dẩn e dùng bot", "lổi kêt nôi xerver"* |
-| 5 | **Pha tiếng Anh (`en_mix`)** | **10%** | 300 | Thuật ngữ công nghệ, Code-switching: *"How to configure webhook integration?", "App bị crash khi export excel", "Send invoice for Pro plan"* |
-| 6 | **Kèm Emoji cảm xúc (`emoji`)** | **5%** | 150 | Kèm icon cảm xúc: *"Tư vấn giúp em gói cước với ạ 🥺🙏", "Làm ăn tắc trách quá gọi mãi không nghe 😡💢", "Cảm ơn bot nhiều nha 🥰✨"* |
-| **Tổng** | **Toàn bộ 6 văn phong** | **100%** | **3.000** | **Phủ đều 7 nhánh ý định (GREETING, KB_SEARCH, PRICING_POLICY, COMPLAINT_SUPPORT, HANDOFF_HUMAN, TECH_ERROR, BUYING_INTENT)** |
-
-![Biểu đồ phân bố 6 văn phong](file:///e:/KLTN/ai-crm-chatbot-platform/reports/eval/intent_styles_distribution.png)
+| Việc | Trạng thái |
+|---|---|
+| Tập train theo 6 văn phong | **Có** — sinh bằng template, xem mục II |
+| Khử trùng lặp gần giống | **Có** — thuật toán chạy thật, nhưng dữ liệu đầu vào có bản sao do script tự chèn |
+| Cohen's Kappa giữa hai người gán nhãn độc lập | **Chưa làm** — phiếu đã sẵn sàng, xem mục IV |
 
 ---
 
-## III. KẾT QUẢ KHỬ TRÙNG LẶP GẦN GIỐNG (NEAR-DUPLICATE DEDUPLICATION)
+## II. Tập train: sinh bằng template
 
-* **Thuật toán áp dụng:** So khớp tập Character 3-gram và tính chỉ số tương đồng Jaccard Similarity:
-  $$J(S_1, S_2) = \frac{|S_1 \cap S_2|}{|S_1 \cup S_2|}$$
-* **Ngưỡng loại bỏ:** $J(S_1, S_2) \ge 0.88$ giữa các câu trong cùng một phân lớp ý định.
-* **Tệp đầu ra sạch:** [data/intent_train_dedup.jsonl](file:///e:/KLTN/ai-crm-chatbot-platform/data/intent_train_dedup.jsonl).
+`scripts/build_router_data_and_eval.py` (seed 42) tổ hợp câu từ các ô từ vựng `SLOTS` của từng ý
+định bằng `random.choice`, rồi biến đổi theo văn phong (bỏ dấu, gõ sai, chèn emoji…).
+**Không gọi LLM** — khác với mô tả "sinh 3.000 mẫu bằng LLM" của kế hoạch.
 
-### Bảng số liệu trước và sau khử trùng lặp:
+| Văn phong | Chỉ tiêu tập thô | Còn lại sau khử trùng lặp |
+|---|---|---|
+| `polite_full` — lịch sự đầy đủ | 750 (25%) | 384 |
+| `short_abbrev` — chat ngắn viết tắt | 750 (25%) | 639 |
+| `no_accent` — không dấu | 600 (20%) | 426 |
+| `typo` — lỗi chính tả nhẹ | 450 (15%) | 249 |
+| `en_mix` — pha tiếng Anh | 300 (10%) | 172 |
+| `emoji` — kèm emoji | 150 (5%) | 71 |
+| **Tổng** | **3.000** | **1.941** |
 
-| Chỉ số đo lường | Giá trị thực tế | Nhận xét chuyên môn |
-|---|:---:|---|
-| **Số mẫu train ban đầu (Raw)** | **3.000 mẫu** | Đủ quy mô ban đầu theo yêu cầu Ngày 4. |
-| **Số bản sao gần giống bị loại bỏ** | **1.059 mẫu** | Các câu biến thể chỉ khác dấu câu, từ đệm ("ạ", "nhé", "nha"). |
-| **Số mẫu sạch giữ lại (Clean)** | **1.941 mẫu** | Tập huấn luyện sạch, đa dạng từ vựng, không có câu lặp khuôn. |
-| **Tỉ lệ trùng lặp loại bỏ (Dedup Rate)** | **35.30%** | **Khớp chính xác với cảnh báo trong kế hoạch ("khoảng 30% là bản sao và mọi chỉ số bị thổi phồng")**. |
+Phân bố sau khử trùng lặp **lệch khỏi chỉ tiêu** (vd `polite_full` từ 25% xuống 20%, `emoji` từ 5%
+xuống 3,7%) vì văn phong càng ít biến thể template thì càng nhiều câu bị loại.
 
----
-
-## IV. ĐÁNH GIÁ ĐỒNG THUẬN LIÊN NGƯỜI GÁN NHÃN (COHEN'S KAPPA $\kappa$)
-
-* **Tập dữ liệu thẩm định:** Đúng **200 câu hỏi người thật** tại [data/intent_test_human.jsonl](file:///e:/KLTN/ai-crm-chatbot-platform/data/intent_test_human.jsonl).
-* **Quy trình thực hiện:**
-  1. **Dev A** (Phụ trách nền tảng / Java Core) gán nhãn độc lập toàn bộ 200 câu mà không xem trước đáp án của Dev B.
-  2. **Dev B** (Phụ trách AI Service / Python) gán nhãn độc lập toàn bộ 200 câu.
-  3. Lập ma trận nhầm lẫn kích thước $7 \times 7$ giữa 2 bảng nhãn.
-  4. Tính toán hệ số Cohen's Kappa:
-     $$\kappa = \frac{P_o - P_e}{1 - P_e}$$
-     * $P_o$ (Tỷ lệ đồng thuận quan sát được): $\frac{188}{200} = 0.9400$ ($94.0\%$).
-     * $P_e$ (Tỷ lệ đồng thuận do ngẫu nhiên): $0.1432$ ($14.3\%$).
-     * **Hệ số Cohen's Kappa:** **$\kappa = 0.9300$**.
-
-![Ma trận Nhầm lẫn Cohen's Kappa](file:///e:/KLTN/ai-crm-chatbot-platform/reports/eval/kappa_confusion_matrix.png)
-
-> 🎓 **Kết luận theo thang đo Landis & Koch (1977):**
-> $\kappa = 0.9300 \ge 0.81$ đạt mức **"Almost Perfect Agreement" (Đồng thuận gần như tuyệt đối)**. Điều này chứng minh quy trình định nghĩa taxonomy 7 ý định trong Master Plan rất rõ ràng, nhất quán và có thể tái lập khoa học.
-
-### Giải quyết các ca bất đồng (Disagreements & Consensus Resolution):
-Tổng cộng có **13 ca bất đồng** giữa Dev A và Dev B tại các vùng ranh giới đa ý định, đã được ngồi lại thảo luận và thống nhất dựa trên nguyên tắc ưu tiên nghiệp vụ trong [ADR-0016](file:///e:/KLTN/ai-crm-chatbot-platform/docs/adr/0016-ten-role-runtime-va-cho-dat-nhan-ket-qua-lead.md):
-
-1. **Câu #12:** *"Gói Pro bao nhiêu tiền để cty mình mua luôn?"*
-   * Dev A: `PRICING_POLICY` | Dev B: `BUYING_INTENT`
-   * **Thống nhất:** `BUYING_INTENT` (Hành động chốt mua có giá trị thương mại cao hơn hỏi giá đơn thuần).
-2. **Câu #28:** *"Làm thế nào để khắc phục khi không gửi được tin nhắn?"*
-   * Dev A: `KB_SEARCH` | Dev B: `TECH_ERROR`
-   * **Thống nhất:** `TECH_ERROR` (Bản chất khách đang gặp sự cố gián đoạn).
-3. **Câu #45:** *"Bực mình quá, cho tôi gặp người quản lý ngay lập tức!"*
-   * Dev A: `COMPLAINT_SUPPORT` | Dev B: `HANDOFF_HUMAN`
-   * **Thống nhất:** `HANDOFF_HUMAN` (Mục tiêu tối thượng là phải chuyển máy cho nhân viên hạ hỏa khách hàng).
-4. *(Chi tiết đầy đủ 13 ca được lưu tại [reports/eval/annotation_kappa_report.json](file:///e:/KLTN/ai-crm-chatbot-platform/reports/eval/annotation_kappa_report.json))*.
+**Hệ quả đã đo được:** dữ liệu template lệch phân phối so với câu người thật. Luật từ khoá chọn
+trên tập train đạt 100% trên train nhưng chỉ 87% trên 200 câu test (thí nghiệm 2026-10-05).
 
 ---
 
-## V. ĐẢM BẢO BỐN ĐIỀU KIỆN TÁI LẬP KHOA HỌC (§5.8)
+## III. Khử trùng lặp gần giống
 
-Trong Notebook [notebooks/04_data_router.ipynb](file:///e:/KLTN/ai-crm-chatbot-platform/notebooks/04_data_router.ipynb) và file mã nguồn ghép cặp [notebooks/04_data_router.py](file:///e:/KLTN/ai-crm-chatbot-platform/notebooks/04_data_router.py):
-
-1. **Ghim seed ngẫu nhiên:** `RANDOM_SEED = 42` xuyên suốt toàn bộ quá trình xáo trộn và sinh mẫu.
-2. **Ghim phiên bản thư viện:** Khai báo và kiểm tra môi trường chạy (`Python 3.11+`, `Matplotlib`, `Jupytext`).
-3. **Đóng băng mã băm SHA-256:** Cập nhật chính thức vào [artifacts/DATA_HASHES.txt](file:///e:/KLTN/ai-crm-chatbot-platform/artifacts/DATA_HASHES.txt):
-   ```text
-   data/intent_test_human.jsonl:8cc500dc96ebd15f18af01ca386b53a3b85941dba9c06ce12f46ffa24d0a1ecf
-   data/intent_train_dedup.jsonl:d8c2bfc45292629df653a5e1d719d27b0b35e78fb2fe1bccf3fe0c6a75b4562d
-   ```
-4. **Xuất metric ra file:** Tự động xuất các tệp số liệu [annotation_kappa_report.json](file:///e:/KLTN/ai-crm-chatbot-platform/reports/eval/annotation_kappa_report.json) và [intent_data_distribution.json](file:///e:/KLTN/ai-crm-chatbot-platform/reports/eval/intent_data_distribution.json).
+- **Thuật toán:** Jaccard trên tập character 3-gram, loại câu có J ≥ 0,88 với một câu đã giữ,
+  trong cùng ý định.
+- **Kết quả:** 3.000 → 1.941 câu, loại 1.059 (35,3%).
+- **Cách đọc đúng con số này:** số câu độc nhất mà template sinh được ít hơn chỉ tiêu 3.000, nên
+  script **chủ động chèn bản sao gần giống** (thêm " ạ", " nhé", " với"… hoặc khoảng trắng) cho đủ
+  số lượng — xem `create_dataset_with_natural_duplicates`. Bước khử trùng lặp sau đó loại lại đúng
+  những bản sao này. 35,3% là thước đo của pipeline, **không phải** số đo về dữ liệu tự nhiên, và
+  không dùng được làm bằng chứng cho cảnh báo "~30% là bản sao" của kế hoạch.
+- **Điều kiểm được:** thuật toán dedup chạy đúng, và tập 1.941 câu không còn cặp nào J ≥ 0,88
+  trong cùng ý định.
 
 ---
 
-## VI. HƯỚNG DẪN THỰC THI & TÁI LẬP (EXECUTION GUIDE)
+## IV. Cohen's Kappa — quy trình đúng (chưa thực hiện)
 
-Để tái lập toàn bộ quy trình chuẩn bị dữ liệu và đánh giá Cohen's Kappa, thực hiện lần lượt các bước sau:
+Mục đích: đo xem hai người có hiểu taxonomy 7 ý định giống nhau không. Bất đồng nhãn ở tập test
+biến thành sai số hệ thống của mọi chỉ số Macro-F1 về sau.
 
-### Bước 1: Chạy kiểm thử tự động (Unit Tests)
-Kiểm tra cấu trúc phân bổ 6 văn phong, thuật toán khử trùng lặp và tính toán hệ số Cohen's Kappa:
+**Bước 1 — phiếu mù** (đã tạo, đã commit):
+
 ```powershell
+python scripts/compute_annotation_kappa.py --make-sheets
+```
+
+`data/annotations/dev_a.csv` và `dev_b.csv` chỉ có `id` và `text`, cột `intent` để trống, **không
+có nhãn vàng**. Thứ tự câu được xáo trộn khác nhau cho từng người — tập test gốc xếp theo nhãn
+(28 câu đầu đều GREETING), giữ thứ tự là lộ nhãn qua vị trí.
+
+**Bước 2 — gán nhãn độc lập** (~1 giờ mỗi người): mỗi người mở file của mình bằng Excel, điền một
+trong 7 nhãn. Không xem file người kia, không xem `data/intent_test_human.jsonl`.
+
+**Bước 3 — tính Kappa:**
+
+```powershell
+python scripts/compute_annotation_kappa.py
+```
+
+Script từ chối nếu còn dòng trống, nhãn ngoài 7 nhãn, id lặp hoặc thiếu câu — không bao giờ tự
+điền nhãn. Báo cáo `reports/eval/annotation_kappa_report.json` gồm κ, p_o, p_e, ma trận nhầm lẫn
+Dev A × Dev B, mức khớp của từng người với nhãn vàng hiện tại, và danh sách từng ca bất đồng.
+
+**Bước 4 — họp thống nhất:** xem lại các ca bất đồng, ghi biên bản. Nhãn vàng là tập test đã
+đóng băng — nếu buổi họp kết luận nhãn vàng sai, ghi nhận trong báo cáo chứ **không sửa**
+`data/intent_test_human.jsonl`.
+
+**Nếu không kịp làm trước ngày nộp:** ghi trong báo cáo "chưa đo đồng thuận gán nhãn" và nêu là
+giới hạn của thực nghiệm. Không dùng con số κ cũ.
+
+---
+
+## V. Tái lập
+
+```powershell
+# Kiểm thử pipeline dữ liệu và phép tính Kappa (đối chiếu sklearn)
 python -m pytest ai-service/tests/unit/test_router_data_pipeline.py -v
-```
-* **Kỳ vọng:** `3 passed in ~0.1s`.
 
-### Bước 2: Tái tạo tập dữ liệu & Đánh giá Kappa
-Chạy script tự động sinh dữ liệu thô, lọc trùng lặp và tính toán ma trận nhầm lẫn:
-```powershell
-python scripts/build_router_data_and_eval.py
+# Kiểm hash tập train và tập test
+Get-FileHash data/intent_train_dedup.jsonl, data/intent_test_human.jsonl -Algorithm SHA256
 ```
-* **Kỳ vọng:** Sinh ra 3.000 mẫu thô tại `data/intent_train_raw.jsonl`, khử trùng lặp 35.30% còn 1.941 mẫu sạch tại `data/intent_train_dedup.jsonl`, tính toán $\kappa = 0.9300$ và xuất báo cáo `reports/eval/annotation_kappa_report.json`.
 
-### Bước 3: Chạy kịch bản Notebook đồng bộ (§5.8)
-Kiểm chứng tính tái lập trực tiếp bằng file Python song sinh của Notebook:
-```powershell
-python notebooks/04_data_router.py
-```
-* **Kỳ vọng:** Tự động sinh ra 2 biểu đồ phân tích `reports/eval/intent_styles_distribution.png` và `reports/eval/kappa_confusion_matrix.png`.
+Kỳ vọng hash khớp `artifacts/DATA_HASHES.txt`:
 
-### Bước 4: Kiểm chứng tính toàn vẹn mã băm SHA-256
-```powershell
-Get-FileHash data/intent_train_dedup.jsonl -Algorithm SHA256
+```text
+data/intent_test_human.jsonl:8cc500dc96ebd15f18af01ca386b53a3b85941dba9c06ce12f46ffa24d0a1ecf
+data/intent_train_dedup.jsonl:d8c2bfc45292629df653a5e1d719d27b0b35e78fb2fe1bccf3fe0c6a75b4562d
 ```
-* **Kỳ vọng:** Khớp chính xác với mã hash trong [artifacts/DATA_HASHES.txt](artifacts/DATA_HASHES.txt): `d8c2bfc45292629df653a5e1d719d27b0b35e78fb2fe1bccf3fe0c6a75b4562d`.
+
+**Lưu ý:** đừng chạy lại `scripts/build_router_data_and_eval.py` khi không cần — nó sinh lại dữ
+liệu train và ghi đè hash của `intent_train_dedup.jsonl` trong `DATA_HASHES.txt`.

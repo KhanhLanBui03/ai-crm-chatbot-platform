@@ -1,9 +1,45 @@
 # ADR-0019 — Chốt nhánh ship Intent Router (Nhánh C qua ONNX INT8) và thiết lập ngưỡng Abstention Fallback sang LLM
 
-- **Trạng thái:** Chấp nhận
+- **Trạng thái:** Chấp nhận — **căn cứ số liệu bị thu hồi 2026-10-05** (xem mục 0)
 - **Ngày:** 2026-10-04
 - **Làn sở hữu:** Track B (AI Service & Inference Runtime)
 - **Quan hệ:** Tiếp nối [ADR-0015](0015-cau-truc-src-hai-tang-theo-master-plan-v8.md), [ADR-0016](0016-ten-role-runtime-va-cho-dat-nhan-ket-qua-lead.md), [ADR-0017](0017-chot-bon-mau-thuan-hop-dong-va-siet-cong-ci.md) và [ADR-0018](0018-bo-nhanh-a-tfidf-router-va-uu-tien-nhanh-c-b.md)
+
+---
+
+## 0. Đính chính 2026-10-05 — số liệu ở mục 2–4 KHÔNG phải số đo
+
+Rà soát `scripts/evaluate_router_branches_comparison.py` (bản tại commit `2c6b8ed`) cho thấy:
+
+| Số liệu trong ADR | Nguồn thật | Trạng thái |
+|---|---|---|
+| Nhánh B: Macro-F1 0,8947, KTC [0,8483 ; 0,9334], Δ = +0,1381 | Dự đoán **sinh ngẫu nhiên** với xác suất đúng 88,5% (`rng_b`) | **Thu hồi** |
+| Nhánh B: p95 168,2 ms, p50 134,5 ms, 1.112 MB, 1,4 GB RAM | **Gán cứng** trong code, không đo | **Thu hồi** |
+| Nhánh C: p95 0,182 ms, p50 0,125 ms | **Gán cứng** trong code | **Thu hồi** |
+| Nhánh C: Macro-F1 0,7582 | Đo thật nhưng là của **kNN** — mô hình ship là LogisticRegression | **Sai mô hình** |
+| τ = 0,65 → acc 95,20%, coverage 78% | Không khớp đường cong đo lại | **Thu hồi** |
+| "Nhánh C dùng BGE-M3 của ai-embed" | Embedder là feature hashing n-gram + IDF (xem ADR-0018 mục 0) | **Sai** |
+| Parity max \|ΔP\| = 2,98 × 10⁻⁷ | Đo thật, tái lập được | Giữ |
+
+**Số đo thật (2026-10-05, 200 câu test người thật, `--no-export`):**
+
+| | Giá trị |
+|---|---|
+| Nhánh C — LogisticRegression ship, Macro-F1 | 0,6755 (KTC 95% [0,6131 ; 0,7327]) |
+| Cả router 3 tầng (luật + ONNX + τ), Macro-F1 | 0,712 |
+| τ = 0,65: độ chính xác phần giữ lại / coverage | 0,924 / 0,395 |
+| τ nhỏ nhất đạt ≥ 0,95 | 0,80 (coverage 0,21) |
+| Nhánh B | **Chưa đánh giá** — chưa có model, chưa có dự đoán |
+
+**Hệ quả cho quyết định:**
+- *Ship nhánh C* vẫn đứng được, nhưng với lý do khác: đây là **nhánh duy nhất đã được đánh giá**,
+  không phải "thắng nhánh B theo §5.9". Muốn dùng quy tắc phá thế hoà §5.9 thì phải chạy thật
+  notebook 05 và đo p95 CPU của XLM-R.
+- *τ = 0,65* chưa đạt tiêu chí "độ chính xác phần giữ lại ≈ 0,95" của đặc tả UC022 (đo được
+  0,924). Giữ 0,65 là đánh đổi có chủ ý để coverage không tụt xuống 21%; cần ghi rõ như vậy
+  trong báo cáo, không ghi "đạt 95%".
+
+Phần thân ADR dưới đây giữ nguyên như đã viết ngày 2026-10-04 để lưu vết.
 
 ---
 
