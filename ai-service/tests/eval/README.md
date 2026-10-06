@@ -1,31 +1,51 @@
 # Khung đánh giá — Track B
 
-## `golden_set.jsonl` — 150 câu, tài sản giá trị nhất của đồ án
+## `golden_set.jsonl` — bộ vàng truy hồi, 100 câu có đáp án
 
-Mốc **M4 — hoàn tất 12/10**. Kế hoạch mục 0.3 nói rõ: nếu phần công sức dôi ra rơi vào bộ dữ
-liệu vàng thì đồ án **mất trần điểm và không có cách nào cứu ở tuần cuối**. Ưu tiên Tầng 1.
+Chốt 27/09 (ghi vào ADR-0020): **100 câu có đáp án** trên 19 tệp mẫu `data/kb_samples/` — vượt mốc
+v1 (40–50) và gộp luôn mốc ≥ 80 cặp của Ngày 13. Một câu = 1 điểm recall@5.
 
-Một dòng một câu hỏi:
+**Cách làm — để câu hỏi không thiên vị làn từ khoá (đổi 06/10: AI làm cả hai bước):**
+
+1. AI (Claude) viết 134 câu ứng viên CHỈ từ mục lục (tiêu đề + heading, không nội dung) — 120 câu
+   nhắm vào một tài liệu, 14 câu cố ý ngoài kho — rồi xáo bằng seed 42 và **khoá bằng sha256 trước
+   khi mở nội dung đoạn nào**.
+2. AI gán căn cứ theo `bo_vang doan`, không sửa chữ câu hỏi. Kho thật quyết định nhãn: câu viết
+   "ngoài kho" mà kho có đáp án thì gán đáp án, câu viết "có đáp án" mà kho không có thì `[]`.
+3. Luật cắt định trước: duyệt theo thứ tự đã xáo, lấy mọi câu tới khi đủ 100 câu có đáp án.
+4. Đóng băng TRƯỚC lần chạy truy hồi đầu tiên; sha256 (bản LF) ở `artifacts/DATA_HASHES.txt`.
+
+Danh sách ứng viên và hash của nó: [`docs/report/uc023-ngay6-2026-10-06.md`](../../../docs/report/uc023-ngay6-2026-10-06.md).
+Báo cáo ghi đúng nguồn là AI, không gọi là "người gõ tay".
 
 ```jsonc
 {
   "id": "G001",
-  "question": "Niềng răng chi phí khoảng bao nhiêu?",
-  "expected_route": "rag",              // rag | tool | clarify | handoff
-  "expected_chunk_ids": ["doc12#c3"],   // căn cứ đúng, dùng để tính Recall@5 / MRR / nDCG
-  "expected_behavior": "answer",        // answer | refuse | clarify | handoff
-  "reference_answer": "...",            // để chấm tính bám nguồn
-  "category": "bang_gia",
-  "difficulty": "easy",                 // easy | medium | hard
-  "source": "pilot_A"                   // pilot_A | public | synthetic
+  "question": "tủ lạnh inverter hư máy nén sau 3 năm còn bảo hành ko",
+  "can_cu": [                                  // căn cứ TƯƠNG ĐƯƠNG — trúng một là đủ
+    {"file": "chinh-sach-bao-hanh.pdf", "quote": "máy nén của tủ lạnh inverter"},
+    {"file": "faq-bao-hanh.html", "quote": "riêng máy nén được bảo hành đến 10 năm"}
+  ],
+  "loai": "dieu_kien",                         // con_so | dieu_kien | cach_lam | tinh_huong | lua_chon
+  "kieu_go": "viet_tat"                        // co_dau | khong_dau | viet_tat | dai | tieng_anh
 }
 ```
 
-**Thành phần bắt buộc:** trong 150 câu phải có **25 câu ngoài phạm vi** (`expected_behavior:
-"refuse"`) — dùng để hiệu chỉnh ngưỡng từ chối, là siêu tham số của thí nghiệm E7.
+- Gán theo **(tệp + câu trích)**, KHÔNG theo `chunk_id` — UUID đổi mỗi lần nạp lại. Câu trích phải
+  khớp ĐÚNG MỘT đoạn của tệp (sau `normalize_vi`, gộp khoảng trắng, không phân biệt hoa thường).
+- `can_cu: []` = kho không có đáp án — giữ cho UC025 (từ chối), không vào mẫu số recall@5.
+- Bản 1 của chính sách đổi trả (`chinh-sach-doi-tra.docx`) đã bị thay, KHÔNG làm căn cứ.
 
-Phân bổ đề xuất: ~60 câu RAG tri thức tĩnh · ~35 câu Tool trạng thái động ·
-~15 câu cần hỏi lại · ~15 câu cần chuyển giao · **25 câu ngoài phạm vi**.
+| Lệnh | Việc |
+|---|---|
+| `python -m tests.eval.bo_vang muc-luc` | mục lục — đầu vào duy nhất khi viết câu hỏi (ẩn heading dạng câu hỏi) |
+| `python -m tests.eval.bo_vang doan` | toàn bộ đoạn theo tệp — để tìm câu trích |
+| `python -m tests.eval.bo_vang kiem` | kiểm định dạng + mỗi câu trích khớp đúng một đoạn + sha256 |
+| `python -m tests.eval.gieo_kho nap` / `nhan-ban` / `xoa` | kho đo: tenant gốc nhúng thật, nhân bản tới 20 tenant |
+| `python -m tests.eval.danh_gia_truy_hoi chay …` / `so-sanh …` | recall@5 · nDCG@5 · MRR@5 · paired bootstrap |
+
+Các trường `expected_route` / `expected_behavior` / `reference_answer` của kế hoạch cũ (150 câu)
+chưa dùng ở Ngày 6 — thêm khi đo định tuyến và độ bám nguồn.
 
 ## `adversarial.jsonl` — 60–80 kịch bản tấn công
 
