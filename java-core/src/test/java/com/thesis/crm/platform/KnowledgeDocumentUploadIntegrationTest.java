@@ -559,6 +559,27 @@ class KnowledgeDocumentUploadIntegrationTest {
         assertThat(hanMuc(TENANT_B, "DOCUMENT")).containsEntry("used_value", 8L);
     }
 
+    /**
+     * Doanh nghiệp đăng ký qua luồng THẬT ({@code register_tenant}, V118) có sẵn dòng
+     * {@code STORAGE_MB} từ lúc đăng ký, và {@code insertIfAbsent} không ghi đè dòng có sẵn. Trước
+     * V127, dòng đó mang trần {@code storage_mb} của gói nguyên văn — 100 MB bị hiểu thành 100 BYTE —
+     * nên tệp 1 KB đã nhận 409.
+     */
+    @Test
+    void dangKyThatTaiLenDuocVoiTranTheoByte() throws Exception {
+        UUID moi = UUID.fromString("44444444-4444-4444-4444-444444444444");
+        chay("""
+                SELECT platform.register_tenant('%s', 'Đăng ký thật', 'dang-ky-that', 'dk@example.test',
+                                                'x', 'Người đăng ký', NULL, NULL)
+                """.formatted(moi));
+
+        KetQua kq = taiLen(tokenAdmin(moi), "a.txt", "x".repeat(1024).getBytes(UTF_8),
+                truong("title", "Tệp đầu tiên sau đăng ký"));
+
+        assertThat(kq.status()).as(kq.body().toString()).isEqualTo(202);
+        assertThat(kq.body().at("/data/storageQuota/quota").asLong()).isEqualTo(DUNG_LUONG_TRIAL);
+    }
+
     @Test
     void khongCoThueBao409() throws Exception {
         KetQua kq = taiLen(tokenAdmin(TENANT_C), "a.txt", "x".getBytes(UTF_8), truong("title", "Chưa mua gói"));
