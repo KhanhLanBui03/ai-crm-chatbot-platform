@@ -106,9 +106,65 @@ export const contactsApi = apiSlice.injectEndpoints({
       ],
     }),
 
+    // ── SCR028 — sửa / ghim / xoá ghi chú (UC017, thêm 06/10) ─────────────────
+    suaGhiChu: build.mutation<
+      GhiChu,
+      { contactId: string; noteId: string; content?: string; isPinned?: boolean }
+    >({
+      query: ({ contactId, noteId, ...than }) => ({
+        url: `/api/v1/contacts/${contactId}/notes/${noteId}`,
+        method: 'PATCH',
+        body: than,
+      }),
+      invalidatesTags: (_kq, _loi, { contactId }) => [
+        { type: 'KhachHang', id: `ghi-chu-${contactId}` },
+      ],
+    }),
+
+    xoaGhiChu: build.mutation<null, { contactId: string; noteId: string }>({
+      query: ({ contactId, noteId }) => ({
+        url: `/api/v1/contacts/${contactId}/notes/${noteId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_kq, _loi, { contactId }) => [
+        { type: 'KhachHang', id: `ghi-chu-${contactId}` },
+      ],
+    }),
+
     danhSachThe: build.query<The[], void>({
       query: () => ({ url: '/api/v1/tags' }),
-      providesTags: ['KhachHang'],
+      providesTags: [{ type: 'KhachHang', id: 'DANH-SACH-THE' }],
+    }),
+
+    // Trùng tên (khác hoa thường / khác dấu) máy chủ trả THẺ CŨ — giao diện gắn luôn thẻ đó.
+    taoThe: build.mutation<The, { name: string }>({
+      query: (than) => ({ url: '/api/v1/tags', method: 'POST', body: than }),
+      invalidatesTags: [{ type: 'KhachHang', id: 'DANH-SACH-THE' }],
+    }),
+
+    ganThe: build.mutation<null, { contactId: string; tagId: string }>({
+      query: ({ contactId, tagId }) => ({
+        url: `/api/v1/contacts/${contactId}/tags/${tagId}`,
+        method: 'PUT',
+      }),
+      // Hồ sơ (thẻ đang gắn), danh sách khách (cột Thẻ), số lượt dùng của thẻ
+      invalidatesTags: (_kq, _loi, { contactId }) => [
+        { type: 'KhachHang', id: contactId },
+        CA_DANH_SACH,
+        { type: 'KhachHang', id: 'DANH-SACH-THE' },
+      ],
+    }),
+
+    goThe: build.mutation<null, { contactId: string; tagId: string }>({
+      query: ({ contactId, tagId }) => ({
+        url: `/api/v1/contacts/${contactId}/tags/${tagId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_kq, _loi, { contactId }) => [
+        { type: 'KhachHang', id: contactId },
+        CA_DANH_SACH,
+        { type: 'KhachHang', id: 'DANH-SACH-THE' },
+      ],
     }),
   }),
 })
@@ -121,5 +177,10 @@ export const {
   useHopNhatKhachHangMutation,
   useGhiChuKhachHangQuery,
   useThemGhiChuMutation,
+  useSuaGhiChuMutation,
+  useXoaGhiChuMutation,
   useDanhSachTheQuery,
+  useTaoTheMutation,
+  useGanTheMutation,
+  useGoTheMutation,
 } = contactsApi

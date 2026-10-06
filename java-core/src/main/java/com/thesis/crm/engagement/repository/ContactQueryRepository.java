@@ -102,6 +102,16 @@ public class ContactQueryRepository {
         return withTags(tenantId, rows).stream().findFirst();
     }
 
+    /** Trạng thái khách (ACTIVE / MERGED / ANONYMIZED); rỗng nếu không có, đã xoá, hoặc thuộc tenant khác. */
+    public Optional<String> findStatus(UUID tenantId, UUID id) {
+        return jdbc.query("""
+                SELECT status FROM engagement.contacts
+                WHERE tenant_id = :tenantId AND id = :id AND deleted_at IS NULL
+                """,
+                new MapSqlParameterSource("tenantId", tenantId).addValue("id", id),
+                (rs, i) -> rs.getString("status")).stream().findFirst();
+    }
+
     public record DetailExtras(
             UUID mergedIntoContactId, Instant anonymizedAt, int conversationCount, int openLeadCount,
             int openDealCount, BigDecimal totalDealValue) {}

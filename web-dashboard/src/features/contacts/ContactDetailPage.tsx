@@ -21,8 +21,10 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { StatusChip } from '@/components/ui/status-chip'
 import { NHAN_KENH } from '@/features/conversations/nhan'
 import { AddNoteDialog } from '@/features/contacts/AddNoteDialog'
+import { ContactTagsEditor } from '@/features/contacts/ContactTagsEditor'
 import { MergeContactDialog } from '@/features/contacts/MergeContactDialog'
-import type { DanhTinhKenh, GhiChu, LoaiKenh } from '@/types/schema'
+import { NoteCard } from '@/features/contacts/NoteCard'
+import type { DanhTinhKenh, LoaiKenh } from '@/types/schema'
 import { chuCaiDau } from '@/utils/ten'
 
 const tien = (v: number) => new Intl.NumberFormat('vi-VN').format(v) + ' ₫'
@@ -123,16 +125,11 @@ export function ContactDetailPage() {
                   />
                 </div>
 
-                {(k.tags?.length ?? 0) > 0 && (
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-muted-foreground text-xs font-medium">Thẻ</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {k.tags?.map((t) => (
-                        <StatusChip key={t.id}>{t.name}</StatusChip>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <ContactTagsEditor
+                  contactId={id}
+                  dangGan={k.tags ?? []}
+                  chiDoc={k.status !== 'ACTIVE'}
+                />
               </div>
             ),
           },
@@ -172,7 +169,14 @@ export function ContactDetailPage() {
                     thaoTac={{ nhan: 'Thêm ghi chú', onClick: () => datMoGhiChu(true) }}
                   />
                 ) : (
-                  ghiChu.data?.map((g) => <TheGhiChu key={g.id} ghiChu={g} />)
+                  ghiChu.data?.map((g) => (
+                    <NoteCard
+                      key={g.id}
+                      ghiChu={g}
+                      contactId={id}
+                      chiXoa={k?.status !== 'ACTIVE'}
+                    />
+                  ))
                 )}
               </div>
             ),
@@ -256,27 +260,6 @@ function DongDanhTinh({ danhTinh }: { danhTinh: DanhTinhKenh }) {
           {formatDistanceToNowStrict(new Date(danhTinh.lastSeenAt), { locale: vi, addSuffix: true })}
         </span>
       )}
-    </div>
-  )
-}
-
-function TheGhiChu({ ghiChu }: { ghiChu: GhiChu }) {
-  return (
-    <div className="flex flex-col gap-1.5 rounded-lg border p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[13px] font-medium">{ghiChu.authorName}</span>
-        <span className="text-muted-foreground text-xs">
-          {formatDistanceToNowStrict(new Date(ghiChu.createdAt), { locale: vi, addSuffix: true })}
-        </span>
-        {/* Máy chủ tự đánh dấu ghi chú chứa dữ liệu cá nhân. Hiện ra chứ không giấu — nhân viên
-            cần biết dòng nào sẽ bị che khi xuất dữ liệu và bị xoá khi khách yêu cầu (SCR056). */}
-        {ghiChu.flaggedSensitive && (
-          <StatusChip sacThai="warning" BieuTuong={AlertTriangle}>
-            Có dữ liệu cá nhân
-          </StatusChip>
-        )}
-      </div>
-      <p className="text-[13px] leading-relaxed whitespace-pre-line">{ghiChu.content}</p>
     </div>
   )
 }
