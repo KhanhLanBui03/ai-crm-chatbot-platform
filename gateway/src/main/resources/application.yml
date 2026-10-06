@@ -10,6 +10,18 @@ spring:
       discovery:
         locator:
           enabled: false   # định tuyến tường minh, không tự sinh từ Eureka
+      # UC009/UC010 — widget chạy trên website DOANH NGHIỆP (tên miền bất kỳ) gọi API qua gateway.
+      # Gateway tự trả lời preflight OPTIONS; không khai CORS thì nó TỪ CHỐI (403) và trình duyệt
+      # không bao giờ gửi request thật. Mở "*" chỉ cho đường widget — không phải lỗ hổng: danh sách
+      # tên miền được phép kiểm ở java-core cho từng widget (WidgetOriginPolicy), không dùng cookie.
+      globalcors:
+        cors-configurations:
+          '[/api/v1/widget/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: [GET, POST, OPTIONS]
+            allowedHeaders: [Content-Type, X-Widget-Token, X-Trace-Id]
+            allowCredentials: false
+            maxAge: 3600
       routes:
         # Định tuyến qua lb:// — Eureka phân giải, không hardcode host:port (ADR-0004)
         - id: java-core
@@ -17,6 +29,9 @@ spring:
           predicates:
             - Path=/api/v1/**
           filters:
+            # java-core cũng gắn header CORS cho đường widget (để chạy được khi gọi thẳng lúc dev) →
+            # qua gateway thành HAI Access-Control-Allow-Origin, trình duyệt từ chối. Gộp về một.
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials Vary, RETAIN_UNIQUE
             - name: RequestRateLimiter
               args:
                 redis-rate-limiter.replenishRate: 20
