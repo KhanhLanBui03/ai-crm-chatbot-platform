@@ -223,7 +223,8 @@ public class InboxRepository {
     public void assign(UUID tenantId, UUID conversationId, UUID userId) {
         jdbc.update("""
                 UPDATE engagement.conversations
-                SET assigned_user_id = :u, assigned_at = now(), status = 'AGENT_HANDLING', updated_at = now()
+                SET assigned_user_id = :u, assigned_at = now(), status = 'AGENT_HANDLING',
+                    queued_at = NULL, priority = 'NORMAL', updated_at = now()
                 WHERE tenant_id = :t AND id = :c
                 """,
                 new MapSqlParameterSource("t", tenantId).addValue("c", conversationId).addValue("u", userId));
@@ -233,7 +234,8 @@ public class InboxRepository {
     public void returnToBot(UUID tenantId, UUID conversationId) {
         jdbc.update("""
                 UPDATE engagement.conversations
-                SET status = 'BOT_HANDLING', assigned_user_id = NULL, assigned_at = NULL, updated_at = now()
+                SET status = 'BOT_HANDLING', assigned_user_id = NULL, assigned_at = NULL, queued_at = NULL,
+                    priority = 'NORMAL', updated_at = now()
                 WHERE tenant_id = :t AND id = :c
                 """, new MapSqlParameterSource("t", tenantId).addValue("c", conversationId));
     }
@@ -242,7 +244,8 @@ public class InboxRepository {
     public void handoffToAgent(UUID tenantId, UUID conversationId, String reason) {
         jdbc.update("""
                 UPDATE engagement.conversations
-                SET status = 'PENDING_AGENT', handover_at = now(), handover_reason = :r, updated_at = now()
+                SET status = 'PENDING_AGENT', handover_at = now(), handover_reason = :r, queued_at = now(),
+                    updated_at = now()
                 WHERE tenant_id = :t AND id = :c
                 """,
                 new MapSqlParameterSource("t", tenantId).addValue("c", conversationId).addValue("r", reason));

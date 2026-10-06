@@ -6,7 +6,10 @@ import static com.thesis.crm.security.CurrentActor.requireUserId;
 
 import com.thesis.crm.common.response.ApiResponse;
 import com.thesis.crm.common.response.PageResponse;
+import com.thesis.crm.engagement.assignment.AssignmentRepository.Assignee;
+import com.thesis.crm.engagement.assignment.AssignmentRepository.QueueStatus;
 import com.thesis.crm.engagement.inbox.InboxDtos.AssignRequest;
+import com.thesis.crm.engagement.inbox.InboxDtos.ReleaseRequest;
 import com.thesis.crm.engagement.inbox.InboxDtos.ConversationContext;
 import com.thesis.crm.engagement.inbox.InboxDtos.ConversationDetail;
 import com.thesis.crm.engagement.inbox.InboxDtos.ConversationSummary;
@@ -57,6 +60,16 @@ public class InboxController {
                 requireTenantId(), actor(), scope, status, channelType, tagId, q, page, size)));
     }
 
+    @GetMapping("/assignees")
+    public ResponseEntity<ApiResponse<List<Assignee>>> assignees() {
+        return ResponseEntity.ok(ApiResponse.ok(service.assignees(requireTenantId())));
+    }
+
+    @GetMapping("/queue-status")
+    public ResponseEntity<ApiResponse<QueueStatus>> queueStatus() {
+        return ResponseEntity.ok(ApiResponse.ok(service.queueStatus(requireTenantId(), actor())));
+    }
+
     @GetMapping("/{conversationId}")
     public ResponseEntity<ApiResponse<ConversationDetail>> detail(@PathVariable UUID conversationId) {
         return ResponseEntity.ok(ApiResponse.ok(service.detail(requireTenantId(), conversationId)));
@@ -87,6 +100,13 @@ public class InboxController {
             @PathVariable UUID conversationId, @RequestBody(required = false) AssignRequest body) {
         UUID target = body == null ? null : body.assigneeUserId();
         return ResponseEntity.ok(ApiResponse.ok(service.assign(requireTenantId(), actor(), conversationId, target)));
+    }
+
+    @PostMapping("/{conversationId}/release")
+    public ResponseEntity<ApiResponse<ConversationSummary>> release(
+            @PathVariable UUID conversationId, @RequestBody ReleaseRequest body) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                service.release(requireTenantId(), actor(), conversationId, body.reason())));
     }
 
     @PostMapping("/{conversationId}/handoff")

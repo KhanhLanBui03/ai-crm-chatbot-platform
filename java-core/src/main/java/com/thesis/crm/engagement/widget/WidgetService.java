@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thesis.crm.common.audit.AuditLogWriter;
 import com.thesis.crm.common.exception.AppException;
+import com.thesis.crm.engagement.assignment.AssignmentService;
 import com.thesis.crm.engagement.widget.AiChatClient.AiReply;
 import com.thesis.crm.engagement.widget.AiChatClient.Turn;
 import com.thesis.crm.engagement.widget.WidgetDtos.Appearance;
@@ -56,6 +57,8 @@ public class WidgetService {
     private static final Set<String> WITH_AGENT = Set.of("PENDING_AGENT", "AGENT_HANDLING");
 
     static final String HANDOFF_TEXT = "Cảm ơn bạn! Nhân viên sẽ liên hệ với bạn trong thời gian sớm nhất.";
+    /** UC014 b8 — đã có người đang trực nhận ngay. */
+    static final String ASSIGNED_TEXT = "Đã có nhân viên tiếp nhận, bạn chờ trong giây lát nhé.";
 
     private final WidgetRepository repo;
     private final WidgetTokenService tokens;
@@ -65,10 +68,11 @@ public class WidgetService {
     private final AuditLogWriter audit;
     private final TransactionTemplate tx;
     private final ObjectMapper json;
+    private final AssignmentService assignment;
 
     public WidgetService(WidgetRepository repo, WidgetTokenService tokens, WidgetRateLimiter limiter,
                          AiChatClient ai, TenantTransactionScope scope, AuditLogWriter audit,
-                         TransactionTemplate tx, ObjectMapper json) {
+                         TransactionTemplate tx, ObjectMapper json, AssignmentService assignment) {
         this.repo = repo;
         this.tokens = tokens;
         this.limiter = limiter;
@@ -77,6 +81,7 @@ public class WidgetService {
         this.audit = audit;
         this.tx = tx;
         this.json = json;
+        this.assignment = assignment;
     }
 
     // ── Mở phiên (UC009 bước 10–11) ─────────────────────────────────────────────
@@ -177,7 +182,7 @@ public class WidgetService {
                 return new Accepted(conversationId, Next.NONE, out, history, hoursNote);   // 6.3–6.4
             }
             if (quotaExceeded) {
-                handoffWithNotice(s.tenantId(), conversationId, "QUOTA_EXCEEDED", hoursNote, out);
+                handoffWithNotice(s.tenantId(), conversationId, "QUOTA_EXCEEDED", "SYSTEM", hoursNote, out);
                 return new Accepted(conversationId, Next.NONE, out, history, hoursNote);
             }
             return new Accepted(conversationId, Next.CALL_AI, out, history, hoursNote);
@@ -201,7 +206,7 @@ public class WidgetService {
                 return;
             }
             if (reply.isEmpty()) {
-                handoffWithNotice(s.tenantId(), acc.conversationId(), "LLM_ERROR", acc.hoursNote(), out);
+                handoffWithNotice(s.tenantId(), acc.conversationId(), "LLM_ERROR", "SYSTEM", acc.hoursNote(), out);
                 return;
             }
             AiReply r = reply.get();
@@ -215,14 +220,14 @@ public class WidgetService {
                 // độ tin cậy thấp thì AI hỏi lại chứ không chuyển giao (router.py BRANCH_TO_ROUTE).
                 String reason = r.refused() ? "NO_GROUNDING" : "CUSTOMER_REQUEST";
                 if (r.answer().isBlank()) {
-                    handoffWithNotice(s.tenantId(), acc.conversationId(), reason, acc.hoursNote(), out);
+                    handoffWithNotice(s.tenantId(), acc.conversationId(), reason, "AI_AGENT", acc.hoursNote(), out);
                 } else {
                     // AI đã tự nói câu chuyển giao — chỉ thêm tin hệ thống khi cần báo khung giờ (7.2)
-                    handoffWithNoticeText(s.tenantId(), acc.conversationId(), reason,
+                    handoffWithNoticeText(s.tenantId(), acc.conversationId(), reason, "AI_AGENT",
                             acc.hoursNote().strip(), out);
                 }
             } else if (r.answer().isBlank()) {
-                handoffWithNotice(s.tenantId(), acc.conversationId(), "LLM_ERROR", acc.hoursNote(), out);
+                handoffWithNotice(s.tenantId(), acc.conversationId(), "LLM_ERROR", "SYSTEM", acc.hoursNote(), out);
             }
         });
         return new TurnResponse(currentStatus(s, acc.conversationId()), out);
@@ -243,7 +248,8 @@ public class WidgetService {
                             HttpStatus.CONFLICT));
             List<MessageDto> out = new ArrayList<>();
             if ("BOT_HANDLING".equals(conv.status())) {
-                handoffWithNotice(s.tenantId(), conv.id(), "CUSTOMER_REQUEST",
+                // Khách tự bấm nút — hệ thống ghi nhận, không phải AI quyết
+                handoffWithNotice(s.tenantId(), conv.id(), "CUSTOMER_REQUEST", "SYSTEM",
                         hours.isOpenNow() ? "" : outsideHoursNote(hours), out);
             }
             return new TurnResponse(currentStatus(s, conv.id()), out);
@@ -314,16 +320,25 @@ public class WidgetService {
         return "Khách web #" + visitorId.toString().substring(0, 4).toUpperCase(Locale.ROOT);
     }
 
-    private void handoffWithNotice(UUID tenantId, UUID conversationId, String reason, String hoursNote,
-                                   List<MessageDto> out) {
-        handoffWithNoticeText(tenantId, conversationId, reason, HANDOFF_TEXT + hoursNote, out);
+    private void handoffWithNotice(UUID tenantId, UUID conversationId, String reason, String triggeredBy,
+                                   String hoursNote, List<MessageDto> out) {
+        handoffWithNoticeText(tenantId, conversationId, reason, triggeredBy, HANDOFF_TEXT + hoursNote, out);
     }
 
-    /** Chuyển cho nhân viên; {@code notice} rỗng thì không thêm tin hệ thống. */
-    private void handoffWithNoticeText(UUID tenantId, UUID conversationId, String reason, String notice,
-                                       List<MessageDto> out) {
-        if (repo.handoff(tenantId, conversationId, reason) && !notice.isEmpty()) {
-            out.add(toDto(repo.insertMessage(tenantId, conversationId, "SYSTEM", "OUTBOUND", notice, "{}")));
+    /**
+     * Chuyển cho nhân viên (UC014 b3–b8): ghi sự kiện chuyển giao, tự giao người đang trực theo chế độ của
+     * doanh nghiệp. Có người nhận ngay thì báo khách "đã có nhân viên tiếp nhận"; vào hàng chờ thì dùng
+     * {@code notice} (kèm khung giờ nếu ngoài giờ — 6.2). {@code notice} rỗng và không ai nhận → không thêm tin.
+     */
+    private void handoffWithNoticeText(UUID tenantId, UUID conversationId, String reason, String triggeredBy,
+                                       String notice, List<MessageDto> out) {
+        if (!repo.handoff(tenantId, conversationId, reason)) {
+            return;
+        }
+        assignment.recordHandoff(tenantId, conversationId, "BOT_TO_AGENT", reason, triggeredBy, null);
+        String text = assignment.autoAssign(tenantId, conversationId, null).isPresent() ? ASSIGNED_TEXT : notice;
+        if (!text.isEmpty()) {
+            out.add(toDto(repo.insertMessage(tenantId, conversationId, "SYSTEM", "OUTBOUND", text, "{}")));
         }
     }
 

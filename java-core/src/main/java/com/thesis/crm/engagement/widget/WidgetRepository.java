@@ -175,7 +175,7 @@ public class WidgetRepository {
     public boolean handoff(UUID tenantId, UUID conversationId, String reason) {
         return jdbc.update("""
                 UPDATE engagement.conversations
-                SET status = 'PENDING_AGENT', handover_at = now(), handover_reason = :r
+                SET status = 'PENDING_AGENT', handover_at = now(), handover_reason = :r, queued_at = now()
                 WHERE tenant_id = :t AND id = :c AND status = 'BOT_HANDLING'
                 """,
                 new MapSqlParameterSource("t", tenantId).addValue("c", conversationId).addValue("r", reason)) > 0;

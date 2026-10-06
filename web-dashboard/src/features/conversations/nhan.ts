@@ -1,4 +1,4 @@
-import { Ban, Check, CircleDot, Clock, Sparkles, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, Ban, Check, CircleDot, Clock, Siren, Sparkles, type LucideIcon } from 'lucide-react'
 
 import type { SacThai } from '@/components/ui/status-chip'
 import type { LoaiKenh, TrangThaiHoiThoai } from '@/types/schema'
@@ -19,6 +19,15 @@ export const NHAN_TRANG_THAI: Record<
   AGENT_HANDLING: { nhan: 'Đang xử lý', sacThai: 'success', BieuTuong: CircleDot },
   RESOLVED: { nhan: 'Đã giải quyết', sacThai: 'success', BieuTuong: Check },
   CLOSED: { nhan: 'Đã đóng', sacThai: 'neutral', BieuTuong: Ban },
+}
+
+/**
+ * Mức ưu tiên do job quá hạn nâng (UC014 7.1): chờ > 5 phút → 2, > 15 phút → 3. Mức thường (0–1)
+ * không hiện chip — chỉ những hội thoại cần chú ý mới nổi lên.
+ */
+export const NHAN_UU_TIEN: Record<number, { nhan: string; sacThai: SacThai; BieuTuong: LucideIcon }> = {
+  2: { nhan: 'Gấp', sacThai: 'warning', BieuTuong: AlertTriangle },
+  3: { nhan: 'Khẩn', sacThai: 'destructive', BieuTuong: Siren },
 }
 
 export const NHAN_KENH: Record<LoaiKenh, string> = {

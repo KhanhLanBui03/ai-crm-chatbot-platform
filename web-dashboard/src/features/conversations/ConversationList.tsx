@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StatusChip } from '@/components/ui/status-chip'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import { NHAN_KENH, NHAN_TRANG_THAI } from '@/features/conversations/nhan'
+import { NHAN_KENH, NHAN_TRANG_THAI, NHAN_UU_TIEN } from '@/features/conversations/nhan'
 import { chuCaiDau } from '@/utils/ten'
 import type { BoLocHoiThoai } from '@/api/conversations'
 import type { HoiThoaiTomTat } from '@/types/schema'
@@ -98,6 +98,7 @@ function MucHoiThoai({
   onChon: () => void
 }) {
   const trangThai = NHAN_TRANG_THAI[hoiThoai.status]
+  const uuTien = NHAN_UU_TIEN[hoiThoai.priority ?? 1]
   const chuaDoc = hoiThoai.unreadCount > 0
 
   return (
@@ -136,6 +137,11 @@ function MucHoiThoai({
           <StatusChip sacThai={trangThai.sacThai} BieuTuong={trangThai.BieuTuong}>
             {trangThai.nhan}
           </StatusChip>
+          {uuTien && (
+            <StatusChip sacThai={uuTien.sacThai} BieuTuong={uuTien.BieuTuong}>
+              {uuTien.nhan}
+            </StatusChip>
+          )}
           <span className="text-muted-foreground text-xs">{NHAN_KENH[hoiThoai.channelType]}</span>
           <span className="flex-1" />
           {chuaDoc && (

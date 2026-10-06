@@ -1,5 +1,7 @@
 -- ═════════════════════════════════════════════════════════════════════════════
--- V128 — UC012/UC013: hộp thư hợp nhất và nhân viên trả lời
+-- V130 — UC012/UC013: hộp thư hợp nhất và nhân viên trả lời
+-- (Ban đầu là V128 — trùng số với V128__han_muc_moc_canh_bao_va_chan của nhánh UC018/019 khi cả
+--  hai cùng vào develop; Flyway từ chối hai migration cùng số nên đổi sang số kế tiếp còn trống.)
 -- ═════════════════════════════════════════════════════════════════════════════
 -- KHÔNG chừa số trống cho nhánh khác: Flyway mặc định từ chối migration số NHỎ HƠN số đã chạy
 -- (validate lỗi trừ khi bật outOfOrder). Nhánh nào merge sau thì lấy số kế tiếp còn trống.

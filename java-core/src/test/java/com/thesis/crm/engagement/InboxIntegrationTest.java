@@ -48,8 +48,8 @@ class InboxIntegrationTest extends EngagementIntegrationTestBase {
         try (Connection c = owner()) {
             for (UUID t : new UUID[] {TENANT_I, TENANT_J}) {
                 exec(c, """
-                        INSERT INTO platform.tenants (id, name, slug, contact_email, status)
-                        VALUES (?, 'DN hộp thư', ?, ?, 'ACTIVE')""", t, "i-" + t.toString().substring(0, 8),
+                        INSERT INTO platform.tenants (id, name, slug, contact_email, status, assignment_mode)
+                        VALUES (?, 'DN hộp thư', ?, ?, 'ACTIVE', 'MANUAL')""", t, "i-" + t.toString().substring(0, 8),
                         "a@" + t.toString().substring(0, 8) + ".vn");
                 UUID sub = UUID.randomUUID();
                 exec(c, """
