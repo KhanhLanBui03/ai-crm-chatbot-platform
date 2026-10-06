@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cửa hàng Demo</title>
+    <!-- [R&D] Trang giả website doanh nghiệp để chạy thử và quay video UC009/UC010.
+         KHÁC trang dev (web-widget/index.html): ở đây widget được nhúng ĐÚNG như doanh nghiệp làm —
+         một thẻ <script> trỏ tới widget.js đã build, không tham số ?key, không mã nguồn TypeScript.
+         Ba giá trị ${...} do container điền lúc khởi động (demo/40-dien-ma-nhung.sh). -->
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; color: #1f2937; background: #fafaf9; }
+      header { background: #1f2937; color: #fff; padding: 18px 32px; display: flex; justify-content: space-between; }
+      header b { font-size: 20px; }
+      main { max-width: 960px; margin: 32px auto; padding: 0 24px; }
+      .luoi { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+      .sp { background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 16px; }
+      .sp .gia { color: #b45309; font-weight: 600; margin-top: 8px; }
+      .ghi-chu { margin-top: 32px; font-size: 13px; color: #78716c; }
+    </style>
+  </head>
+  <body>
+    <header><b>Cửa hàng Demo</b><span>Hotline 1900 0000</span></header>
+    <main>
+      <h1>Gói dịch vụ phần mềm bán hàng</h1>
+      <div class="luoi">
+        <div class="sp"><b>Gói Khởi đầu</b><div>5 người dùng, 2 kênh</div><div class="gia">490.000đ / tháng</div></div>
+        <div class="sp"><b>Gói Tăng trưởng</b><div>15 người dùng, 3 kênh</div><div class="gia">1.490.000đ / tháng</div></div>
+        <div class="sp"><b>Gói Chuyên nghiệp</b><div>50 người dùng, ưu tiên hỗ trợ</div><div class="gia">3.990.000đ / tháng</div></div>
+      </div>
+      <p class="ghi-chu">Bấm bong bóng chat ở góc dưới để hỏi trợ lý AI.</p>
+    </main>
+
+    <!-- Mã nhúng lấy từ dashboard (Cài đặt → Web Widget → Chép mã) -->
+    <script src="${WIDGET_SCRIPT_URL}" data-widget-key="${DEMO_WIDGET_KEY}" data-api-url="${WIDGET_PUBLIC_API_URL}" async></script>
+  </body>
+</html>

@@ -40,6 +40,7 @@ export class GiaoDienChat {
   private readonly tenEl: HTMLSpanElement
   private readonly anhEl: HTMLImageElement
   private readonly chan: HTMLDivElement
+  private readonly chanTrang: HTMLSpanElement
   private dangGo: HTMLDivElement | null = null
   private readonly daCo = new Set<string>()
 
@@ -96,7 +97,8 @@ export class GiaoDienChat {
     this.nutGapNv.type = 'button'
     this.nutGapNv.hidden = true
     this.nutGapNv.addEventListener('click', () => this.suKien.onGapNhanVien())
-    phu.append(tao('span', undefined, 'Trả lời tự động bởi trợ lý AI'), this.nutGapNv)
+    this.chanTrang = tao('span', undefined, 'Trả lời tự động bởi trợ lý AI')
+    phu.append(this.chanTrang, this.nutGapNv)
     this.chan.append(hang, phu)
 
     this.khung.append(dau, this.than, this.loi, this.chan)
@@ -175,6 +177,16 @@ export class GiaoDienChat {
 
   datCoTheGapNhanVien(co: boolean): void {
     this.nutGapNv.hidden = !co
+  }
+
+  /** Chân khung chat nói đúng ai đang trả lời — khách không nhầm nhân viên với AI. */
+  datNguoiTraLoi(trangThai: string | null): void {
+    this.chanTrang.textContent =
+      trangThai === 'AGENT_HANDLING'
+        ? 'Nhân viên đang hỗ trợ bạn'
+        : trangThai === 'PENDING_AGENT'
+          ? 'Đang chờ nhân viên tiếp nhận…'
+          : 'Trả lời tự động bởi trợ lý AI'
   }
 
   baoLoi(chu: string | null): void {

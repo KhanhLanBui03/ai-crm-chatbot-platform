@@ -914,6 +914,76 @@ paths:
                                 type: array
                                 items: { $ref: '#/components/schemas/HoiThoaiTomTat' }
 
+  /api/v1/conversations/assignees:
+    get:
+      tags: [Hộp thư]
+      summary: UC015 b3 — người nhận được hội thoại (ô "Giao cho…")
+      description: |
+        Người dùng ACTIVE có vai trò AGENT hoặc TENANT_ADMIN của doanh nghiệp, kèm trạng thái trực tuyến
+        (có hoạt động trên Hộp thư trong 2 phút qua — bảng `platform.user_presence`) và số hội thoại đang
+        xử lý. Giao cho người ngoại tuyến vẫn được nhưng giao diện phải cảnh báo (UC015 6.1).
+      responses:
+        '200':
+          description: Danh sách người nhận
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/NguoiNhanHoiThoai' }
+
+  /api/v1/conversations/queue-status:
+    get:
+      tags: [Hộp thư]
+      summary: Tình trạng hàng chờ — thanh cảnh báo của quản trị viên (UC014 6.2, 7.2)
+      description: |
+        Đếm hội thoại đang chờ chưa ai nhận, số chờ quá 5 phút, và số người đang trực. Chỉ quản trị viên.
+        Thay cho thông báo đẩy — hệ thống chưa có kênh thông báo riêng (giảm độ sâu).
+      responses:
+        '200':
+          description: Tình trạng hàng chờ
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/TinhTrangHangCho' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+
+  /api/v1/conversations/{conversationId}/release:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    post:
+      tags: [Hộp thư]
+      summary: UC015 1a — trả hội thoại về hàng chờ
+      description: |
+        Người phụ trách hoặc quản trị viên. Bắt buộc lý do (5–200 ký tự). Gỡ người phụ trách, về
+        `PENDING_AGENT`, rồi tự giao lại theo `assignment_mode` — **không** giao lại cho chính người vừa trả.
+        Ghi `audit_logs` (`CONVERSATION_RELEASED`, chỉ độ dài lý do — không chép nội dung).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 5, maxLength: 200 }
+      responses:
+        '200':
+          description: Đã trả về hàng chờ (có thể đã được giao lại ngay)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/HoiThoaiTomTat' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '409': { description: Hội thoại đã đóng hoặc đang ở hàng chờ }
+
   /api/v1/conversations/{conversationId}:
     parameters:
       - $ref: '#/components/parameters/ConversationId'
@@ -970,8 +1040,8 @@ paths:
       summary: Tin nhắn của hội thoại, phân trang bằng con trỏ
       description: |
         Con trỏ chứ không phải số trang: tin nhắn mới đến liên tục ở đầu danh sách, phân trang bằng
-        offset sẽ làm lệch cửa sổ và hiện lặp tin đã đọc. Con trỏ là `createdAt` của tin cũ nhất
-        đang hiển thị.
+        offset sẽ làm lệch cửa sổ và hiện lặp tin đã đọc. Con trỏ là `sentAt` của tin cũ nhất
+        đang hiển thị (thứ tự hiển thị của hội thoại là `sent_at`) — chính là `nextCursor` máy chủ trả.
       parameters:
         - name: before
           in: query
@@ -3797,9 +3867,12 @@ components:
 
     SuKienChuyenGiao:
       type: object
+      description: |
+        Một dòng của `engagement.handoff_events` (V129). `BOT_TO_AGENT` do nhân viên bấm thì máy chủ tự
+        giao theo `assignment_mode`; giao được ngay thì `toUserId`/`acceptedAt` đã có giá trị.
       required: [id, direction, reason, triggeredBy, occurredAt]
       properties:
-        id: { type: string, format: uuid }
+        id: { type: string, format: uuid, description: 'ID thật của sự kiện, tra lại được' }
         direction:
           type: string
           enum: [BOT_TO_AGENT, AGENT_TO_BOT]
@@ -3817,6 +3890,24 @@ components:
         acceptedAt: { type: [string, 'null'], format: date-time }
         occurredAt: { type: string, format: date-time }
 
+
+    NguoiNhanHoiThoai:
+      type: object
+      required: [userId, fullName, role, online, openCount]
+      properties:
+        userId: { type: string, format: uuid }
+        fullName: { type: string }
+        role: { $ref: '#/components/schemas/MaVaiTro' }
+        online: { type: boolean, description: 'Có hoạt động trên Hộp thư trong 2 phút qua' }
+        openCount: { type: integer, description: 'Số hội thoại AGENT_HANDLING đang giữ' }
+
+    TinhTrangHangCho:
+      type: object
+      required: [waitingTotal, waitingOverdue, onlineAgents]
+      properties:
+        waitingTotal: { type: integer, description: 'Đang chờ, chưa ai nhận' }
+        waitingOverdue: { type: integer, description: 'Trong số đó, chờ quá 5 phút' }
+        onlineAgents: { type: integer, description: 'Người đang trực (AGENT và quản trị viên)' }
 
     # ── F. Khách hàng ──────────────────────────────────────────────────────────
 

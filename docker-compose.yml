@@ -246,6 +246,14 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:-changeme-dev}
       # Dự phòng khi ai-service chưa tự đăng ký Eureka — LoadBalancer hỏi Eureka trước.
       AI_SERVICE_URL: http://ai-service:8000
+      # UC009 — mã nhúng widget. Hai địa chỉ do TRÌNH DUYỆT CỦA KHÁCH truy cập (không phải tên
+      # service nội bộ): nơi tải widget.js và gateway công khai.
+      WIDGET_SCRIPT_URL: ${WIDGET_SCRIPT_URL:-http://localhost:5174/widget.js}
+      WIDGET_PUBLIC_API_URL: ${WIDGET_PUBLIC_API_URL:-http://localhost:8080}
+      # Khoá ký token phiên widget (HMAC, ≥ 32 byte). KHÔNG được để rỗng: biến rỗng vẫn "có giá trị"
+      # với Spring nên không rơi về mặc định → khoá rỗng → java-core từ chối khởi động. Thiếu trong .env
+      # thì dùng khoá dev dưới đây; môi trường thật BẮT BUỘC đặt khoá riêng.
+      WIDGET_TOKEN_SECRET: ${WIDGET_TOKEN_SECRET:-dev-only-widget-secret-doi-ngay-khi-trien-khai-0123456789}
       SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
       SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
     depends_on:
@@ -287,7 +295,18 @@ services:
     build: ./web-widget
     container_name: crm-web-widget
     ports:
-      - "5174:5174"
+      - "5174:5174"   # widget.js đã build (vai máy chủ phục vụ widget)
+      - "3000:3000"   # trang "Cửa hàng Demo" (vai website doanh nghiệp) — chỉ để chạy thử, quay video
+    environment:
+      WIDGET_SCRIPT_URL: ${WIDGET_SCRIPT_URL:-http://localhost:5174/widget.js}
+      WIDGET_PUBLIC_API_URL: ${WIDGET_PUBLIC_API_URL:-http://localhost:8080}
+      # Khoá công khai lấy ở dashboard (Cài đặt → Web Widget) sau khi bấm "Sinh mã nhúng"
+      DEMO_WIDGET_KEY: ${DEMO_WIDGET_KEY:-wk_chua_dat_khoa_demo}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5174/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
     depends_on:
       - gateway
     networks: [crm]

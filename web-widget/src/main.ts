@@ -11,10 +11,16 @@ import { GiaoDienChat } from './ui'
 const CHU_KY_HOI_MS = 5000
 const DANG_CO_NHAN_VIEN = new Set(['PENDING_AGENT', 'AGENT_HANDLING'])
 
+/**
+ * Thẻ <script> của CHÍNH widget, ghi nhớ NGAY khi file vừa chạy. `document.currentScript` chỉ có giá trị
+ * trong lúc thẻ đang thực thi — nếu đợi tới DOMContentLoaded (thẻ `async` chạy khi trang chưa tải xong)
+ * thì nó đã là null và phải đoán bằng querySelector, dễ chọn nhầm khi trang có nhiều thẻ.
+ */
+const theCuaToi = document.currentScript
+
 function timThe(): HTMLScriptElement | null {
-  // currentScript chỉ có khi chạy ĐỒNG BỘ lúc trang tải; bản dev chạy dạng module thì không có
-  const s = document.currentScript
-  if (s instanceof HTMLScriptElement && s.dataset.widgetKey) return s
+  if (theCuaToi instanceof HTMLScriptElement && theCuaToi.dataset.widgetKey) return theCuaToi
+  // Bản dev chạy dạng module nên không có currentScript — lúc đó mới tìm theo thuộc tính
   return document.querySelector<HTMLScriptElement>('script[data-widget-key]')
 }
 
@@ -75,6 +81,7 @@ class WidgetApp {
     }
     // Chỉ cho bấm "Gặp nhân viên" khi đã có hội thoại và AI đang giữ
     this.ui.datCoTheGapNhanVien(this.trangThai === 'BOT_HANDLING')
+    this.ui.datNguoiTraLoi(this.trangThai)
     this.batDauHoi()
   }
 

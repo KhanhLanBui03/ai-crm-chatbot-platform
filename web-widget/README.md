@@ -26,10 +26,32 @@ cho CSS là đủ và an toàn hơn.
 
 ## Chạy thử
 
+**Khi sửa code** (Vite dev, nạp thẳng mã nguồn):
+
 ```bash
-npm install && npm run dev        # mở http://localhost:5174/?key=<widget_key>&api=http://localhost:8080
-npm run build                     # ra dist/widget.js (một file IIFE)
+npm install && npm run dev        # http://localhost:5174/?key=<widget_key>&api=http://localhost:8080
+npm run typecheck && npm run build   # ra dist/widget.js (một file IIFE ~12 kB)
 ```
 
-`index.html` là trang giả "Cửa hàng Demo" — chỉ dùng khi phát triển và quay video. Tên miền
-`localhost` phải được khai trong danh sách tên miền của widget thì mới chạy (không có ngoại lệ ngầm).
+`index.html` là trang dev — nạp `/src/main.ts`, lấy khoá từ địa chỉ trang.
+
+**Như doanh nghiệp thật nhúng** (image Docker — bản đã build):
+
+```bash
+docker compose up -d web-widget   # hoặc: docker build -t crm-web-widget . && docker run -p 5174:5174 -p 3000:3000 ...
+```
+
+| Cổng | Vai | Nội dung |
+|---|---|---|
+| `5174` | máy chủ phục vụ widget | chỉ `/widget.js` (+ `/healthz`); mọi đường khác 404, không phục vụ sourcemap |
+| `3000` | website doanh nghiệp giả | `demo/index.html` — trang "Cửa hàng Demo" chỉ có MỘT thẻ `<script>` y như mã nhúng |
+
+Biến môi trường của container: `DEMO_WIDGET_KEY` (khoá công khai lấy ở dashboard sau khi "Sinh mã nhúng"),
+`WIDGET_SCRIPT_URL`, `WIDGET_PUBLIC_API_URL`. Script `demo/40-dien-ma-nhung.sh` điền chúng vào trang lúc
+khởi động và **từ chối khoá có ký tự lạ** (chống chèn mã vào HTML).
+
+Trong dashboard, khai tên miền được phép là `localhost`. Muốn demo tên miền riêng: thêm
+`127.0.0.1 cuahangdemo.vn` vào file `hosts` của Windows rồi khai `cuahangdemo.vn`.
+
+**Qua gateway**: gateway phải mở CORS cho `/api/v1/widget/**` (`gateway/.../application.yml`,
+`globalcors`) — thiếu thì preflight `OPTIONS` bị 403 và trình duyệt không bao giờ gửi request thật.
