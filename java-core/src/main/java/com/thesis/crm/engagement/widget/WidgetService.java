@@ -204,8 +204,17 @@ public class WidgetService {
                         r.answer(), botMetadata(r))));
             }
             if (r.handoff()) {
-                handoffWithNotice(s.tenantId(), acc.conversationId(),
-                        r.refused() ? "NO_GROUNDING" : "LOW_CONFIDENCE", acc.hoursNote(), out);
+                // ai-service chỉ báo chuyển giao ở nhánh HANDOFF (khách xin gặp người / khiếu nại) và
+                // TOOL_CALL (thao tác cần nhân viên, MCP đã hoãn) — đều là khách CHỦ ĐỘNG cần người;
+                // độ tin cậy thấp thì AI hỏi lại chứ không chuyển giao (router.py BRANCH_TO_ROUTE).
+                String reason = r.refused() ? "NO_GROUNDING" : "CUSTOMER_REQUEST";
+                if (r.answer().isBlank()) {
+                    handoffWithNotice(s.tenantId(), acc.conversationId(), reason, acc.hoursNote(), out);
+                } else {
+                    // AI đã tự nói câu chuyển giao — chỉ thêm tin hệ thống khi cần báo khung giờ (7.2)
+                    handoffWithNoticeText(s.tenantId(), acc.conversationId(), reason,
+                            acc.hoursNote().strip(), out);
+                }
             } else if (r.answer().isBlank()) {
                 handoffWithNotice(s.tenantId(), acc.conversationId(), "LLM_ERROR", acc.hoursNote(), out);
             }
@@ -301,9 +310,14 @@ public class WidgetService {
 
     private void handoffWithNotice(UUID tenantId, UUID conversationId, String reason, String hoursNote,
                                    List<MessageDto> out) {
-        if (repo.handoff(tenantId, conversationId, reason)) {
-            out.add(toDto(repo.insertMessage(tenantId, conversationId, "SYSTEM", "OUTBOUND",
-                    HANDOFF_TEXT + hoursNote, "{}")));
+        handoffWithNoticeText(tenantId, conversationId, reason, HANDOFF_TEXT + hoursNote, out);
+    }
+
+    /** Chuyển cho nhân viên; {@code notice} rỗng thì không thêm tin hệ thống. */
+    private void handoffWithNoticeText(UUID tenantId, UUID conversationId, String reason, String notice,
+                                       List<MessageDto> out) {
+        if (repo.handoff(tenantId, conversationId, reason) && !notice.isEmpty()) {
+            out.add(toDto(repo.insertMessage(tenantId, conversationId, "SYSTEM", "OUTBOUND", notice, "{}")));
         }
     }
 

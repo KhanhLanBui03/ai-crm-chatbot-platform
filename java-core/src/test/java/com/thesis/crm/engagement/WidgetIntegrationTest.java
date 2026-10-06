@@ -205,12 +205,13 @@ class WidgetIntegrationTest extends EngagementIntegrationTestBase {
     }
 
     @Test
-    void aiBaoChuyenGiao_LOW_CONFIDENCE_vaTinSauKhongGoiAiNua() throws Exception {
+    void aiBaoChuyenGiao_CUSTOMER_REQUEST_vaTinSauKhongGoiAiNua() throws Exception {
         AI.respond(FakeAiServer.handoff());
         String token = newToken(KEY_W, ORIGIN_W);
         JsonNode turn = turnOf(send(token, ORIGIN_W, "cho tôi gặp người thật"));
         assertThat(turn.get("conversationStatus").asText()).isEqualTo("PENDING_AGENT");
-        assertThat(handoverReason(turn)).isEqualTo("LOW_CONFIDENCE");
+        assertThat(handoverReason(turn)).isEqualTo("CUSTOMER_REQUEST");
+        assertThat(lastSystemMessage(turn)).startsWith("Cảm ơn bạn!");   // AI không nói gì → máy chủ báo
 
         // 6.3–6.4: hội thoại đang chờ nhân viên → tin tiếp theo không qua AI
         int before = AI.calls.get();
@@ -218,6 +219,19 @@ class WidgetIntegrationTest extends EngagementIntegrationTestBase {
         assertThat(AI.calls.get()).isEqualTo(before);
         assertThat(next.get("messages")).hasSize(1);
         assertThat(next.get("conversationStatus").asText()).isEqualTo("PENDING_AGENT");
+    }
+
+    @Test
+    void aiDaTuNoiCauChuyenGiao_khongThemTinHeThongLap() throws Exception {
+        AI.respond(new FakeAiServer.Script(200, """
+                {"answer": "Dạ em đã chuyển cho nhân viên tư vấn ạ.", "citations": [], "route": "HANDOFF",
+                 "refused": false, "handoff": true, "latency_ms": 30}
+                """, 0));
+        String token = newToken(KEY_W, ORIGIN_W);
+        JsonNode turn = turnOf(send(token, ORIGIN_W, "gặp nhân viên"));
+        assertThat(turn.get("conversationStatus").asText()).isEqualTo("PENDING_AGENT");
+        assertThat(turn.get("messages")).hasSize(2);                     // tin khách + câu của AI
+        assertThat(turn.get("messages").get(1).get("senderType").asText()).isEqualTo("BOT");
     }
 
     @Test

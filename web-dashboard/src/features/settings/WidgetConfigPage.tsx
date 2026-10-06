@@ -221,8 +221,9 @@ export function WidgetConfigPage() {
           tieuDe: 'Mã nhúng',
           moTa: 'Dán ngay trước thẻ đóng </body> của mọi trang muốn có khung chat.',
           noiDung: (
-            <div className="flex flex-col gap-2">
-              <pre className="bg-muted overflow-x-auto rounded-lg p-3 font-mono text-xs leading-relaxed">
+            <div className="flex min-w-0 flex-col gap-2">
+              {/* Mã nhúng là một dòng rất dài — cho xuống dòng thay vì đẩy cả trang tràn ngang */}
+              <pre className="bg-muted rounded-lg p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
                 {maNhung.data?.snippet ?? 'Đang tải…'}
               </pre>
               <div className="flex items-center gap-2">
