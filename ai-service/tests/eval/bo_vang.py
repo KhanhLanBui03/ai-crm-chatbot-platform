@@ -1,7 +1,7 @@
-"""Công cụ cho bộ vàng Ngày 6 — mục lục cho Gemini, bản đoạn để gán căn cứ, kiểm tệp. [R&D]
+"""Công cụ cho bộ vàng Ngày 6 — mục lục để viết câu hỏi, bản đoạn để gán căn cứ, kiểm tệp. [R&D]
 
     cd ai-service && source .venv/bin/activate
-    python -m tests.eval.bo_vang muc-luc > muc_luc.md   # đầu vào DUY NHẤT của prompt Gemini
+    python -m tests.eval.bo_vang muc-luc > muc_luc.md   # đầu vào DUY NHẤT khi viết câu hỏi
     python -m tests.eval.bo_vang doan    > doan.md      # người gán đọc để tìm câu trích
     python -m tests.eval.bo_vang kiem                   # mặc định tests/eval/golden_set.jsonl
 
@@ -9,14 +9,14 @@ Không cần CSDL, không cần vector: đoạn được dựng bằng CHÍNH đ
 ``normalize_vi`` → ``chia_doan``) trên ``data/kb_samples/``, nên nội dung trùng từng ký tự với
 cột ``content`` mà worker ghi vào ``knowledge.knowledge_chunks``.
 
-VÌ SAO GEMINI CHỈ ĐƯỢC THẤY MỤC LỤC
------------------------------------
+VÌ SAO NGƯỜI VIẾT CÂU HỎI CHỈ ĐƯỢC THẤY MỤC LỤC
+-----------------------------------------------
 Mô hình ngôn ngữ nhìn đoạn văn rồi đặt câu hỏi thì chép lại từ ngữ của đoạn. Làn từ khoá hưởng
 lợi, và phép so dense ↔ sparse ↔ hybrid của Ngày 6 lệch đúng về phía đang bị đo. Mục lục chỉ
 có tiêu đề tài liệu và heading — đủ để biết kho nói về gì, không đủ để chép câu chữ.
 
 Heading dạng câu hỏi (kết thúc bằng "?") bị ẩn: ở ``faq-bao-hanh.html`` chính heading là câu
-hỏi mẫu, đưa cho Gemini thì nó chép nguyên văn.
+hỏi mẫu, đưa vào thì câu hỏi sinh ra chép nguyên văn.
 
 ĐỊNH DẠNG MỘT DÒNG CỦA ``golden_set.jsonl``
 -------------------------------------------
@@ -43,6 +43,7 @@ import hashlib
 import json
 import sys
 from collections import Counter
+from collections.abc import Collection
 from pathlib import Path
 
 from src.ai.exceptions import AiServiceError
@@ -63,14 +64,16 @@ SO_TU_TOI_THIEU = 5
 
 
 class KhoMau:
-    """Mọi tệp nhận 202 và có chữ trong ``manifest.csv``, giữ thứ tự manifest."""
+    """Mọi tệp nhận 202 và có chữ trong ``manifest.csv``, giữ thứ tự manifest. ``chi_tep`` giới
+    hạn vào vài tệp — cho test, để khỏi phân tích cả 19 tệp."""
 
-    def __init__(self) -> None:
+    def __init__(self, chi_tep: Collection[str] | None = None) -> None:
         self.tieu_de: dict[str, str] = {}
         self.ngon_ngu: dict[str, str] = {}
+        self.dinh_dang: dict[str, str] = {}
         self.doan: dict[str, list[Doan]] = {}
         for r in csv.DictReader(open(MAU / "manifest.csv", encoding="utf-8")):
-            if r["ma_http"] != "202":
+            if r["ma_http"] != "202" or (chi_tep is not None and r["file"] not in chi_tep):
                 continue
             try:
                 khoi = phan_tich_tep(MAU / r["file"], r["dinh_dang"])
@@ -79,9 +82,10 @@ class KhoMau:
             self.doan[r["file"]] = chia_doan(chuan_hoa_khoi(khoi))
             self.tieu_de[r["file"]] = r["title"]
             self.ngon_ngu[r["file"]] = r["language"]
+            self.dinh_dang[r["file"]] = r["dinh_dang"]
 
 
-def _de_so(chu: str) -> str:
+def de_so(chu: str) -> str:
     """Dạng so khớp: ``normalize_vi`` + gộp khoảng trắng + bỏ phân biệt hoa thường."""
     return " ".join(normalize_vi(chu).split()).casefold()
 
@@ -120,7 +124,7 @@ def in_doan(kho: KhoMau) -> None:
 
 def kiem(kho: KhoMau, duong_dan: Path) -> int:
     """In lỗi + thống kê. Trả mã thoát: 0 khi sạch lỗi."""
-    da_so = {tep: [_de_so(d.content) for d in ds] for tep, ds in kho.doan.items()}
+    da_so = {tep: [de_so(d.content) for d in ds] for tep, ds in kho.doan.items()}
     loi: list[str] = []
     ids: set[str] = set()
     cau_da_co: set[str] = set()
@@ -145,7 +149,7 @@ def kiem(kho: KhoMau, duong_dan: Path) -> int:
         if ma in ids:
             loi.append(f"{ma}: trùng id")
         ids.add(ma)
-        cau = _de_so(m["question"])
+        cau = de_so(m["question"])
         if not cau:
             loi.append(f"{ma}: câu hỏi rỗng")
         elif cau in cau_da_co:
@@ -169,7 +173,7 @@ def kiem(kho: KhoMau, duong_dan: Path) -> int:
             if len(trich.split()) < SO_TU_TOI_THIEU:
                 loi.append(f"{ma}: câu trích dưới {SO_TU_TOI_THIEU} từ — {trich!r}")
                 continue
-            khop = [i for i, c in enumerate(da_so[tep]) if _de_so(trich) in c]
+            khop = [i for i, c in enumerate(da_so[tep]) if de_so(trich) in c]
             if len(khop) != 1:
                 loi.append(f"{ma}: câu trích khớp {len(khop)} đoạn {khop} của {tep} — {trich!r}")
                 continue
@@ -192,7 +196,7 @@ def kiem(kho: KhoMau, duong_dan: Path) -> int:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     lenh = ap.add_subparsers(dest="lenh", required=True)
-    lenh.add_parser("muc-luc", help="tiêu đề + heading, KHÔNG nội dung — đưa cho Gemini")
+    lenh.add_parser("muc-luc", help="tiêu đề + heading, KHÔNG nội dung — để viết câu hỏi")
     lenh.add_parser("doan", help="toàn bộ đoạn theo tệp — để tìm câu trích")
     p_kiem = lenh.add_parser("kiem", help="kiểm golden_set.jsonl")
     p_kiem.add_argument("tep", nargs="?", type=Path, default=BO_VANG)
