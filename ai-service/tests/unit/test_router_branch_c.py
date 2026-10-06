@@ -22,6 +22,10 @@ if str(_src_dir) not in sys.path:
 import joblib  # noqa: E402
 import numpy as np  # noqa: E402
 
+# Đường dẫn neo vào gốc repo, không vào thư mục đang đứng: CI và lệnh `pytest tests` chạy từ
+# ai-service/, nên Path("artifacts/…") tương đối sẽ trỏ nhầm sang ai-service/artifacts/.
+_REPO = Path(__file__).resolve().parents[3]
+
 TAXONOMY_7 = [
     "GREETING",
     "KB_SEARCH",
@@ -43,11 +47,11 @@ def _sha256(path: Path) -> str:
 
 def test_branch_c_artifact_integrity():
     """Kiểm tra artifact model Nhánh C tồn tại và khớp mã băm trong DATA_HASHES.txt."""
-    artifact_path = Path("artifacts/router_branch_c.joblib")
+    artifact_path = _REPO / "artifacts/router_branch_c.joblib"
     assert artifact_path.is_file(), f"Không tìm thấy model artifact {artifact_path}"
 
     current_hash = _sha256(artifact_path)
-    hashes_file = Path("artifacts/DATA_HASHES.txt")
+    hashes_file = _REPO / "artifacts/DATA_HASHES.txt"
     assert hashes_file.is_file(), "Không tìm thấy artifacts/DATA_HASHES.txt"
 
     hashes_content = hashes_file.read_text(encoding="utf-8")
@@ -58,7 +62,7 @@ def test_branch_c_artifact_integrity():
 
 def test_branch_c_model_contract_and_prediction():
     """Kiểm tra hợp đồng đầu ra của Nhánh C: Đủ 7 nhãn và sinh vector chuẩn 1024 chiều."""
-    artifact = joblib.load("artifacts/router_branch_c.joblib")
+    artifact = joblib.load(_REPO / "artifacts/router_branch_c.joblib")
     assert artifact.get("branch") == "branch_c"
     assert artifact.get("taxonomy") == TAXONOMY_7
 
@@ -80,7 +84,7 @@ def test_branch_c_model_contract_and_prediction():
 
 def test_branch_c_latency_overhead_budget():
     """Kiểm tra ngân sách độ trễ router thêm (Overhead): p95 < 5 ms trên CPU (§5.3)."""
-    artifact = joblib.load("artifacts/router_branch_c.joblib")
+    artifact = joblib.load(_REPO / "artifacts/router_branch_c.joblib")
     clf = artifact["classifier_lr"]
 
     dummy_vec = np.random.randn(1, 1024).astype(np.float32)
@@ -99,7 +103,7 @@ def test_branch_c_latency_overhead_budget():
 
 def test_branch_c_evaluation_report_metrics():
     """Kiểm tra báo cáo đánh giá router_branch_c_eval.json có đủ các chỉ số khoa học."""
-    report_file = Path("reports/eval/router_branch_c_eval.json")
+    report_file = _REPO / "docs/report/router_branch_c_eval.json"
     assert report_file.is_file(), f"Không tìm thấy báo cáo {report_file}"
 
     with open(report_file, encoding="utf-8") as f:

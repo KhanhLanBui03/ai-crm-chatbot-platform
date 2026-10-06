@@ -6,11 +6,14 @@ MẪU. Mọi endpoint lấy cấu hình, phiên CSDL và ngữ cảnh tenant qua
 request ngay, không đoán và không dùng giá trị mặc định (ADR-0001).
 """
 
+from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import Depends, Header
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.config import Settings, get_settings
+from src.ai.db.session import get_tenant_session
 from src.ai.exceptions import TenantContextMissingError
 from src.ai.telemetry.logging import tenant_id_var, trace_id_var
 
@@ -39,4 +42,19 @@ async def get_tenant_id(x_tenant_id: Annotated[str | None, Header()] = None) -> 
 TraceIdDep = Annotated[str, Depends(get_trace_id)]
 TenantIdDep = Annotated[str, Depends(get_tenant_id)]
 
-# TODO: SessionDep — phiên SQLAlchemy async, đặt SET LOCAL app.tenant_id cho mỗi transaction
+
+async def get_session(tenant_id: TenantIdDep) -> AsyncIterator[AsyncSession]:
+    """Phiên CSDL đã gắn tenant — trọn một request nằm trong MỘT transaction.
+
+    Tenant đi thẳng từ ``get_tenant_id`` vào ``get_tenant_session``: không có đường nào khác
+    để đặt ``app.tenant_id``. Commit (hoặc rollback) xảy ra lúc dependency này kết thúc.
+    """
+    async with get_tenant_session(tenant_id) as session:
+        yield session
+
+
+# scope="function" là BẮT BUỘC, không phải tuỳ chọn. Mặc định ("request") phần sau yield
+# chạy SAU KHI phản hồi đã gửi đi — tức commit xảy ra sau khi client đã nhận 202. Commit mà
+# hỏng lúc đó thì client cầm job_id của một bản ghi không tồn tại. Với "function", commit
+# xong (hoặc lỗi thành 5xx) rồi mới trả phản hồi. Cần FastAPI >= 0.121.
+SessionDep = Annotated[AsyncSession, Depends(get_session, scope="function")]

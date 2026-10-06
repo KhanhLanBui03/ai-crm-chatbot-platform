@@ -14,6 +14,11 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * (và {@code open-in-view: false}), nên không có gì bảo đảm kết nối của service là kết nối đã được
  * đặt biến. CLAUDE.md luật 3: "SET LOCAL app.tenant_id trong CÙNG transaction với truy vấn".
  *
+ * <p>Cùng câu đó XOÁ {@code app.is_platform_admin} trong transaction: một kết nối từng phục vụ
+ * quản trị nền tảng có thể còn cờ này ở MỨC PHIÊN, và khi đó {@code current_tenant()} (V123) trả
+ * NULL — policy cho thấy mọi tenant dù {@code app.tenant_id} đã đặt đúng. Request đã có tenant thì
+ * không bao giờ là quản trị nền tảng.
+ *
  * <p>Gọi ở đầu mọi phương thức {@code @Transactional} chạm bảng có RLS. Gọi ngoài transaction là
  * lỗi lập trình — ném ngay thay vì âm thầm không có tác dụng.
  */
@@ -33,7 +38,8 @@ public class TenantTransactionScope {
         if (!TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new IllegalStateException("TenantTransactionScope.apply() phải gọi bên trong @Transactional.");
         }
-        jdbcTemplate.queryForObject(
-                "SELECT set_config('app.tenant_id', ?, true)", String.class, tenantId.toString());
+        jdbcTemplate.queryForList(
+                "SELECT set_config('app.tenant_id', ?, true), set_config('app.is_platform_admin', '', true)",
+                tenantId.toString());
     }
 }

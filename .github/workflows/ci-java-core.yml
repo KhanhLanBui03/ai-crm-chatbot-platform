@@ -1,0 +1,37 @@
+# CI java-core — biên dịch và chạy test trên hạ tầng thật mỗi lần java-core đổi.
+#
+# Tách khỏi ci.yml (ci-module-ai): khác ngôn ngữ, khác điều kiện kích hoạt. Chung một nguyên tắc
+# với job rls-test bên đó: KHÔNG khai `services:` mà để Testcontainers tự dựng Postgres
+# (pgvector/pgvector:pg16 + scripts/init-db.sql), RustFS và Kafka (cp-kafka:7.9.0, chế độ
+# ZooKeeper — ADR-0009). Một đường chạy duy nhất cho local lẫn CI. Runner ubuntu-latest có sẵn
+# Docker daemon.
+#
+# Các test ở đây phải ĐỎ ĐƯỢC — đã kiểm ngược trên máy 27/09/2026: bỏ khoá FOR UPDATE của dòng
+# hạn mức thì sauLuotDongThoiKhiConMotCho đỏ; bỏ chặn-theo-tenant của job phát outbox thì
+# suKienHongChiChanTenantCuaNo đỏ.
+
+name: ci-java-core
+
+on:
+  push:
+    paths: ["java-core/**", "scripts/init-db.sql", ".github/workflows/ci-java-core.yml"]
+  pull_request:
+    paths: ["java-core/**", "scripts/init-db.sql", ".github/workflows/ci-java-core.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # `test` chứ không `verify`/`package`: mục đích là cổng chặn, không cần đóng jar.
+      # Test tích hợp đọc ../scripts/init-db.sql — Maven chạy test với thư mục làm việc là
+      # java-core/, nên phải gọi bằng -f từ gốc repo như dưới đây.
+      - name: Biên dịch và chạy test
+        run: mvn -B -ntp -f java-core/pom.xml test

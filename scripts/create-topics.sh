@@ -26,7 +26,8 @@ TOPICS=(
   "ai.handoff.requested"       # producer: ai-service  consumers: live-agent-cg (java-core UC022)
   "ai.tool_call.audited"       # producer: ai-service  consumers: audit-cg (java-core UC024/028)
   "ai.turn.completed"          # producer: ai-service  consumers: analytics-cg, billing-cg (UC006/039)
-  "ai.dlq"                     # producer: ai-service  dead-letter queue lưu trữ thông điệp lỗi (30 ngày)
+  # ai.dlq KHÔNG nằm ở đây: tạo riêng bên dưới với retention 30 ngày. Để trong vòng lặp
+  # thì nó được tạo trước với retention mặc định 7 ngày và --if-not-exists nuốt khối sau.
 
   # --- 3. Topics legacy duy trì tương thích ngược (kế hoạch mục 4.3) ---
   "crm.conversation.v1"        # producer: java-core   consumers: analytics-cg, scoring-cg
@@ -46,6 +47,19 @@ for t in "${TOPICS[@]}"; do
     --replication-factor "$REPLICATION"
   echo "  ok: $t"
 done
+
+# Hàng đợi chết của ai-service (Master Plan §2.6, ADR-0024). Giữ 30 ngày thay vì mặc định 7:
+# đủ để sửa lỗi rồi phát lại, và khớp hạn dọn ai.processed_events — quá hạn đó không còn bản tin
+# nào để nhận trùng. Khoá vẫn là tenant_id (giữ nguyên khoá của bản tin gốc).
+DLQ_RETENTION_MS=$((30 * 24 * 60 * 60 * 1000))
+docker exec "$CONTAINER" kafka-topics \
+  --bootstrap-server "$BOOTSTRAP" \
+  --create --if-not-exists \
+  --topic "ai.dlq" \
+  --partitions "$PARTITIONS" \
+  --replication-factor "$REPLICATION" \
+  --config "retention.ms=$DLQ_RETENTION_MS"
+echo "  ok: ai.dlq (giữ 30 ngày)"
 
 echo
 echo "Danh sách topic hiện có:"

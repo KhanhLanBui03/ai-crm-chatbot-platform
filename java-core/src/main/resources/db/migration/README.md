@@ -22,7 +22,7 @@ V1<nn>__<mo_ta_khong_dau>.sql
 
 Không dấu tiếng Việt trong tên file. Nội dung và comment thì viết tiếng Việt bình thường.
 
-## Đã có — 13 file, 26 bảng
+## Đã có — 29 file, 26 bảng
 
 Nguồn: `docs/erd-ai-crm.md`. Sửa lược đồ thì sửa ERD trước, migration sau.
 
@@ -43,6 +43,20 @@ Nguồn: `docs/erd-ai-crm.md`. Sửa lược đồ thì sửa ERD trước, migr
 | V113 | Lịch sử điểm + mô hình đọc + quy tắc phân công — xem `docs/traceability-uc-db-api-screen.md` | `lead_scores` `metrics_daily` (+2 cột trên `tenants`) |
 | V114 | Tóm tắt hội thoại có cấu trúc — UC026 b3-b4 | — (3 cột + 2 `CHECK` trên `conversations`) |
 | V115 | Trần số thẻ theo gói — UC017 9.1 | — (1 cột trên `subscription_plans`) |
+| V116 | Hàm `email_is_taken` (`SECURITY DEFINER`) + policy `tenants` cho đăng ký — UC001 | — |
+| V117 | Policy INSERT cho các bảng khởi tạo lúc đăng ký tenant — UC001 | — (policy trên `tenant_subscriptions` `usage_records` `users` `user_roles`) |
+| V118 | Hàm `register_tenant` (`SECURITY DEFINER`) gom trọn luồng đăng ký — UC001 | — |
+| V119 | Hàm `verify_email` (`SECURITY DEFINER`) — UC001 | — |
+| V120 | Seed vai trò + tài khoản `PLATFORM_ADMIN` — UC007 | — |
+| V121 | Hàm `activate_user`, `update_failed_login`, `reset_failed_login` — UC002 | — |
+| V122 | Hàm `reset_password` (`SECURITY DEFINER`) — UC002 | — |
+| V123 | `current_tenant()` cho `PLATFORM_ADMIN` + policy đa tenant — UC007 | — |
+| V124 | Danh bạ: cho phép trùng, đồng ý xử lý dữ liệu, tìm không dấu (`fold_vi`) — UC016 | — (4 cột + 2 chỉ mục + trigger trên `contacts`) |
+| V125 | Ghi chú và gắn thẻ — UC017 | — (4 cột trên `contact_notes`, chỉ mục duy nhất trên `tags`, trigger đếm thẻ) |
+| V126 | Căn cứ câu trả lời AI lưu cùng tin nhắn — UC010 | — (cột `metadata` trên `messages`) |
+| V127 | Mỗi doanh nghiệp đúng một Web Widget — UC009 | — (chỉ mục duy nhất `uq_channels_one_widget`) |
+| V128 | Mốc chạm 80% / 100% của hạn mức — UC006, UC018. Viết với số V116; đổi hai lần khi merge develop 06/10 vì trùng số với migration của Dev B | — (2 cột + 1 `CHECK` trên `usage_records`) |
+| V129 | `register_tenant` ghi trần `STORAGE_MB` theo BYTE + sửa dòng đã ghi theo MB — UC001, UC018 (ADR-0023 (c)). Viết với số V127 | — |
 
 Migration chạy tự động khi khởi động java-core (`application.yml` → `spring.flyway`).
 Chạy tay bằng Flyway CLI:
