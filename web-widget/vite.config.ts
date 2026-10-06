@@ -1,5 +1,4 @@
 import { defineConfig } from 'vite'
-import path from 'node:path'
 
 // Widget được nhúng vào website của khách hàng bằng một thẻ <script>.
 // Vì vậy build ra thư viện IIFE một file, không phụ thuộc framework — giữ kích thước nhỏ
@@ -7,7 +6,8 @@ import path from 'node:path'
 export default defineConfig({
   build: {
     lib: {
-      entry: path.resolve(__dirname, 'src/main.ts'),
+      // Đường dẫn tương đối tính từ thư mục gốc dự án — không cần node:path/@types/node
+      entry: 'src/main.ts',
       name: 'CrmAiWidget',
       formats: ['iife'],
       fileName: () => 'widget.js',
