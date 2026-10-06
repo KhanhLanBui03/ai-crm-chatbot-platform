@@ -41,6 +41,12 @@ public class TokenRelayGatewayFilter implements GlobalFilter, Ordered {
                         public HttpHeaders getHeaders() {
                             HttpHeaders headers = new HttpHeaders();
                             headers.putAll(super.getHeaders());
+                            // Header danh tính CHỈ do gateway gắn từ JWT đã xác thực. Client tự gửi
+                            // X-Tenant-Id thì phải bỏ — trước đây request không có JWT (hoặc JWT
+                            // không có tenant_id) mang nguyên header giả xuống java-core (CLAUDE.md luật 1).
+                            headers.remove("X-Tenant-Id");
+                            headers.remove("X-User-Id");
+                            headers.remove("X-User-Scope");
                             headers.set("X-Trace-Id", traceId);
                             if (jwt != null) {
                                 String tenantId = jwt.getClaimAsString("tenant_id");
