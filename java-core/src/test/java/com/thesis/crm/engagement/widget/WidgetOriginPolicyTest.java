@@ -66,4 +66,34 @@ class WidgetOriginPolicyTest {
         assertThat(b.isOpenNow()).isTrue();
         assertThat(b.describe()).isEmpty();
     }
+
+    @Test
+    void dongCua2400_hieuLaHetNgay_khongPhaiNgayNghi() throws Exception {
+        // Lỗ hổng R5: "24:00" không phải LocalTime hợp lệ → cả ngày bị coi là NGHỈ, khách luôn nghe
+        // "ngoài giờ làm việc" dù doanh nghiệp mở 24/7.
+        var hours = new ObjectMapper().readTree("""
+                {"mon":{"open":"00:00","close":"24:00"},"tue":{"open":"00:00","close":"24:00"},
+                 "wed":{"open":"00:00","close":"24:00"},"thu":{"open":"00:00","close":"24:00"},
+                 "fri":{"open":"00:00","close":"24:00"},"sat":{"open":"00:00","close":"24:00"},
+                 "sun":{"open":"00:00","close":"24:00"}}""");
+        BusinessHours b = new BusinessHours(hours, "Asia/Ho_Chi_Minh");
+        assertThat(b.isOpen(ZonedDateTime.of(2026, 10, 6, 23, 30, 0, 0, ZoneId.of("Asia/Ho_Chi_Minh")))).isTrue();
+        assertThat(b.describe()).isEqualTo("Thứ Hai–Chủ nhật 00:00–24:00");
+    }
+
+    @Test
+    void kyTuSaoQuaRong_bitBoQua_ngayCaKhiDaNamTrongCsdl() {
+        // Lớp thứ hai cho dữ liệu lưu trước khi WidgetConfigService biết từ chối
+        assertThat(WidgetOriginPolicy.allowed("https://bat-ky.vn", List.of("*.vn"))).isFalse();
+        assertThat(WidgetOriginPolicy.allowed("https://shop.com.vn", List.of("*.com.vn"))).isFalse();
+        assertThat(WidgetOriginPolicy.allowed("https://shop.congtya.com.vn", List.of("*.congtya.com.vn"))).isTrue();
+        assertThat(WidgetOriginPolicy.isTooBroadWildcard("*.congtya.vn")).isFalse();
+    }
+
+    @Test
+    void tenMienCoDau_quyVePunycode() {
+        String ascii = java.net.IDN.toASCII("cửahàng.vn");
+        assertThat(WidgetOriginPolicy.normalize("https://CửaHàng.vn/")).isEqualTo(ascii);
+        assertThat(WidgetOriginPolicy.allowed("https://www." + ascii, List.of("cửahàng.vn"))).isTrue();
+    }
 }

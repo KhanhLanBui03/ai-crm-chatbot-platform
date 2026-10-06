@@ -235,6 +235,37 @@ class WidgetIntegrationTest extends EngagementIntegrationTestBase {
     }
 
     @Test
+    void nhanVienNhanHoiThoaiTrongLucAiDangNghi_khongChenCauTraLoiAiVao() throws Exception {
+        // Lỗ hổng R1: AI trả lời chậm; trong lúc đó nhân viên đã nhận hội thoại (UC015). Câu AI về
+        // muộn không được chen vào cuộc trò chuyện nhân viên đang giữ (UC010 6.3).
+        AI.respond(new FakeAiServer.Script(200, """
+                {"answer": "Câu AI về muộn", "citations": [], "route": "RAG", "refused": false,
+                 "handoff": false, "latency_ms": 900}
+                """, 900));
+        String token = newToken(KEY_W, ORIGIN_W);
+        Thread nhanVien = new Thread(() -> {
+            try {
+                Thread.sleep(400);
+                try (Connection c = owner(); PreparedStatement ps = c.prepareStatement("""
+                        UPDATE engagement.conversations SET status = 'AGENT_HANDLING'
+                        WHERE tenant_id = ? AND status = 'BOT_HANDLING' AND id IN
+                          (SELECT conversation_id FROM engagement.messages WHERE content = 'nhân viên sắp nhận')""")) {
+                    ps.setObject(1, TENANT_W);
+                    ps.executeUpdate();
+                }
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        });
+        nhanVien.start();
+        JsonNode turn = turnOf(send(token, ORIGIN_W, "nhân viên sắp nhận"));
+        nhanVien.join();
+        assertThat(turn.get("conversationStatus").asText()).isEqualTo("AGENT_HANDLING");
+        assertThat(turn.toString()).doesNotContain("Câu AI về muộn");
+        assertThat(countMessages(conversationOf(turn), "BOT")).isZero();
+    }
+
+    @Test
     void hetHanMuc_vanLuuTin_khongGoiAi_QUOTA_EXCEEDED() throws Exception {
         String token = newToken(KEY_Q, "https://shop-q.vn");
         int before = AI.calls.get();
@@ -397,6 +428,17 @@ class WidgetIntegrationTest extends EngagementIntegrationTestBase {
             ResultSet rs = ps.executeQuery();
             rs.next();
             return rs.getString(1);
+        }
+    }
+
+    private static long countMessages(String conversationId, String senderType) throws Exception {
+        try (Connection c = owner(); PreparedStatement ps = c.prepareStatement(
+                "SELECT count(*) FROM engagement.messages WHERE conversation_id = ?::uuid AND sender_type = ?")) {
+            ps.setString(1, conversationId);
+            ps.setString(2, senderType);
+            ResultSet rs = ps.executeQuery();
+            rs.next();
+            return rs.getLong(1);
         }
     }
 

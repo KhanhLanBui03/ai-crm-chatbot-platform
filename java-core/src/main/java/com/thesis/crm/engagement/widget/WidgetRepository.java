@@ -163,6 +163,14 @@ public class WidgetRepository {
                 UUID.class);
     }
 
+    /** Trạng thái hiện tại, KHOÁ dòng — để quyết định trong cùng transaction có còn được ghi trả lời AI không. */
+    public Optional<String> lockConversationStatus(UUID tenantId, UUID conversationId) {
+        return jdbc.query(
+                "SELECT status FROM engagement.conversations WHERE tenant_id = :t AND id = :c FOR UPDATE",
+                new MapSqlParameterSource("t", tenantId).addValue("c", conversationId),
+                (rs, i) -> rs.getString(1)).stream().findFirst();
+    }
+
     /** Chuyển cho nhân viên — chỉ khi AI đang giữ, để không ghi đè hội thoại đã có người nhận. */
     public boolean handoff(UUID tenantId, UUID conversationId, String reason) {
         return jdbc.update("""

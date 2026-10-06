@@ -18,6 +18,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -96,12 +97,18 @@ public class WidgetConfigService {
         config.put("greetingMessage", "Xin chào! Mình có thể giúp gì cho bạn?");
         config.putNull("avatarUrl");
         config.putArray("allowedDomains");
-        UUID id = jdbc.queryForObject("""
-                INSERT INTO engagement.channels (tenant_id, type, name, widget_key, status, config, created_by)
-                VALUES (:t, 'WEB_WIDGET', 'Web Widget', :k, 'ACTIVE', CAST(:c AS jsonb), :u) RETURNING id
-                """,
-                new MapSqlParameterSource("t", tenantId).addValue("k", key).addValue("c", config.toString())
-                        .addValue("u", actorUserId), UUID.class);
+        UUID id;
+        try {
+            id = jdbc.queryForObject("""
+                    INSERT INTO engagement.channels (tenant_id, type, name, widget_key, status, config, created_by)
+                    VALUES (:t, 'WEB_WIDGET', 'Web Widget', :k, 'ACTIVE', CAST(:c AS jsonb), :u) RETURNING id
+                    """,
+                    new MapSqlParameterSource("t", tenantId).addValue("k", key).addValue("c", config.toString())
+                            .addValue("u", actorUserId), UUID.class);
+        } catch (DuplicateKeyException e) {
+            // Hai quản trị viên bấm cùng lúc — người đến sau thua ở uq_channels_one_widget (V127)
+            throw new AppException("Doanh nghiệp đã có widget — mỗi doanh nghiệp một mã nhúng.", HttpStatus.CONFLICT);
+        }
         audit.recordUserAction(tenantId, actorUserId, "WIDGET_CREATED", "CHANNEL", id, Map.of("type", "WEB_WIDGET"));
         return toDto(require(tenantId));
     }
@@ -229,6 +236,10 @@ public class WidgetConfigService {
             }
             if (!DOMAIN.matcher(d).matches()) {
                 throw invalid("Tên miền không hợp lệ: " + r.strip());
+            }
+            if (WidgetOriginPolicy.isTooBroadWildcard(d)) {
+                throw invalid("\"" + r.strip() + "\" phủ quá rộng (mọi website cùng đuôi). Khai "
+                        + "*.ten-mien-cua-ban.vn thay vì *.vn hay *.com.vn.");
             }
             out.add(d);
         }

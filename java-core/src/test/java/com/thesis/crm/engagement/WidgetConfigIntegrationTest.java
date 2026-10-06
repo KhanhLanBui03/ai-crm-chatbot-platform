@@ -138,6 +138,48 @@ class WidgetConfigIntegrationTest extends EngagementIntegrationTestBase {
     }
 
     @Test
+    @Order(6)
+    void kyTuSaoPhuCaDuoiQuocGia_bitTuChoi() throws Exception {
+        // Lỗ hổng R2: "*.vn" hay "*.com.vn" cho widget chạy trên MỌI website .vn — gõ nhầm một
+        // dòng là mất toàn bộ lớp chặn nhúng trái phép.
+        for (String rong : new String[] {"*.vn", "*.com.vn", "*.com", "*.edu.vn"}) {
+            mvc.perform(put("/api/v1/widget-config").with(as(TENANT_B)).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"allowedDomains\":[\"" + rong + "\"]}"))
+                    .andExpect(status().isUnprocessableEntity());
+        }
+    }
+
+    @Test
+    @Order(7)
+    void tenMienTiengViet_luuDangPunycode_vaKhachMoPhienDuoc() throws Exception {
+        // Lỗ hổng R3: trình duyệt gửi Origin dạng punycode (xn--…), người dùng gõ có dấu → hoặc bị
+        // từ chối khi lưu, hoặc lưu rồi không bao giờ khớp.
+        String ascii = java.net.IDN.toASCII("cửahàng.vn");
+        mvc.perform(put("/api/v1/widget-config").with(as(TENANT_B)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"allowedDomains\":[\"cửahàng.vn\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.allowedDomains[0]").value(ascii));
+        String key = data(mvc.perform(get("/api/v1/widget-config").with(as(TENANT_B)))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8)).get("publicKey").asText();
+        widgetSession(key, "https://" + ascii).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+    }
+
+    @Test
+    @Order(8)
+    void haiWidgetChoMotDoanhNghiep_csdlChan() throws Exception {
+        // Lỗ hổng R4: hai quản trị viên bấm "Sinh mã" cùng lúc → kiểm-rồi-chèn đua nhau, ra hai
+        // widget; màn chỉ hiện một, khoá kia "mồ côi" vẫn chạy.
+        try (Connection c = owner(); PreparedStatement ps = c.prepareStatement("""
+                INSERT INTO engagement.channels (tenant_id, type, name, widget_key, status, config)
+                VALUES (?, 'WEB_WIDGET', 'Widget thứ hai', 'wk_trung_' || substr(md5(random()::text), 1, 8), 'ACTIVE', '{}')""")) {
+            ps.setObject(1, TENANT_B);
+            org.assertj.core.api.Assertions.assertThatThrownBy(ps::executeUpdate)
+                    .hasMessageContaining("uq_channels_one_widget");
+        }
+    }
+
+    @Test
     @Order(5)
     void cachLy_doanhNghiepAKhongThayWidgetCuaB() throws Exception {
         mvc.perform(get("/api/v1/widget-config").with(as(TENANT_A))).andExpect(status().isNotFound());

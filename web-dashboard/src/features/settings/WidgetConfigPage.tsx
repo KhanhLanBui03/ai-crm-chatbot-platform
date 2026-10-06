@@ -46,9 +46,15 @@ export function WidgetConfigPage() {
   const laQuanTri = useAppSelector((s) => s.auth.nguoiDung?.roleCode === 'TENANT_ADMIN')
   const [nhap, datNhap] = useState<CauHinhWidget | null>(null)
   const [daChep, datDaChep] = useState(false)
+  // Giữ NGUYÊN văn bản ô tên miền: nếu dựng lại từ mảng đã lọc dòng trống thì vừa bấm Enter,
+  // dòng mới đã bị lọc mất — không bao giờ gõ được tên miền thứ hai.
+  const [vanBanTenMien, datVanBanTenMien] = useState('')
 
   useEffect(() => {
-    if (truyVan.data) datNhap(truyVan.data)
+    if (truyVan.data) {
+      datNhap(truyVan.data)
+      datVanBanTenMien(truyVan.data.allowedDomains.join('\n'))
+    }
   }, [truyVan.data])
 
   const goc = truyVan.data
@@ -108,7 +114,11 @@ export function WidgetConfigPage() {
       coThayDoi={coThayDoi}
       dangLuu={ketQua.isLoading}
       loi={ketQua.error}
-      onHuy={() => goc && datNhap(goc)}
+      onHuy={() => {
+        if (!goc) return
+        datNhap(goc)
+        datVanBanTenMien(goc.allowedDomains.join('\n'))
+      }}
       onLuu={async () => {
         if (!nhap) return
         await luu(nhap).unwrap()
@@ -201,13 +211,14 @@ export function WidgetConfigPage() {
                 id="wg-mien"
                 rows={4}
                 className="resize-none font-mono text-[13px]"
-                value={nhap.allowedDomains.join('\n')}
-                onChange={(e) =>
+                value={vanBanTenMien}
+                onChange={(e) => {
+                  datVanBanTenMien(e.target.value)
                   dat(
                     'allowedDomains',
                     e.target.value.split('\n').map((d) => d.trim()).filter(Boolean),
                   )
-                }
+                }}
               />
               <FieldDescription>
                 Khai <code>cattuong.vn</code> là nhận luôn <code>www.cattuong.vn</code>. Muốn mọi tên

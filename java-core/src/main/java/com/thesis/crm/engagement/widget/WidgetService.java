@@ -194,6 +194,12 @@ public class WidgetService {
         List<MessageDto> out = new ArrayList<>(acc.messages());
         tx.executeWithoutResult(st -> {
             scope.apply(s.tenantId());
+            // Trong vài giây chờ AI, nhân viên có thể đã nhận hội thoại (UC015) hoặc đã đóng nó.
+            // Câu AI về muộn không được chen vào cuộc trò chuyện người đang giữ (UC010 6.3).
+            String now = repo.lockConversationStatus(s.tenantId(), acc.conversationId()).orElse("");
+            if (!"BOT_HANDLING".equals(now)) {
+                return;
+            }
             if (reply.isEmpty()) {
                 handoffWithNotice(s.tenantId(), acc.conversationId(), "LLM_ERROR", acc.hoursNote(), out);
                 return;

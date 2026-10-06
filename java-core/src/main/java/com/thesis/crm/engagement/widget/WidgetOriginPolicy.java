@@ -1,9 +1,11 @@
 package com.thesis.crm.engagement.widget;
 
+import java.net.IDN;
 import java.net.URI;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * UC009 bước 10 — đối chiếu tên miền gốc của trang đang nhúng widget với danh sách được phép.
@@ -20,7 +22,26 @@ import java.util.Optional;
  */
 public final class WidgetOriginPolicy {
 
+    /**
+     * Đuôi "dùng chung" ở Việt Nam: {@code *.com.vn} nghĩa là mọi công ty .com.vn, không phải tên miền
+     * con của MỘT doanh nghiệp. Không phải danh sách Public Suffix đầy đủ — chỉ các đuôi hay gặp.
+     */
+    private static final Set<String> SHARED_SECOND_LEVEL =
+            Set.of("com", "net", "org", "edu", "gov", "ac", "co", "info", "biz", "name", "pro", "health", "int");
+
     private WidgetOriginPolicy() {}
+
+    /**
+     * {@code *.vn}, {@code *.com}, {@code *.com.vn}… phủ hàng triệu website — gõ nhầm một dòng là mất
+     * toàn bộ lớp chặn nhúng trái phép. Ký tự sao phải đứng trước tên miền CỦA doanh nghiệp.
+     */
+    public static boolean isTooBroadWildcard(String rule) {
+        if (!rule.startsWith("*.")) {
+            return false;
+        }
+        String[] labels = rule.substring(2).split("\\.");
+        return labels.length < 2 || (labels.length == 2 && SHARED_SECOND_LEVEL.contains(labels[0]));
+    }
 
     /** Tên máy của header {@code Origin}; rỗng khi thiếu hoặc không đọc được. */
     public static Optional<String> hostOf(String origin) {
@@ -46,6 +67,9 @@ public final class WidgetOriginPolicy {
             String rule = normalize(raw);
             if (rule.isEmpty()) {
                 continue;
+            }
+            if (isTooBroadWildcard(rule)) {
+                continue;   // lớp thứ hai: dữ liệu cũ lưu trước khi có kiểm tra ở WidgetConfigService
             }
             if (rule.startsWith("*.")) {
                 String apex = rule.substring(2);
@@ -76,6 +100,15 @@ public final class WidgetOriginPolicy {
                 cut = i;
             }
         }
-        return s.substring(0, cut);
+        s = s.substring(0, cut);
+        // Trình duyệt luôn gửi Origin dạng punycode ("xn--…"); người dùng hay gõ có dấu ("cửahàng.vn")
+        boolean wild = s.startsWith("*.");
+        String body = wild ? s.substring(2) : s;
+        try {
+            body = IDN.toASCII(body).toLowerCase(Locale.ROOT);
+        } catch (IllegalArgumentException e) {
+            // để nguyên — WidgetConfigService sẽ từ chối vì sai dạng
+        }
+        return wild ? "*." + body : body;
     }
 }

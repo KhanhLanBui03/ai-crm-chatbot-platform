@@ -90,7 +90,8 @@ public final class BusinessHours {
 
     private static String label(JsonNode day) {
         LocalTime[] s = span(day);
-        return s == null ? null : s[0] + "–" + s[1];
+        // In lại đúng chữ người dùng nhập: "24:00" chứ không phải 23:59:59.999999999
+        return s == null ? null : day.path("open").asText() + "–" + day.path("close").asText();
     }
 
     private static LocalTime[] span(JsonNode day) {
@@ -99,7 +100,9 @@ public final class BusinessHours {
         }
         try {
             LocalTime open = LocalTime.parse(day.path("open").asText());
-            LocalTime close = LocalTime.parse(day.path("close").asText());
+            String c = day.path("close").asText();
+            // "24:00" = hết ngày (mở 24/7). LocalTime không có 24:00 — không đổi thì cả ngày bị coi là NGHỈ
+            LocalTime close = "24:00".equals(c) ? LocalTime.MAX : LocalTime.parse(c);
             return close.isAfter(open) ? new LocalTime[] {open, close} : null;
         } catch (RuntimeException e) {
             return null;
