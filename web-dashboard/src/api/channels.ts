@@ -41,9 +41,20 @@ export const channelsApi = apiSlice.injectEndpoints({
       invalidatesTags: [{ type: 'Kenh', id: 'WIDGET' }],
     }),
 
-    maNhungWidget: build.query<{ snippet: string }, void>({
+    maNhungWidget: build.query<{ publicKey: string; snippet: string }, void>({
       query: () => ({ url: '/api/v1/widget-config/snippet' }),
       providesTags: [{ type: 'Kenh', id: 'WIDGET' }],
+    }),
+
+    // UC009 bước 6–7 — chưa có widget thì GET trả 404, màn hiện nút này
+    sinhMaNhungWidget: build.mutation<CauHinhWidget, void>({
+      query: () => ({ url: '/api/v1/widget-config', method: 'POST' }),
+      invalidatesTags: [{ type: 'Kenh', id: 'WIDGET' }],
+    }),
+
+    // Khung thử chatbot: gọi AI thật, KHÔNG ghi CSDL — nên không invalidate gì
+    thuChatbotWidget: build.mutation<KetQuaThuChatbot, CauHoiThuChatbot>({
+      query: (than) => ({ url: '/api/v1/widget-config/test-chat', method: 'POST', body: than }),
     }),
   }),
 })
@@ -56,4 +67,18 @@ export const {
   useCauHinhWidgetQuery,
   useLuuCauHinhWidgetMutation,
   useMaNhungWidgetQuery,
+  useSinhMaNhungWidgetMutation,
+  useThuChatbotWidgetMutation,
 } = channelsApi
+
+export interface CauHoiThuChatbot {
+  message: string
+  history: { role: 'user' | 'assistant'; content: string }[]
+}
+
+export interface KetQuaThuChatbot {
+  answer: string
+  citations: { documentId: string | null; title: string | null; snippet: string | null }[]
+  handoff: boolean
+  refused: boolean
+}

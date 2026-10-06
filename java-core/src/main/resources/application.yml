@@ -76,6 +76,9 @@ ai-service:
 # Giá trị mặc định chỉ dùng cho dev; môi trường thật đặt WIDGET_TOKEN_SECRET.
 widget:
   token-secret: ${WIDGET_TOKEN_SECRET:dev-only-widget-secret-doi-ngay-khi-trien-khai-0123456789}
+  # Hai địa chỉ ghi vào thẻ <script> của mã nhúng (UC009 bước 8): nơi phục vụ widget.js và gateway công khai
+  script-url: ${WIDGET_SCRIPT_URL:http://localhost:5174/widget.js}
+  public-api-url: ${WIDGET_PUBLIC_API_URL:http://localhost:8080}
 
 eureka:
   client:
