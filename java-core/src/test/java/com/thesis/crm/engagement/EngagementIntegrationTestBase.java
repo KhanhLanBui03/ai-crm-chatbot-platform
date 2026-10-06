@@ -21,6 +21,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.utility.MountableFile;
@@ -45,8 +46,16 @@ abstract class EngagementIntegrationTestBase {
                     MountableFile.forHostPath(Path.of("..", "scripts", "init-db.sql").toAbsolutePath()),
                     "/docker-entrypoint-initdb.d/00-init.sql");
 
+    /** Redis thật cho phần chống spam của widget (UC010) — cùng image docker-compose. */
+    static final GenericContainer<?> REDIS =
+            new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
+
+    /** ai-service giả: trả lời theo kịch bản từng test, không gọi LLM thật (kết quả lặp lại được). */
+    static final FakeAiServer AI = FakeAiServer.start();
+
     static {
         PG.start();
+        REDIS.start();
     }
 
     @DynamicPropertySource
@@ -57,6 +66,10 @@ abstract class EngagementIntegrationTestBase {
         r.add("spring.flyway.user", () -> "crm_owner");
         r.add("spring.flyway.password", () -> "changeme");
         r.add("eureka.client.enabled", () -> "false");
+        r.add("spring.data.redis.host", REDIS::getHost);
+        r.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
+        r.add("ai-service.url", AI::baseUrl);
+        r.add("ai-service.chat-timeout", () -> "2s");
     }
 
     static final UUID TENANT_A = UUID.randomUUID();

@@ -20,6 +20,8 @@ public class SecurityConfig {
                         "/api/v1/auth/**",
                         "/actuator/**",
                         "/ai/v1/widget/**",
+                        // UC009/UC010 — khách vãng lai, java-core tự xác thực bằng token widget
+                        "/api/v1/widget/**",
                         "/ws/**"
                 ))
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)

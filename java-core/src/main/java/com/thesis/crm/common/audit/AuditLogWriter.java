@@ -48,6 +48,24 @@ public class AuditLogWriter {
                 tenantId, actorUserId, action, entityType, entityId, toJson(afterData));
     }
 
+    /**
+     * Sự kiện hệ thống tự ghi nhận, không có người dùng đăng nhập — vd. widget bị nhúng trên tên miền
+     * lạ (UC009 10.2). {@code actor_type = 'SYSTEM'} nên không cần {@code actor_user_id}.
+     */
+    public void recordSystemAction(
+            UUID tenantId, String action, String entityType, UUID entityId, String severity,
+            Map<String, ?> afterData) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("AuditLogWriter phải gọi bên trong @Transactional.");
+        }
+        jdbc.update("""
+                INSERT INTO platform.audit_logs
+                    (tenant_id, actor_type, action, entity_type, entity_id, severity, after_data)
+                VALUES (?, 'SYSTEM', ?, ?, ?, ?, CAST(? AS jsonb))
+                """,
+                tenantId, action, entityType, entityId, severity, toJson(afterData));
+    }
+
     private String toJson(Map<String, ?> data) {
         try {
             return data == null ? null : json.writeValueAsString(data);
