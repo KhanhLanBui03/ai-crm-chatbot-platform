@@ -8,116 +8,30 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.UUID;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.ResultActions;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.utility.DockerImageName;
-import org.testcontainers.utility.MountableFile;
 
 /**
  * UC016 — API danh bạ chạy trên Postgres THẬT (pgvector:pg16, cùng image với docker-compose),
  * migration Flyway thật, role runtime {@code crm_app} (KHÔNG phải chủ bảng) — H2 không có RLS nên
  * không dùng được cho bài kiểm cách ly tenant.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-class ContactApiIntegrationTest {
-
-    static final PostgreSQLContainer<?> PG = new PostgreSQLContainer<>(
-            DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres"))
-            .withDatabaseName("thesis_crm")
-            .withUsername("crm_owner")
-            .withPassword("changeme")
-            // Cùng script khởi tạo với docker-compose: tạo role crm_app + extension
-            .withCopyFileToContainer(
-                    MountableFile.forHostPath(Path.of("..", "scripts", "init-db.sql").toAbsolutePath()),
-                    "/docker-entrypoint-initdb.d/00-init.sql");
-
-    static {
-        PG.start();
-    }
-
-    @DynamicPropertySource
-    static void props(DynamicPropertyRegistry r) {
-        r.add("spring.datasource.url", PG::getJdbcUrl);
-        r.add("spring.datasource.username", () -> "crm_app");
-        r.add("spring.datasource.password", () -> "changeme");
-        r.add("spring.flyway.user", () -> "crm_owner");
-        r.add("spring.flyway.password", () -> "changeme");
-        r.add("eureka.client.enabled", () -> "false");
-    }
-
-    static final UUID TENANT_A = UUID.randomUUID();
-    static final UUID TENANT_B = UUID.randomUUID();
-    // Người dùng THẬT trong platform.users — audit_logs.actor_user_id có khoá ngoại tới đây
-    static final UUID USER_A = UUID.randomUUID();
-    static final UUID USER_B = UUID.randomUUID();
-
-    @Autowired MockMvc mvc;
-    @Autowired ObjectMapper json;
-
-    private static boolean seeded;
-
-    /**
-     * Chạy SAU khi Spring đã khởi động (Flyway đã tạo bảng) — {@code @BeforeAll} tĩnh chạy trước
-     * context nên chưa có bảng. Cờ tĩnh để chỉ seed một lần cho cả lớp.
-     */
-    @BeforeEach
-    void seedTenants() throws Exception {
-        if (seeded) {
-            return;
-        }
-        seeded = true;
-        // crm_owner là superuser của container nên ghi được platform.tenants bất chấp RLS
-        try (Connection c = owner()) {
-            for (UUID t : new UUID[] {TENANT_A, TENANT_B}) {
-                try (PreparedStatement ps = c.prepareStatement(
-                        "INSERT INTO platform.tenants (id, name, slug, contact_email) VALUES (?, ?, ?, ?)")) {
-                    ps.setObject(1, t);
-                    ps.setString(2, "DN " + t);
-                    ps.setString(3, "dn-" + t.toString().substring(0, 8));
-                    ps.setString(4, "admin@" + t.toString().substring(0, 8) + ".vn");
-                    ps.executeUpdate();
-                }
-            }
-            for (UUID[] tu : new UUID[][] {{TENANT_A, USER_A}, {TENANT_B, USER_B}}) {
-                try (PreparedStatement ps = c.prepareStatement("""
-                        INSERT INTO platform.users (id, tenant_id, email, password_hash, full_name, status)
-                        VALUES (?, ?, ?, 'x', 'Nhân viên test', 'ACTIVE')""")) {
-                    ps.setObject(1, tu[1]);
-                    ps.setObject(2, tu[0]);
-                    ps.setString(3, "nv@" + tu[0].toString().substring(0, 8) + ".vn");
-                    ps.executeUpdate();
-                }
-            }
-        }
-    }
+class ContactApiIntegrationTest extends EngagementIntegrationTestBase {
 
     // ── Tạo khách (SCR027) ──────────────────────────────────────────────────────
 
     @Test
     void taoKhachChuanHoaSoDienThoaiVaGhiDongY() throws Exception {
-        JsonNode data = create(TENANT_A, """
+        JsonNode data = createContact(TENANT_A, """
                 {"fullName":"Phạm Minh Tuấn","phone":"0903 111 222","email":"Tuan@Shop.VN",
                  "consentGranted":true}""")
                 .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString()
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8)
                 .transform(this::data);
 
         JsonNode c = data.get("contact");
@@ -135,13 +49,13 @@ class ContactApiIntegrationTest {
 
     @Test
     void trungSoDienThoaiVanTaoVaGoiYHopNhat() throws Exception {
-        String first = createdId(TENANT_A, """
+        String first = createdContactId(TENANT_A, """
                 {"fullName":"Khách gốc","phone":"0987 000 111"}""");
 
-        JsonNode data = data(create(TENANT_A, """
+        JsonNode data = data(createContact(TENANT_A, """
                 {"fullName":"Khách nhập lại","phone":"+84 987 000 111"}""")
                 .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString());
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
 
         assertThat(data.get("duplicateCandidates")).hasSize(1);
         assertThat(data.get("duplicateCandidates").get(0).get("id").asText()).isEqualTo(first);
@@ -149,7 +63,7 @@ class ContactApiIntegrationTest {
 
     @Test
     void thieuCaSoDienThoaiLanThuThiBaoLoi() throws Exception {
-        create(TENANT_A, """
+        createContact(TENANT_A, """
                 {"fullName":"Không có cách liên hệ"}""")
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.message").value("Phải có ít nhất số điện thoại hoặc địa chỉ thư."));
@@ -157,7 +71,7 @@ class ContactApiIntegrationTest {
 
     @Test
     void soDienThoaiSaiThiBaoLoi() throws Exception {
-        create(TENANT_A, """
+        createContact(TENANT_A, """
                 {"phone":"12345"}""").andExpect(status().isUnprocessableEntity());
     }
 
@@ -165,7 +79,7 @@ class ContactApiIntegrationTest {
 
     @Test
     void timKhongDauKhongPhanBietHoaThuong() throws Exception {
-        String id = createdId(TENANT_A, """
+        String id = createdContactId(TENANT_A, """
                 {"fullName":"Nguyễn Thị Ánh Tuyết","email":"tuyet.nguyen@khach.vn"}""");
 
         for (String q : new String[] {"tuyet", "ÁNH TUYẾT", "nguyen thi", "khach.vn"}) {
@@ -176,7 +90,7 @@ class ContactApiIntegrationTest {
 
     @Test
     void timTheoSoDienThoaiNhieuKieuGo() throws Exception {
-        String id = createdId(TENANT_A, """
+        String id = createdContactId(TENANT_A, """
                 {"fullName":"Khách điện thoại","phone":"0911 222 333"}""");
         for (String q : new String[] {"0911222333", "+84 911 222", "911.222"}) {
             assertThat(list(TENANT_A, "q=" + q).get("items").findValuesAsText("id")).as("q=%s", q).contains(id);
@@ -185,9 +99,9 @@ class ContactApiIntegrationTest {
 
     @Test
     void macDinhAnHoSoDaGopNhung_locTrangThaiThiThay() throws Exception {
-        String keep = createdId(TENANT_A, """
+        String keep = createdContactId(TENANT_A, """
                 {"fullName":"Bản giữ lại","email":"giu.lai@khach.vn"}""");
-        String merged = createdId(TENANT_A, """
+        String merged = createdContactId(TENANT_A, """
                 {"fullName":"Bản đã gộp","email":"da.gop@khach.vn"}""");
         try (Connection c = owner(); PreparedStatement ps = c.prepareStatement(
                 "UPDATE engagement.contacts SET status='MERGED', merged_into_contact_id=? WHERE id=?")) {
@@ -202,9 +116,9 @@ class ContactApiIntegrationTest {
 
     @Test
     void locTheoDongY() throws Exception {
-        String yes = createdId(TENANT_A, """
+        String yes = createdContactId(TENANT_A, """
                 {"fullName":"Đồng ý lọc","email":"loc.dongy@khach.vn","consentGranted":true}""");
-        String no = createdId(TENANT_A, """
+        String no = createdContactId(TENANT_A, """
                 {"fullName":"Chưa đồng ý lọc","email":"loc.chua@khach.vn"}""");
 
         assertThat(list(TENANT_A, "q=loc.&hasConsent=true").get("items").findValuesAsText("id"))
@@ -214,7 +128,7 @@ class ContactApiIntegrationTest {
     @Test
     void sapXepTheoTenVaPhanTrang() throws Exception {
         for (String n : new String[] {"Zed Sapxep", "An Sapxep", "Minh Sapxep"}) {
-            createdId(TENANT_A, "{\"fullName\":\"" + n + "\",\"email\":\"" + n.charAt(0) + ".sapxep@khach.vn\"}");
+            createdContactId(TENANT_A, "{\"fullName\":\"" + n + "\",\"email\":\"" + n.charAt(0) + ".sapxep@khach.vn\"}");
         }
         JsonNode page = list(TENANT_A, "q=sapxep&sort=fullName&size=2&page=0");
         assertThat(page.get("items").findValuesAsText("fullName")).containsExactly("An Sapxep", "Minh Sapxep");
@@ -232,7 +146,7 @@ class ContactApiIntegrationTest {
 
     @Test
     void xemHoSo() throws Exception {
-        String id = createdId(TENANT_A, """
+        String id = createdContactId(TENANT_A, """
                 {"fullName":"Xem hồ sơ","email":"ho.so@khach.vn","primaryChannel":"ZALO"}""");
         mvc.perform(get("/api/v1/contacts/" + id).with(as(TENANT_A)))
                 .andExpect(status().isOk())
@@ -252,33 +166,33 @@ class ContactApiIntegrationTest {
 
     @Test
     void doanhNghiepKhacKhongThayKhachCuaMinh_quaApi() throws Exception {
-        String idOfA = createdId(TENANT_A, """
+        String idOfA = createdContactId(TENANT_A, """
                 {"fullName":"Bí mật của A","email":"bimat@a.vn"}""");
 
         assertThat(list(TENANT_B, "q=bimat").get("items")).isEmpty();
         mvc.perform(get("/api/v1/contacts/" + idOfA).with(as(TENANT_B))).andExpect(status().isNotFound());
 
         // B tạo trùng thư với khách của A: KHÔNG được gợi ý hợp nhất sang dữ liệu của A
-        JsonNode data = data(create(TENANT_B, """
+        JsonNode data = data(createContact(TENANT_B, """
                 {"fullName":"Khách của B","email":"bimat@a.vn"}""")
-                .andReturn().getResponse().getContentAsString());
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
         assertThat(data.get("duplicateCandidates")).isEmpty();
     }
 
     @Test
     void headerTenantGiaKhongDoiDuocTenantCuaJwt() throws Exception {
-        String idOfB = createdId(TENANT_B, """
+        String idOfB = createdContactId(TENANT_B, """
                 {"fullName":"Khách riêng của B","email":"rieng@b.vn"}""");
         // JWT của A + header giả trỏ sang B: tenant phải lấy từ JWT, không từ header (luật 1)
         String res = mvc.perform(get("/api/v1/contacts?q=rieng").with(as(TENANT_A))
                         .header("X-Tenant-Id", TENANT_B.toString()))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         assertThat(data(res).get("items").findValuesAsText("id")).doesNotContain(idOfB);
     }
 
     @Test
     void rlsTrongCsdlChanTheoTenant_khongPhuThuocCauSql() throws Exception {
-        String idOfA = createdId(TENANT_A, """
+        String idOfA = createdContactId(TENANT_A, """
                 {"fullName":"Kiểm RLS","email":"rls@a.vn"}""");
 
         // Lớp thứ hai, độc lập với câu SQL của ứng dụng: crm_app, đặt tenant B, KHÔNG có WHERE tenant_id
@@ -319,13 +233,13 @@ class ContactApiIntegrationTest {
     @Test
     void tenGoDangNfdVanTimKhongDauDuoc() throws Exception {
         String nfd = java.text.Normalizer.normalize("Hoàng Yến Nhi", java.text.Normalizer.Form.NFD);
-        String id = createdId(TENANT_A, "{\"fullName\":\"" + nfd + "\",\"email\":\"yen.nhi@khach.vn\"}");
+        String id = createdContactId(TENANT_A, "{\"fullName\":\"" + nfd + "\",\"email\":\"yen.nhi@khach.vn\"}");
         assertThat(list(TENANT_A, "q=yen nhi").get("items").findValuesAsText("id")).contains(id);
     }
 
     @Test
     void timNhieuTuKhongCanLienNhau() throws Exception {
-        String id = createdId(TENANT_A, """
+        String id = createdContactId(TENANT_A, """
                 {"fullName":"Vũ Quốc Bảo","email":"bao.vu@khach.vn","phone":"0977 888 999"}""");
         // tên và số điện thoại không đứng liền nhau trong chuỗi tìm kiếm
         assertThat(list(TENANT_A, "q=bao 0977888").get("items").findValuesAsText("id")).contains(id);
@@ -334,18 +248,18 @@ class ContactApiIntegrationTest {
 
     @Test
     void soDienThoaiGoCaMaQuocGiaLanSo0VanDungVaPhatHienTrung() throws Exception {
-        String first = createdId(TENANT_A, """
+        String first = createdContactId(TENANT_A, """
                 {"fullName":"Gốc 0","phone":"0966 123 456"}""");
-        JsonNode data = data(create(TENANT_A, """
+        JsonNode data = data(createContact(TENANT_A, """
                 {"fullName":"Gõ +84 0","phone":"+84 0966 123 456"}""")
-                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
         assertThat(data.get("contact").get("phone").asText()).isEqualTo("0966123456");
         assertThat(data.get("duplicateCandidates").findValuesAsText("id")).contains(first);
     }
 
     @Test
     void dongYDuocGhiNhatKyKiemToan() throws Exception {
-        String id = createdId(TENANT_A, """
+        String id = createdContactId(TENANT_A, """
                 {"fullName":"Kiểm toán đồng ý","email":"kiem.toan@khach.vn","consentGranted":true}""");
         try (Connection c = owner(); PreparedStatement ps = c.prepareStatement("""
                 SELECT actor_type, actor_user_id, action, after_data ->> 'consentSource'
@@ -375,16 +289,16 @@ class ContactApiIntegrationTest {
     @Test
     void loiDuLieuNhapCungMotMaTrangThai() throws Exception {
         // Ba loại lỗi "dữ liệu khách nhập sai" phải cùng mã để giao diện xử lý một kiểu
-        create(TENANT_A, "{\"fullName\":\"x\"}").andExpect(status().isUnprocessableEntity());
-        create(TENANT_A, "{\"phone\":\"12345\"}").andExpect(status().isUnprocessableEntity());
-        create(TENANT_A, "{\"email\":\"khong-hop-le\"}").andExpect(status().isUnprocessableEntity());
+        createContact(TENANT_A, "{\"fullName\":\"x\"}").andExpect(status().isUnprocessableEntity());
+        createContact(TENANT_A, "{\"phone\":\"12345\"}").andExpect(status().isUnprocessableEntity());
+        createContact(TENANT_A, "{\"email\":\"khong-hop-le\"}").andExpect(status().isUnprocessableEntity());
     }
 
     @Test
     void locTheoThe() throws Exception {
-        String tagged = createdId(TENANT_A, """
+        String tagged = createdContactId(TENANT_A, """
                 {"fullName":"Có thẻ VIP","email":"co.the@khach.vn"}""");
-        String plain = createdId(TENANT_A, """
+        String plain = createdContactId(TENANT_A, """
                 {"fullName":"Không thẻ","email":"khong.the@khach.vn"}""");
         UUID tag = UUID.randomUUID();
         try (Connection c = owner()) {
@@ -430,38 +344,9 @@ class ContactApiIntegrationTest {
 
     // ── tiện ích ────────────────────────────────────────────────────────────────
 
-    private static JwtRequestPostProcessor as(UUID tenantId) {
-        UUID user = TENANT_A.equals(tenantId) ? USER_A : USER_B;
-        return jwt().jwt(j -> j.subject(user.toString())
-                .claim("tenant_id", tenantId.toString())
-                .claim("role", "TENANT_ADMIN"));
-    }
-
-    private ResultActions create(UUID tenantId, String body) throws Exception {
-        return mvc.perform(post("/api/v1/contacts").with(as(tenantId))
-                .contentType(MediaType.APPLICATION_JSON).content(body));
-    }
-
-    private String createdId(UUID tenantId, String body) throws Exception {
-        String res = create(tenantId, body).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-        return data(res).get("contact").get("id").asText();
-    }
-
     private JsonNode list(UUID tenantId, String query) throws Exception {
         String res = mvc.perform(get("/api/v1/contacts?" + query).with(as(tenantId)))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         return data(res);
-    }
-
-    private JsonNode data(String body) {
-        try {
-            return json.readTree(body).get("data");
-        } catch (Exception e) {
-            throw new IllegalStateException(body, e);
-        }
-    }
-
-    private static Connection owner() throws Exception {
-        return DriverManager.getConnection(PG.getJdbcUrl(), "crm_owner", "changeme");
     }
 }

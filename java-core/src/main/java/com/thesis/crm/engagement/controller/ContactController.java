@@ -1,5 +1,8 @@
 package com.thesis.crm.engagement.controller;
 
+import static com.thesis.crm.security.CurrentActor.requireTenantId;
+import static com.thesis.crm.security.CurrentActor.requireUserId;
+
 import com.thesis.crm.common.exception.AppException;
 import com.thesis.crm.common.response.ApiResponse;
 import com.thesis.crm.common.response.PageResponse;
@@ -8,7 +11,6 @@ import com.thesis.crm.engagement.dto.response.ContactDtos.ContactDetailDto;
 import com.thesis.crm.engagement.dto.response.ContactDtos.ContactDto;
 import com.thesis.crm.engagement.dto.response.ContactDtos.CreateContactResult;
 import com.thesis.crm.engagement.service.ContactService;
-import com.thesis.crm.security.SecurityUtils;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -24,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * UC016 — {@code /api/v1/contacts} (docs/openapi/dashboard-api.yaml).
  *
- * <p>{@code tenantId} LUÔN lấy từ JWT đã xác thực ({@link SecurityUtils}), không bao giờ từ
+ * <p>{@code tenantId} LUÔN lấy từ JWT đã xác thực ({@code CurrentActor}), không bao giờ từ
  * query/body/path — CLAUDE.md luật 1.
  */
 @RestController
@@ -74,23 +76,5 @@ public class ContactController {
         requireTenantId();
         throw new AppException(
                 "Chức năng hợp nhất khách hàng chưa được hỗ trợ ở phiên bản này.", HttpStatus.NOT_IMPLEMENTED);
-    }
-
-    /** Người thao tác — cần cho nhật ký kiểm toán; JWT không mang mã người dùng hợp lệ thì từ chối. */
-    private UUID requireUserId() {
-        UUID userId = SecurityUtils.getCurrentUserId();
-        if (userId == null) {
-            throw new AppException("Phiên làm việc không xác định được người dùng.", HttpStatus.UNAUTHORIZED);
-        }
-        return userId;
-    }
-
-    private UUID requireTenantId() {
-        UUID tenantId = SecurityUtils.getCurrentTenantId();
-        if (tenantId == null) {
-            throw new AppException(
-                    "Phiên làm việc không hợp lệ hoặc thiếu thông tin doanh nghiệp.", HttpStatus.UNAUTHORIZED);
-        }
-        return tenantId;
     }
 }
