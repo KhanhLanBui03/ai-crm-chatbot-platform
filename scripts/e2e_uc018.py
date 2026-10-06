@@ -20,7 +20,6 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 import unicodedata
@@ -35,9 +34,15 @@ from minio import Minio
 REPO = Path(__file__).resolve().parents[1]
 MAU = REPO / "data" / "kb_samples"
 URL = os.environ["E2E_JAVA_CORE_URL"] + "/api/v1/documents"
+URL_DANG_NHAP = os.environ["E2E_JAVA_CORE_URL"] + "/api/v1/auth/login"
 TENANT_A = "11111111-1111-1111-1111-111111111111"
 TENANT_B = "22222222-2222-2222-2222-222222222222"
-NGUOI_TAI = "00000000-0000-0000-0000-00000000a001"  # sub mặc định của scripts/dev-jwt.sh
+# Quản trị viên mỗi tenant — e2e-uc018.sh seed với đúng id/email này (cmd_up).
+NGUOI_TAI = {TENANT_A: "00000000-0000-0000-0000-00000000a001",
+             TENANT_B: "00000000-0000-0000-0000-00000000b001"}
+EMAIL = {TENANT_A: "a@example.test", TENANT_B: "b@example.test"}
+# Hash bcrypt của hai user được CHÉP từ admin@platform.vn (V120), nên mật khẩu trùng tài khoản đó.
+MAT_KHAU = "Admin@123456"
 BUCKET = os.environ.get("E2E_BUCKET", "kb-tai-lieu")
 GIOI_HAN = 20 * 1024 * 1024
 
@@ -72,10 +77,14 @@ def nfc(s: str) -> str:
 
 
 def token(tenant: str) -> str:
-    """JWT RS256 từ scripts/dev-jwt.sh — cùng cặp khoá java-core đang tin (DEV_JWT_DIR)."""
-    kq = subprocess.run([str(REPO / "scripts" / "dev-jwt.sh"), tenant],
-                        capture_output=True, text=True, check=True, env=os.environ.copy())
-    return kq.stdout.strip()
+    """JWT RS256 do CHÍNH java-core phát qua đăng nhập thật (UC002).
+
+    java-core ký bằng khoá RSA sinh trong RAM lúc khởi động — không còn cách nào tự ký token từ
+    bên ngoài. Đăng nhập lại mỗi lần gọi: token sống 15 phút, `nap` chạy sau `run` có thể quá hạn.
+    """
+    r = httpx.post(URL_DANG_NHAP, json={"email": EMAIL[tenant], "password": MAT_KHAU}, timeout=30)
+    r.raise_for_status()
+    return r.json()["data"]["accessToken"]
 
 
 def tai_len(tok: str, tenant: str, ten: str, du_lieu: bytes, title: str, language: str = "vi",
@@ -264,7 +273,7 @@ def phan_3_soi_du_lieu() -> int:
         ("`file_name` = tên người dùng đặt (NFC)", lambda d: d.ten_tep, lambda r: r[7]),
         ("`file_size_bytes` = dung lượng thật", lambda d: d.kich_thuoc, lambda r: r[9]),
         ("`version` khớp phản hồi 202", lambda d: d.version, lambda r: r[12]),
-        ("`uploaded_by` = `sub` của JWT", lambda d: NGUOI_TAI, lambda r: r[13]),
+        ("`uploaded_by` = `sub` của JWT", lambda d: NGUOI_TAI[d.tenant], lambda r: r[13]),
     ]:
         bk.kiem(ten, *_lech([(d.ten_tep, lay_mong(d), lay_that(r)) for d, r in co]))
 

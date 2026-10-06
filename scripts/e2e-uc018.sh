@@ -16,17 +16,24 @@
 # Mọi cổng ở dải 5xxxx để không đụng stack docker compose đang chạy (5432, 9010, 29092, 8000,
 # 8081). KHÔNG chạm CSDL dev: Postgres ở đây là container riêng, xoá khi `down`.
 #
+# Token lấy qua đăng nhập thật POST /api/v1/auth/login (java-core ký bằng khoá RSA sinh trong RAM,
+# không tự ký từ ngoài được) — nên cần Redis (refresh token) và hai user quản trị seed ở `up`.
+#
 # Cần: Docker, ai-service/.venv (httpx), JDK 21 + Maven.
 set -euo pipefail
 
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 STATE="${TMPDIR:-/tmp}/uc018-e2e"
 NET=uc018-e2e
-PG=uc018-e2e-pg; S3=uc018-e2e-s3; ZK=uc018-e2e-zk; KAFKA=uc018-e2e-kafka
+PG=uc018-e2e-pg; S3=uc018-e2e-s3; ZK=uc018-e2e-zk; KAFKA=uc018-e2e-kafka; REDIS=uc018-e2e-redis
 PG_PORT=55432; S3_PORT=59010; S3_UI_PORT=59011; KAFKA_PORT=59092; AI_PORT=58000; CORE_PORT=58081
+REDIS_PORT=56379
 S3_KEY=kb-e2e; S3_SECRET=kb-e2e-secret; BUCKET=kb-tai-lieu
 TENANT_A=11111111-1111-1111-1111-111111111111
 TENANT_B=22222222-2222-2222-2222-222222222222
+# Quản trị viên mỗi tenant — e2e_uc018.py đăng nhập bằng email tương ứng, kiểm uploaded_by = id này.
+NGUOI_A=00000000-0000-0000-0000-00000000a001
+NGUOI_B=00000000-0000-0000-0000-00000000b001
 
 cho() {  # cho <mô tả> <số giây> <lệnh…> — chờ tới khi lệnh thành công
     local mo_ta="$1" han="$2"; shift 2
@@ -56,11 +63,14 @@ cmd_up() {
         -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT \
         -e KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
         -e KAFKA_NUM_PARTITIONS=3 confluentinc/cp-kafka:7.9.0 >/dev/null
+    # Refresh token của đăng nhập lưu ở Redis — thiếu thì /auth/login trả 500.
+    docker run -d --name "$REDIS" --network "$NET" -p "$REDIS_PORT:6379" redis:7-alpine >/dev/null
 
     cho "Postgres" 60 docker exec "$PG" pg_isready -U crm_owner -d thesis_crm
     sleep 2  # initdb khởi động lại một lần sau khi chạy init-db.sql
     cho "Postgres" 30 docker exec "$PG" psql -U crm_owner -d thesis_crm -c "select 1"
     cho "RustFS" 60 curl -fsS "http://localhost:$S3_PORT/health"
+    cho "Redis" 30 docker exec "$REDIS" redis-cli ping
     curl -fsS --aws-sigv4 "aws:amz:us-east-1:s3" --user "$S3_KEY:$S3_SECRET" \
         -X PUT "http://localhost:$S3_PORT/$BUCKET" >/dev/null
     for f in "$ROOT"/ai-service/migration/V2*.sql; do psql_e2e < "$f" >/dev/null; done
@@ -82,12 +92,11 @@ cmd_up() {
 
     echo "Đóng gói và dựng java-core (:$CORE_PORT)…"
     mvn -q -B -ntp -f "$ROOT/java-core/pom.xml" -DskipTests package
-    DEV_JWT_DIR="$STATE/jwt" "$ROOT/scripts/dev-jwt.sh" "$TENANT_A" >/dev/null 2>&1
     SERVER_PORT="$CORE_PORT" DB_HOST=localhost DB_PORT="$PG_PORT" DB_USERNAME=crm_app DB_PASSWORD=changeme \
         DB_MIGRATION_USER=crm_owner DB_MIGRATION_PASSWORD=changeme \
         S3_ENDPOINT="localhost:$S3_PORT" S3_ACCESS_KEY="$S3_KEY" S3_SECRET_KEY="$S3_SECRET" \
         AI_SERVICE_URL="http://localhost:$AI_PORT" KAFKA_BOOTSTRAP="localhost:$KAFKA_PORT" \
-        JWT_PUBLIC_KEY_LOCATION="file:$STATE/jwt/dev-public.pem" EUREKA_CLIENT_ENABLED=false REDIS_HOST=localhost \
+        EUREKA_CLIENT_ENABLED=false REDIS_HOST=localhost REDIS_PORT="$REDIS_PORT" \
         nohup java -jar "$ROOT"/java-core/target/java-core-*.jar >"$STATE/java-core.log" 2>&1 &
     echo $! >"$STATE/java-core.pid"
 
@@ -102,6 +111,18 @@ INSERT INTO platform.tenant_subscriptions (tenant_id, plan_id, status, period_st
 SELECT v.t, p.id, 'ACTIVE', now() - interval '1 day', now() + interval '29 days'
   FROM (VALUES ('$TENANT_A'::uuid, 'STARTER'), ('$TENANT_B'::uuid, 'TRIAL')) AS v(t, code)
   JOIN platform.subscription_plans p ON p.code = v.code;
+-- Một quản trị viên mỗi tenant. Hash bcrypt CHÉP từ admin@platform.vn (seed V120) — repo không có
+-- pgcrypto để tự băm; mật khẩu vì thế trùng tài khoản đó (e2e_uc018.py: MAT_KHAU).
+INSERT INTO platform.users (id, tenant_id, email, password_hash, full_name, scope, status)
+SELECT v.id::uuid, v.t::uuid, v.email, a.password_hash, v.ten, 'TENANT', 'ACTIVE'
+  FROM (VALUES ('$NGUOI_A', '$TENANT_A', 'a@example.test', 'Quản trị E2E A'),
+               ('$NGUOI_B', '$TENANT_B', 'b@example.test', 'Quản trị E2E B')) AS v(id, t, email, ten)
+  CROSS JOIN (SELECT password_hash FROM platform.users WHERE email = 'admin@platform.vn') AS a;
+INSERT INTO platform.user_roles (user_id, role_id, tenant_id)
+SELECT u.id, r.id, u.tenant_id
+  FROM platform.users u
+  JOIN platform.roles r ON r.code = 'TENANT_ADMIN' AND r.tenant_id IS NULL
+ WHERE u.id IN ('$NGUOI_A', '$NGUOI_B');
 SQL
     echo "Sẵn sàng. Tiếp: scripts/e2e-uc018.sh run"
 }
@@ -110,7 +131,7 @@ cmd_run() {
     local loi=0
     # Phần 3 của e2e_uc018.py soi CSDL bằng crm_owner (bỏ qua RLS) — góc nhìn kiểm tra, không
     # phải đường đi của ứng dụng.
-    E2E_JAVA_CORE_URL="http://localhost:$CORE_PORT" DEV_JWT_DIR="$STATE/jwt" \
+    E2E_JAVA_CORE_URL="http://localhost:$CORE_PORT" \
         E2E_DB_DSN="postgresql://crm_owner:changeme@localhost:$PG_PORT/thesis_crm" \
         E2E_S3_ENDPOINT="localhost:$S3_PORT" E2E_S3_ACCESS="$S3_KEY" E2E_S3_SECRET="$S3_SECRET" \
         E2E_BUCKET="$BUCKET" E2E_KAFKA="localhost:$KAFKA_PORT" E2E_STATE="$STATE" \
@@ -151,7 +172,7 @@ cmd_run() {
 }
 
 cmd_soi() {
-    E2E_JAVA_CORE_URL="http://localhost:$CORE_PORT" DEV_JWT_DIR="$STATE/jwt" \
+    E2E_JAVA_CORE_URL="http://localhost:$CORE_PORT" \
         E2E_DB_DSN="postgresql://crm_owner:changeme@localhost:$PG_PORT/thesis_crm" \
         E2E_S3_ENDPOINT="localhost:$S3_PORT" E2E_S3_ACCESS="$S3_KEY" E2E_S3_SECRET="$S3_SECRET" \
         E2E_BUCKET="$BUCKET" E2E_KAFKA="localhost:$KAFKA_PORT" E2E_STATE="$STATE" \
@@ -171,7 +192,7 @@ cmd_nap() {
     echo $! >"$STATE/ai-worker.pid"
 
     local loi=0
-    E2E_JAVA_CORE_URL="http://localhost:$CORE_PORT" DEV_JWT_DIR="$STATE/jwt" \
+    E2E_JAVA_CORE_URL="http://localhost:$CORE_PORT" \
         E2E_AI_URL="http://localhost:$AI_PORT" E2E_KAFKA="localhost:$KAFKA_PORT" \
         E2E_DB_DSN="postgresql://crm_owner:changeme@localhost:$PG_PORT/thesis_crm" \
         E2E_WORKER_PID="$(cat "$STATE/ai-worker.pid")" E2E_STATE="$STATE" \
@@ -222,7 +243,7 @@ cmd_down() {
     for p in java-core ai-service ai-worker; do
         [[ -f "$STATE/$p.pid" ]] && kill "$(cat "$STATE/$p.pid")" 2>/dev/null || true
     done
-    docker rm -f "$PG" "$S3" "$KAFKA" "$ZK" >/dev/null 2>&1 || true
+    docker rm -f "$PG" "$S3" "$KAFKA" "$ZK" "$REDIS" >/dev/null 2>&1 || true
     docker network rm "$NET" >/dev/null 2>&1 || true
     rm -rf "$STATE"
     echo "Đã dọn sạch hạ tầng e2e."
