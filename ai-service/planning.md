@@ -306,7 +306,7 @@ chỉ chọn model + export, dời đo parity sang sáng Ngày 3.
       của `src/api/deps.py` (header `X-Tenant-Id`), **không** từ body/query/path.*
 - [x] 🤖 Kiểm phần mở rộng + dung lượng + hạn mức `max_documents` của gói — *verify: ngưỡng
       **cảnh báo 80%** và **chặn 100%** là hai nhánh khác nhau, không gộp.*
-- [x] 🤖 Ghi bản ghi `PENDING` — *verify: `title` 3–255 ký tự (ADR-0017), `description` ≤ 500,
+- [x] 🤖 Ghi bản ghi `PENDING` — *verify: `title` 3–255 ký tự (ADR-0020), `description` ≤ 500,
       `language` ∈ {`vi`,`en`}; ràng buộc `ck_doc_failed` của V202 không bị vi phạm.*
 - [x] 🖐 **Lưu tệp theo đường dẫn CÓ CHỨA `tenant_id`** — cô lập ngay ở tầng kho lưu trữ chứ
       không chỉ ở truy vấn. *(Claude viết theo yêu cầu; bạn đã tự giải thích được — 27/09/2026)*
@@ -437,13 +437,13 @@ lượng (không phải ~500 — ranh giới heading là ranh giới đoạn, xe
       ảnh hưởng thì bỏ qua sự kiện**. *Giao nhận ít nhất một lần: nhận trùng là chắc chắn, không
       phải rủi ro.*
       *(27/09: bảng là **`ai.processed_events`** (V211), KHÔNG phải `analytics.` — `ai_app` không có
-      USAGE trên schema của Track A (ADR-0021). `processed_event_repository.ghi_nhan`, ghi CÙNG
+      USAGE trên schema của Track A (ADR-0024). `processed_event_repository.ghi_nhan`, ghi CÙNG
       transaction với bước nhận việc trong `service.nap_tai_lieu`. Tick khi bạn tự giải thích lại.)*
 - [ ] 🤖 Chuyển tài liệu sang `READY` + `chunk_count` + `indexed_at`; lỗi vĩnh viễn đẩy sang
       **DLQ** — *verify: phân biệt lỗi tạm thời (retry) và lỗi vĩnh viễn (DLQ); đừng đẩy hết vào DLQ.*
       *(27/09: `service.nap_tai_lieu`. DLQ `ai.dlq` chỉ cho sự kiện KHÔNG thành trạng thái tài liệu
       (sai lược đồ, CSDL chết 3 lần); `PARSE_*` → `FAILED` trên SCR033, không DLQ; S3/ai-embed chết
-      → `PENDING`, thử lại 5 s/30 s, 3 lượt → `FAILED INGEST_RETRY_EXHAUSTED`. ADR-0021 quyết định 4–5.)*
+      → `PENDING`, thử lại 5 s/30 s, 3 lượt → `FAILED INGEST_RETRY_EXHAUSTED`. ADR-0024 quyết định 4–5.)*
 - [ ] 🤖 Endpoint trả **6 bước tiến độ** của job.
       *(27/09: `GET /v1/ai/kb/ingestion-jobs/{job_id}` — `service.tien_do_nap` + `rag/ingest/tien_do.py`;
       DTO bám `CongViecNap`. Hợp đồng ai-service → java-core còn TODO.)*
@@ -558,10 +558,10 @@ fine-tune) · số cặp huấn luyện khai thác được + tỉ lệ hard neg
       ⚠️ *Bản fine-tune có phân bố trọng số đã dịch nên INT8 có thể lệch nhiều hơn bản gốc.*
       🚫 ~~**Không đạt → DỪNG, giữ bản pretrained, ghi ADR.**~~
       **Sửa 26/09 — đường lùi này ĐÃ VÔ HIỆU:** bản pretrained **cũng trượt** cổng đó ở Ngày 2
-      (`mean` 0,98476 · `min` 0,96692, xem [ADR-0018](../docs/adr/0018-cong-parity-int8-truot-phan-xu-bang-recall.md)).
+      (`mean` 0,98476 · `min` 0,96692, xem [ADR-0021](../docs/adr/0021-cong-parity-int8-truot-phan-xu-bang-recall.md)).
       "Giữ bản pretrained" là lùi về chỗ cũng đang hỏng. Đường lùi thật: giữ pretrained **fp32**
       làm nhánh đối chứng, và quyết định ship bằng **Recall@5**, không bằng cổng parity.
-- [ ] 🖐 **Đo Recall@5 fp32 vs INT8 trên bộ vàng** — đây là phép thử phân xử của ADR-0018, làm
+- [ ] 🖐 **Đo Recall@5 fp32 vs INT8 trên bộ vàng** — đây là phép thử phân xử của ADR-0021, làm
       **cùng lượt** với phép so fine-tune ↔ pretrained ngay dưới, dùng chung paired bootstrap.
       Chỉ cần nhúng lại **tập chunk của bộ vàng** (84 cặp ⇒ vài trăm chunk, vài phút), **không**
       phải reindex toàn kho.

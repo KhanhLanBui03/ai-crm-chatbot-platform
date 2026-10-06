@@ -345,7 +345,7 @@ async def test_tien_do_queued_roi_done(client, ha_tang, kho_s3, tenant_a):
 
 
 async def test_tien_do_giua_chung_embedding(client, ha_tang, kho_s3, tenant_a):
-    """Đọc tiến độ TRONG LÚC đang nhúng — thứ phương án 2 của ADR-0021 mua được."""
+    """Đọc tiến độ TRONG LÚC đang nhúng — thứ phương án 2 của ADR-0024 mua được."""
     factory, _ = ha_tang
     doc = await tai_lieu_pending(factory, kho_s3, tenant_a, "chinh-sach-bao-hanh.pdf", "PDF")
     anh_chup: dict = {}
