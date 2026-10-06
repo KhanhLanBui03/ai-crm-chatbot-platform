@@ -171,6 +171,22 @@ public class InboxRepository {
                 """, p, InboxRepository::mapMsg);
     }
 
+    /**
+     * Hội thoại bị chuyển cho người VÌ HẾT HẠN MỨC và hạn mức hội thoại của thuê bao hiện hành vẫn
+     * đang hết — trả lại cho AI lúc này là lách hạn mức (widget chỉ kiểm hạn mức khi mở hội thoại mới).
+     */
+    public boolean blockedByQuota(UUID tenantId, UUID conversationId) {
+        Boolean b = jdbc.queryForObject("""
+                SELECT c.handover_reason = 'QUOTA_EXCEEDED' AND EXISTS (
+                         SELECT 1 FROM platform.usage_records u
+                         JOIN platform.tenant_subscriptions s ON s.id = u.subscription_id AND s.tenant_id = u.tenant_id
+                         WHERE u.tenant_id = c.tenant_id AND u.metric = 'CONVERSATION'
+                           AND s.status IN ('TRIALING','ACTIVE','PAST_DUE') AND u.used_value >= u.quota_value)
+                FROM engagement.conversations c WHERE c.tenant_id = :t AND c.id = :c
+                """, new MapSqlParameterSource("t", tenantId).addValue("c", conversationId), Boolean.class);
+        return Boolean.TRUE.equals(b);
+    }
+
     /** Người dùng còn hoạt động của doanh nghiệp — đích hợp lệ khi phân công. */
     public Optional<String> activeUserName(UUID tenantId, UUID userId) {
         return jdbc.query("""

@@ -51,8 +51,13 @@ public class InboxService {
     private static final Set<String> CLOSED = Set.of("RESOLVED", "CLOSED");
     private static final Set<String> STATUSES =
             Set.of("BOT_HANDLING", "PENDING_AGENT", "AGENT_HANDLING", "RESOLVED", "CLOSED");
+    /**
+     * Lý do NHÂN VIÊN được chọn. {@code QUOTA_EXCEEDED} và {@code LLM_ERROR} chỉ HỆ THỐNG ghi: cho người chọn
+     * thì chọn QUOTA_EXCEEDED là tự loại lượt chuyển giao khỏi chỉ số chất lượng AI.
+     */
     private static final Set<String> REASONS = Set.of("CUSTOMER_REQUEST", "LOW_CONFIDENCE", "NO_GROUNDING",
-            "NEGATIVE_SENTIMENT", "REPEATED_FAILURE", "WRITE_TOOL_APPROVAL", "QUOTA_EXCEEDED", "LLM_ERROR");
+            "NEGATIVE_SENTIMENT", "REPEATED_FAILURE", "WRITE_TOOL_APPROVAL");
+    private static final Set<String> SYSTEM_REASONS = Set.of("QUOTA_EXCEEDED", "LLM_ERROR");
 
     private final InboxRepository repo;
     private final ContactQueryRepository contacts;
@@ -204,6 +209,9 @@ public class InboxService {
     @Transactional
     public HandoffEvent handoff(UUID tenantId, Actor actor, UUID conversationId, String direction, String reason) {
         scope.apply(tenantId);
+        if (reason != null && SYSTEM_REASONS.contains(reason)) {
+            throw invalid("Lý do này do hệ thống tự ghi, nhân viên không chọn được.");
+        }
         if (reason == null || !REASONS.contains(reason)) {
             throw invalid("Lý do chuyển giao không hợp lệ.");
         }
@@ -216,6 +224,10 @@ public class InboxService {
             requireHolderOrAdmin(r, actor);
             if ("BOT_HANDLING".equals(r.status())) {
                 throw new AppException("Tác tử AI đang giữ hội thoại này rồi.", HttpStatus.CONFLICT);
+            }
+            if (repo.blockedByQuota(tenantId, conversationId)) {
+                throw new AppException("Hạn mức hội thoại của gói đã hết — tác tử AI chưa trả lời được. "
+                        + "Nâng cấp gói hoặc để nhân viên tiếp tục hỗ trợ.", HttpStatus.CONFLICT);
             }
             repo.returnToBot(tenantId, conversationId);
         } else if ("BOT_TO_AGENT".equals(direction)) {

@@ -23,6 +23,7 @@ export function MessageThread({
   dangThaoTac = false,
   onGui,
   dangGui = false,
+  nguoiKhacGiu = null,
 }: {
   chiTiet: HoiThoaiChiTiet | undefined
   tenKhachHang: string
@@ -38,6 +39,8 @@ export function MessageThread({
   /** UC013 — gửi tin. Trả `true` khi máy chủ nhận để xoá ô soạn; lỗi thì giữ nguyên chữ đã gõ. */
   onGui?: (noiDung: string) => Promise<boolean>
   dangGui?: boolean
+  /** Tên người đang giữ hội thoại khi đó KHÔNG phải mình (và mình không phải quản trị viên). */
+  nguoiKhacGiu?: string | null
 }) {
   const khungCuon = useRef<HTMLDivElement>(null)
   const [nhap, datNhap] = useState('')
@@ -97,7 +100,7 @@ export function MessageThread({
         {/* Nút hiện theo trạng thái thật, không phải lúc nào cũng đủ ba nút: hội thoại tác tử
             đang giữ thì "Đánh dấu xong" là vô nghĩa, còn hội thoại đã có người thì "Nhận xử lý"
             chỉ tổ giành việc của đồng nghiệp. */}
-        {daDong ? null : chiTiet.autoReplyEnabled ? (
+        {daDong || nguoiKhacGiu ? null : chiTiet.autoReplyEnabled ? (
           <Button
             variant="outline"
             size="sm"
@@ -126,7 +129,7 @@ export function MessageThread({
           </Button>
         )}
 
-        {chiTiet.status !== 'RESOLVED' && chiTiet.status !== 'CLOSED' && (
+        {!daDong && !nguoiKhacGiu && (
           <Button variant="outline" size="sm" disabled={dangThaoTac} onClick={onDanhDauXong}>
             <Check />
             Đánh dấu xong
@@ -143,10 +146,12 @@ export function MessageThread({
 
       {/* Gợi ý từ kho tri thức (cần RAG), mẫu câu và đính kèm chưa có — ẩn hẳn thay vì để nút bấm
           không làm gì (đã chốt giảm độ sâu UC013 3.1, b4). */}
-      {daDong ? (
+      {daDong || nguoiKhacGiu ? (
         <div className="text-muted-foreground flex shrink-0 items-center gap-2 border-t p-3 text-[13px]">
           <Lock className="size-4" />
-          Hội thoại đã đóng. Khách nhắn lại sẽ mở một hội thoại mới.
+          {daDong
+            ? 'Hội thoại đã đóng. Khách nhắn lại sẽ mở một hội thoại mới.'
+            : `${nguoiKhacGiu} đang phụ trách hội thoại này — bạn chỉ xem được. Quản trị viên có thể giao lại.`}
         </div>
       ) : (
         <div className="flex shrink-0 flex-col gap-2 border-t p-3">

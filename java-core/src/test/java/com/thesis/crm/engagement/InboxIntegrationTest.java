@@ -253,7 +253,47 @@ class InboxIntegrationTest extends EngagementIntegrationTestBase {
         assertThat(auditCount(k.conversationId(), "CONVERSATION_STATUS_CHANGED")).isEqualTo(1);
     }
 
+    // ── Rà soát lần 2: lỗ hổng tìm ra sau khi chạy thật ────────────────────────
+
+    @Test
+    void lyDoCuaHeThong_nhanVienKhongTuChonDuoc() throws Exception {
+        // Lỗ hổng R1: QUOTA_EXCEEDED và LLM_ERROR là lý do do HỆ THỐNG ghi. Nhân viên tự chọn được thì
+        // chọn QUOTA_EXCEEDED là "countsAgainstAiQuality = false" — tự làm đẹp chỉ số chất lượng AI.
+        // Giao diện đã giấu hai lý do này nhưng API vẫn nhận.
+        Khach k = khachMoi("hỏi");
+        for (String lyDo : new String[] {"QUOTA_EXCEEDED", "LLM_ERROR"}) {
+            mvc.perform(post("/api/v1/conversations/" + k.conversationId() + "/handoff").with(nv(AGENT_1))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"direction\":\"BOT_TO_AGENT\",\"reason\":\"" + lyDo + "\"}"))
+                    .andExpect(status().isUnprocessableEntity());
+        }
+    }
+
+    @Test
+    void hoiThoaiDoHetHanMuc_khongTraLaiAiDuoc_khiHanMucVanHet() throws Exception {
+        // Lỗ hổng R2: hội thoại chuyển cho người vì HẾT HẠN MỨC. Nhân viên bấm "Trả lại cho AI" thì
+        // mọi tin sau đó gọi AI — hạn mức (chỉ kiểm khi mở hội thoại MỚI) bị lách hoàn toàn.
+        setUsage(TENANT_I, true);
+        try {
+            Khach k = khachMoi("hỏi khi đã hết hạn mức");
+            assertThat(findInList(admin(), k.conversationId(), "all").get("status").asText()).isEqualTo("PENDING_AGENT");
+            handoff(admin(), k, "AGENT_TO_BOT").andExpect(status().isConflict());
+        } finally {
+            setUsage(TENANT_I, false);
+        }
+    }
+
     // ── tiện ích ────────────────────────────────────────────────────────────────
+
+    private static void setUsage(UUID tenant, boolean exhausted) throws Exception {
+        try (Connection c = owner(); PreparedStatement ps = c.prepareStatement(
+                "UPDATE platform.usage_records SET used_value = CASE WHEN ? THEN quota_value ELSE 0 END "
+                        + "WHERE tenant_id = ? AND metric = 'CONVERSATION'")) {
+            ps.setBoolean(1, exhausted);
+            ps.setObject(2, tenant);
+            ps.executeUpdate();
+        }
+    }
 
     record Khach(String token, String conversationId) {}
 

@@ -15,6 +15,7 @@ import {
   usePhanCongHoiThoaiMutation,
   type BoLocHoiThoai,
 } from '@/api/conversations'
+import { useAppSelector } from '@/app/store/hooks'
 import { ContextPanel } from '@/features/conversations/ContextPanel'
 import { ConversationList } from '@/features/conversations/ConversationList'
 import { MessageThread } from '@/features/conversations/MessageThread'
@@ -41,6 +42,7 @@ export function InboxPage() {
   const [doiTrangThai, ketQuaTrangThai] = useDoiTrangThaiHoiThoaiMutation()
   const [guiTin, ketQuaGui] = useGuiTinNhanMutation()
   const [danhDauDaDoc] = useDanhDauDaDocMutation()
+  const toi = useAppSelector((s) => s.auth.nguoiDung)
   const [huongChuyenGiao, datHuongChuyenGiao] = useState<
     'BOT_TO_AGENT' | 'AGENT_TO_BOT' | null
   >(null)
@@ -54,6 +56,15 @@ export function InboxPage() {
   useEffect(() => {
     if (idDangChon && chuaDoc > 0) void danhDauDaDoc(idDangChon)
   }, [idDangChon, chuaDoc, danhDauDaDoc])
+
+  /**
+   * Đang ở tab "Chờ tôi" mà nhận / trả lời thì hội thoại thành "của tôi" và RỜI khỏi danh sách đang
+   * lọc — đoạn tự chọn bên dưới sẽ nhảy sang hội thoại khác ngay lúc nhân viên đang làm, dễ trả lời
+   * nhầm khách. Chuyển theo sang tab "Của tôi" để hội thoại vừa nhận vẫn đang mở.
+   */
+  function theoHoiThoaiVuaNhan() {
+    if (boLoc.phamVi === 'unassigned') datBoLoc({ ...boLoc, phamVi: 'mine', trang: 0 })
+  }
 
   // Tự chọn hội thoại đầu tiên, và bỏ chọn khi bộ lọc làm nó biến mất khỏi danh sách
   useEffect(() => {
@@ -95,6 +106,7 @@ export function InboxPage() {
             onGui={async (noiDung) => {
               try {
                 await guiTin({ id: idDangChon, content: noiDung }).unwrap()
+                theoHoiThoaiVuaNhan()
                 return true
               } catch (loi) {
                 toast.error(laLoiTruyVan(loi) ? loi.message : 'Không gửi được tin nhắn.')
@@ -105,6 +117,7 @@ export function InboxPage() {
               try {
                 // Bỏ trống `assigneeUserId` là tự nhận — máy chủ lấy người dùng từ JWT
                 await phanCong({ id: idDangChon }).unwrap()
+                theoHoiThoaiVuaNhan()
                 toast.success('Bạn đang phụ trách hội thoại này.')
               } catch (loi) {
                 toast.error(laLoiTruyVan(loi) ? loi.message : 'Không nhận được hội thoại.')
@@ -118,6 +131,14 @@ export function InboxPage() {
                 toast.error(laLoiTruyVan(loi) ? loi.message : 'Không đổi được trạng thái.')
               }
             }}
+            // Giống luật ở máy chủ (InboxService): hội thoại người khác đang giữ thì nhân viên chỉ xem
+            nguoiKhacGiu={
+              dangChon.assignedUserId &&
+              dangChon.assignedUserId !== toi?.id &&
+              toi?.roleCode !== 'TENANT_ADMIN'
+                ? (dangChon.assignedUserName ?? 'một nhân viên khác')
+                : null
+            }
             onChuyenGiao={datHuongChuyenGiao}
             onQuayLai={() => datIdDangChon(null)}
           />
