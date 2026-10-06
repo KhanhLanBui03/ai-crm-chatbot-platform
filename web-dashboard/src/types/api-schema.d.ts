@@ -1624,8 +1624,8 @@ export interface paths {
         /**
          * Tin nhắn của hội thoại, phân trang bằng con trỏ
          * @description Con trỏ chứ không phải số trang: tin nhắn mới đến liên tục ở đầu danh sách, phân trang bằng
-         *     offset sẽ làm lệch cửa sổ và hiện lặp tin đã đọc. Con trỏ là `createdAt` của tin cũ nhất
-         *     đang hiển thị.
+         *     offset sẽ làm lệch cửa sổ và hiện lặp tin đã đọc. Con trỏ là `sentAt` của tin cũ nhất
+         *     đang hiển thị (thứ tự hiển thị của hội thoại là `sent_at`) — chính là `nextCursor` máy chủ trả.
          */
         get: {
             parameters: {

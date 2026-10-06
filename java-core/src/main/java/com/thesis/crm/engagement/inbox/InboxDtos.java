@@ -64,5 +64,6 @@ public final class InboxDtos {
 
     public record HandoffRequest(String direction, String reason) {}
 
-    public record StatusRequest(String status, String reason) {}
+    /** Tên trường theo hợp đồng: {@code closedReason}. */
+    public record StatusRequest(String status, String closedReason) {}
 }

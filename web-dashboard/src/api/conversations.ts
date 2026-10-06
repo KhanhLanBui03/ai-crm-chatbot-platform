@@ -7,6 +7,7 @@ import type {
   LyDoChuyenGiao,
   NguCanhHoiThoai,
   SuKienChuyenGiao,
+  TinNhan,
   TrangThaiHoiThoai,
 } from '@/types/schema'
 
@@ -195,6 +196,21 @@ export const conversationsApi = apiSlice.injectEndpoints({
       invalidatesTags: (_kq, _loi, { id }) => [{ type: 'HoiThoai', id }, CA_DANH_SACH],
     }),
 
+    // ── UC013 — nhân viên gửi tin. Hội thoại chưa ai nhận thì gửi tin là tự nhận (máy chủ quyết) ──
+    guiTinNhan: build.mutation<TinNhan, { id: string; content: string }>({
+      query: ({ id, content }) => ({
+        url: `/api/v1/conversations/${id}/messages`,
+        method: 'POST',
+        body: { content, contentType: 'TEXT' },
+      }),
+      invalidatesTags: (_kq, _loi, { id }) => [{ type: 'HoiThoai', id }, CA_DANH_SACH],
+    }),
+
+    // ── UC012 bước 10 — mở hội thoại thì số chưa đọc về 0 ──
+    danhDauDaDoc: build.mutation<null, string>({
+      query: (id) => ({ url: `/api/v1/conversations/${id}/read`, method: 'POST' }),
+      invalidatesTags: [CA_DANH_SACH],
+    }),
   }),
 })
 
@@ -206,4 +222,6 @@ export const {
   usePhanCongHoiThoaiMutation,
   useChuyenGiaoHoiThoaiMutation,
   useDoiTrangThaiHoiThoaiMutation,
+  useGuiTinNhanMutation,
+  useDanhDauDaDocMutation,
 } = conversationsApi

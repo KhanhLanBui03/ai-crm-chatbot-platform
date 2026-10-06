@@ -100,7 +100,7 @@ public class InboxController {
     public ResponseEntity<ApiResponse<ConversationSummary>> status(
             @PathVariable UUID conversationId, @RequestBody StatusRequest body) {
         return ResponseEntity.ok(ApiResponse.ok(service.changeStatus(
-                requireTenantId(), actor(), conversationId, body.status(), body.reason())));
+                requireTenantId(), actor(), conversationId, body.status(), body.closedReason())));
     }
 
     @PostMapping("/{conversationId}/read")

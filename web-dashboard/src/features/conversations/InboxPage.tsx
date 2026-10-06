@@ -4,10 +4,13 @@ import { useEffect, useState } from 'react'
 
 import { toast } from 'sonner'
 
+import { laLoiTruyVan } from '@/api/baseQuery'
 import {
   useChiTietHoiThoaiQuery,
+  useDanhDauDaDocMutation,
   useDanhSachHoiThoaiQuery,
   useDoiTrangThaiHoiThoaiMutation,
+  useGuiTinNhanMutation,
   useNguCanhHoiThoaiQuery,
   usePhanCongHoiThoaiMutation,
   type BoLocHoiThoai,
@@ -21,17 +24,23 @@ import { useDangGo } from '@/features/conversations/useDangGo'
 /**
  * SCR019 + SCR020 — hộp thư hợp nhất, bố cục ba cột.
  * Bản chuyển từ artboard "Hộp thư hợp nhất" ở canvas Hộp thư và CRM.
+ *
+ * Tin mới về bằng HỎI ĐỊNH KỲ 5 giây (UC012 bước 4 — đã chốt giảm độ sâu: java-core chưa có máy chủ
+ * WebSocket). Khi có máy chủ thời gian thực thì bỏ `pollingInterval`, phần còn lại giữ nguyên.
  */
+const CHU_KY_HOI_MS = 5000
 export function InboxPage() {
   const [boLoc, datBoLoc] = useState<BoLocHoiThoai>({ phamVi: 'all' })
   const [idDangChon, datIdDangChon] = useState<string | null>(null)
 
-  const danhSach = useDanhSachHoiThoaiQuery(boLoc)
-  const chiTiet = useChiTietHoiThoaiQuery(idDangChon ?? skipToken)
+  const danhSach = useDanhSachHoiThoaiQuery(boLoc, { pollingInterval: CHU_KY_HOI_MS })
+  const chiTiet = useChiTietHoiThoaiQuery(idDangChon ?? skipToken, { pollingInterval: CHU_KY_HOI_MS })
   const nguCanh = useNguCanhHoiThoaiQuery(idDangChon ?? skipToken)
   const dangGo = useDangGo(idDangChon)
   const [phanCong, ketQuaPhanCong] = usePhanCongHoiThoaiMutation()
   const [doiTrangThai, ketQuaTrangThai] = useDoiTrangThaiHoiThoaiMutation()
+  const [guiTin, ketQuaGui] = useGuiTinNhanMutation()
+  const [danhDauDaDoc] = useDanhDauDaDocMutation()
   const [huongChuyenGiao, datHuongChuyenGiao] = useState<
     'BOT_TO_AGENT' | 'AGENT_TO_BOT' | null
   >(null)
@@ -39,6 +48,12 @@ export function InboxPage() {
   // `data` giữ kết quả của bộ lọc trước cho tới khi kết quả mới về — danh sách không nháy trắng
   const muc = danhSach.data?.items
   const dangChon = muc?.find((c) => c.id === idDangChon) ?? null
+
+  // UC012 bước 10 — đang mở hội thoại mà có tin chưa đọc thì đánh dấu đã đọc
+  const chuaDoc = dangChon?.unreadCount ?? 0
+  useEffect(() => {
+    if (idDangChon && chuaDoc > 0) void danhDauDaDoc(idDangChon)
+  }, [idDangChon, chuaDoc, danhDauDaDoc])
 
   // Tự chọn hội thoại đầu tiên, và bỏ chọn khi bộ lọc làm nó biến mất khỏi danh sách
   useEffect(() => {
@@ -71,17 +86,37 @@ export function InboxPage() {
           <MessageThread
             chiTiet={chiTiet.currentData}
             tenKhachHang={dangChon.contactName}
-            dangTai={chiTiet.isFetching}
+            // Chỉ hiện xương khi CHƯA có dữ liệu của hội thoại này — lần hỏi định kỳ 5 giây
+            // cũng làm `isFetching` bật, dùng nó thì khung chat nháy trắng mỗi 5 giây.
+            dangTai={!chiTiet.currentData}
             dangGo={dangGo}
             dangThaoTac={ketQuaPhanCong.isLoading || ketQuaTrangThai.isLoading}
+            dangGui={ketQuaGui.isLoading}
+            onGui={async (noiDung) => {
+              try {
+                await guiTin({ id: idDangChon, content: noiDung }).unwrap()
+                return true
+              } catch (loi) {
+                toast.error(laLoiTruyVan(loi) ? loi.message : 'Không gửi được tin nhắn.')
+                return false
+              }
+            }}
             onNhanXuLy={async () => {
-              // Bỏ trống `assigneeUserId` là tự nhận — máy chủ lấy người dùng từ JWT
-              await phanCong({ id: idDangChon }).unwrap()
-              toast.success('Bạn đang phụ trách hội thoại này.')
+              try {
+                // Bỏ trống `assigneeUserId` là tự nhận — máy chủ lấy người dùng từ JWT
+                await phanCong({ id: idDangChon }).unwrap()
+                toast.success('Bạn đang phụ trách hội thoại này.')
+              } catch (loi) {
+                toast.error(laLoiTruyVan(loi) ? loi.message : 'Không nhận được hội thoại.')
+              }
             }}
             onDanhDauXong={async () => {
-              await doiTrangThai({ id: idDangChon, status: 'RESOLVED' }).unwrap()
-              toast.success('Đã đánh dấu hội thoại đã xử lý xong.')
+              try {
+                await doiTrangThai({ id: idDangChon, status: 'RESOLVED' }).unwrap()
+                toast.success('Đã đánh dấu hội thoại đã xử lý xong.')
+              } catch (loi) {
+                toast.error(laLoiTruyVan(loi) ? loi.message : 'Không đổi được trạng thái.')
+              }
             }}
             onChuyenGiao={datHuongChuyenGiao}
             onQuayLai={() => datIdDangChon(null)}
