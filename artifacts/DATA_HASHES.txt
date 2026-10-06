@@ -1,0 +1,7 @@
+# SỔ ĐÓNG BĂNG MÃ HASH DỮ LIỆU ĐÁNH GIÁ (DATA HASHES)
+# Bất biến: Không bao giờ sửa các tệp đã đóng băng ở đây để 'tút' điểm.
+data/intent_test_human.jsonl:8cc500dc96ebd15f18af01ca386b53a3b85941dba9c06ce12f46ffa24d0a1ecf
+data/intent_train_dedup.jsonl:d8c2bfc45292629df653a5e1d719d27b0b35e78fb2fe1bccf3fe0c6a75b4562d
+bbad7ba113dd1acac8d4569670aee1020450026ec8488c28ed65ec57c72357df  artifacts/router_branch_c.joblib
+0cc5f770af0c6d2b49417021244d6d5d20d7453e87f614855e9aa7b1478ec95e  artifacts/router_model.onnx
+6e15b46930cdb4a60a1cd66de25c0b64b6430c2537566c5378ab37e41f6ef1dd  artifacts/router_embedder.json

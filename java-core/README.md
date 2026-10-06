@@ -11,8 +11,8 @@ com.thesis.crm
 │
 │   ── cắt ngang cả 4 context ──
 ├── config/          Jackson · OpenAPI · Async · Kafka · RestClient · S3 · transaction manager
-├── security/        JWT RS256 · TenantContext · biến phiên RLS (TenantAwareJpaTransactionManager)
-├── client/          gọi ra ngoài: ai-service — bề mặt DUY NHẤT (ADR-0002) · kho S3 (ADR-0019)
+├── security/        JWT RS256 (phát hành + xác minh) · CurrentActor · TenantTransactionScope (RLS)
+├── client/          gọi ra ngoài: ai-service — bề mặt DUY NHẤT (ADR-0002) · kho S3 (ADR-0022)
 ├── common/
 │   ├── enums/       enum dùng chung nhiều context
 │   ├── exception/   ngoại lệ + @RestControllerAdvice
@@ -99,7 +99,7 @@ chưa cài đặt. Nhưng chúng **compile được**: `mvn -f java-core/pom.xml
 
 - **Schema:** `platform`, `engagement`, `sales`, `analytics`
 - **Flyway:** dải **V1xx** — `src/main/resources/db/migration/` (xem README ở đó)
-- **Kafka:** sản xuất `crm.kb.document.uploaded` (UC018, ADR-0017), `crm.conversation.v1`, `crm.lead.v1`,
+- **Kafka:** sản xuất `crm.kb.document.uploaded` (UC018, ADR-0020), `crm.conversation.v1`, `crm.lead.v1`,
   `crm.usage.v1` — ba topic sau chờ chốt bộ tên (Master Plan §2.6 hay `crm.*.v1`)
 
 ## Hai tài khoản CSDL — không được nhầm
@@ -112,11 +112,13 @@ chưa cài đặt. Nhưng chúng **compile được**: `mvn -f java-core/pom.xml
 ## TODO
 
 - [ ] Migration V101–V112 (xem `db/migration/README.md`)
-- [x] `security/` — đặt `app.tenant_id` từ JWT cho mỗi transaction. Không làm bằng filter như dự
-      định ban đầu: `SET LOCAL` chỉ sống trong transaction, filter chạy trước khi có transaction —
-      xem javadoc `TenantAwareJpaTransactionManager`
-- [ ] Phát hành JWT (UC002 đăng nhập) + `/.well-known/jwks.json`. Hiện chỉ XÁC MINH token bằng khoá
-      công khai ở `JWT_PUBLIC_KEY_LOCATION`; dev lấy token bằng `scripts/dev-jwt.sh`
+- [x] `security/` — đặt `app.tenant_id` cho mỗi transaction: service gọi
+      `TenantTransactionScope.apply(CurrentActor.requireTenantId())` ngay đầu `@Transactional`.
+      `SET LOCAL` chỉ sống trong transaction, filter chạy trước khi có transaction nên không đặt
+      được ở filter.
+- [x] Phát hành JWT (UC002 đăng nhập) + `/.well-known/jwks.json` — `JwtTokenProvider`, claim
+      `tenant_id` · `role` · `scope`. Khoá RSA sinh trong RAM lúc khởi động (`RsaKeyProperties`):
+      token cũ hết hiệu lực sau mỗi lần khởi động lại.
 - [x] Ghi outbox trong transaction nghiệp vụ — `platform/service/OutboxService`
 - [x] `platform/messaging/OutboxPublisher` + `platform/scheduler/` @Scheduled 500ms, lô 100 — khoá
       bản tin `tenant_id`, một job phát duy nhất (khoá advisory), sự kiện hỏng chỉ chặn tenant của nó.

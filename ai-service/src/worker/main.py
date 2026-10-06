@@ -23,7 +23,7 @@ BỐN LUẬT KHÔNG ĐƯỢC BỎ — mỗi luật ứng với một cách hỏn
 
 4. **Bắt SIGTERM, rời group sạch.** Xử lý nốt bản tin đang dở, xác nhận, rồi mới thoát;
    ``terminationGracePeriodSeconds=60`` ở §3.10.6 dành đúng cho việc này. Job dài hơn 60 s thì
-   Kubernetes giết cứng — bộ quét job kẹt (ADR-0021) nhặt lại tài liệu đó.
+   Kubernetes giết cứng — bộ quét job kẹt (ADR-0024) nhặt lại tài liệu đó.
 
 Bẫy hai listener: worker chạy TỪ MÁY CHỦ thì ``KAFKA_BOOTSTRAP=localhost:29092``; trong mạng
 Docker thì ``kafka:9092``. Nhầm thì client treo rồi hết thời gian chờ, không thông báo nào chỉ ra.
@@ -147,7 +147,7 @@ class Worker:
                     await self._xu_ly_mot(ban_tin, consumer, producer)
 
     async def _vong_quet(self) -> None:
-        """Bộ quét job kẹt (ADR-0021): mỗi ``kb_chu_ky_quet_s`` giây một lần.
+        """Bộ quét job kẹt (ADR-0024): mỗi ``kb_chu_ky_quet_s`` giây một lần.
 
         Chờ MỘT chu kỳ rồi mới quét lần đầu: vừa khởi động thì Kafka đang giao lại các bản tin
         chưa xác nhận của lần chạy trước — để chúng đi trước qua semaphore, bộ quét chỉ nhặt những

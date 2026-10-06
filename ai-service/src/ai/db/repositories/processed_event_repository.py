@@ -1,4 +1,4 @@
-"""Chống xử lý trùng sự kiện Kafka — ``ai.processed_events`` (V211, ADR-0021). [PRODUCTION]
+"""Chống xử lý trùng sự kiện Kafka — ``ai.processed_events`` (V211, ADR-0024). [PRODUCTION]
 
 Giao nhận ít nhất một lần nghĩa là nhận trùng là CHẮC CHẮN: pod chết sau khi xử lý nhưng trước
 khi xác nhận offset, rebalance giữa chừng, java-core phát lại một dòng outbox. Bảng này biến "đã

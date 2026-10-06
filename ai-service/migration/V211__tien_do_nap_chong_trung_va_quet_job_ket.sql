@@ -1,9 +1,9 @@
 -- V211 — Nạp tài liệu chạy qua NHIỀU transaction: đếm lượt, chặng tiến độ, chống trùng sự kiện,
 -- quét job kẹt.
--- UC019 · ADR-0021
+-- UC019 · ADR-0024
 --
 -- Ngày 4 nhận xử lý và phân tích trong MỘT transaction, nên tài liệu đang nạp không bao giờ lộ ra
--- ngoài: SCR033 chỉ thấy PENDING rồi nhảy thẳng sang READY/FAILED. ADR-0021 chọn phương án 2 —
+-- ngoài: SCR033 chỉ thấy PENDING rồi nhảy thẳng sang READY/FAILED. ADR-0024 chọn phương án 2 —
 -- commit PROCESSING sớm và ghi từng chặng — để hiện được 6 bước tiến độ. Cái giá: tiến trình chết
 -- giữa chừng để lại tài liệu PROCESSING mà không ai nhặt lại. Bốn phần dưới đây trả cái giá đó.
 --
@@ -38,7 +38,7 @@ ALTER TABLE knowledge.knowledge_documents
         CHECK (status IN ('PROCESSING', 'FAILED') OR ingest_step IS NULL);
 
 COMMENT ON COLUMN knowledge.knowledge_documents.attempt_count IS
-    'Số lần đã nhận xử lý. Trần 3 (ADR-0021). Cũng là thẻ sở hữu: mọi ghi sau bước nhận đều kèm '
+    'Số lần đã nhận xử lý. Trần 3 (ADR-0024). Cũng là thẻ sở hữu: mọi ghi sau bước nhận đều kèm '
     'attempt_count = lượt của mình, lượt bị bộ quét tước quyền cập nhật 0 dòng và tự dừng.';
 COMMENT ON COLUMN knowledge.knowledge_documents.ingest_step IS
     'Chặng đang chạy (PROCESSING) hoặc đã hỏng (FAILED). QUEUED/DONE suy ra từ status, không lưu.';
@@ -63,7 +63,7 @@ CREATE INDEX ix_doc_dang_nap
 --
 -- KHÁC V110 ở chỗ CÓ RLS: consumer của Track B đọc tenant từ vỏ sự kiện TRƯỚC khi ghi bảng này,
 -- nên không có lý do "chưa biết tenant" như phía analytics. Dòng ghi nằm cùng transaction với bước
--- nhận xử lý tài liệu (ADR-0021) — sự kiện được đánh dấu đã xử lý đúng lúc tài liệu vào tay
+-- nhận xử lý tài liệu (ADR-0024) — sự kiện được đánh dấu đã xử lý đúng lúc tài liệu vào tay
 -- worker, không sớm hơn, không muộn hơn.
 --
 -- event_id là bigint vì java-core lấy platform.outbox_events.id làm event_id (V110).
@@ -91,7 +91,7 @@ CREATE POLICY tenant_isolation ON ai.processed_events
 GRANT SELECT, INSERT ON ai.processed_events TO ai_app;
 
 COMMENT ON TABLE ai.processed_events IS
-    'Chống xử lý trùng cho consumer của ai-service (ADR-0021). Bản sao có chủ ý của '
+    'Chống xử lý trùng cho consumer của ai-service (ADR-0024). Bản sao có chủ ý của '
     'analytics.processed_events (V110): ai_app không được chạm schema của Track A (ADR-0002).';
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -143,7 +143,7 @@ REVOKE ALL ON FUNCTION knowledge.tim_job_ket(interval, int) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION knowledge.tim_job_ket(interval, int) TO ai_app;
 
 COMMENT ON FUNCTION knowledge.tim_job_ket(interval, int) IS
-    'SECURITY DEFINER — lỗ có chủ đích trong RLS cho bộ quét job kẹt (ADR-0021). Chỉ trả id + '
+    'SECURITY DEFINER — lỗ có chủ đích trong RLS cho bộ quét job kẹt (ADR-0024). Chỉ trả id + '
     'trạng thái; mọi thao tác sau đó chạy trong phiên đã gắn tenant, dưới RLS.';
 
 -- ─────────────────────────────────────────────────────────────────────────────

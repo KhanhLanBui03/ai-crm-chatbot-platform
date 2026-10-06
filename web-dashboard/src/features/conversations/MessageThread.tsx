@@ -1,6 +1,6 @@
-import { format } from 'date-fns'
-import { Bot, Check, Paperclip, Sparkles, UserPlus } from 'lucide-react'
+import { ArrowLeft, Bot, Check, Paperclip, Sparkles, UserPlus } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { format } from 'date-fns'
 
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -19,6 +19,7 @@ export function MessageThread({
   onNhanXuLy,
   onDanhDauXong,
   onChuyenGiao,
+  onQuayLai,
   dangThaoTac = false,
 }: {
   chiTiet: HoiThoaiChiTiet | undefined
@@ -30,6 +31,7 @@ export function MessageThread({
   onNhanXuLy?: () => void
   onDanhDauXong?: () => void
   onChuyenGiao?: (huong: 'BOT_TO_AGENT' | 'AGENT_TO_BOT') => void
+  onQuayLai?: () => void
   dangThaoTac?: boolean
 }) {
   const khungCuon = useRef<HTMLDivElement>(null)
@@ -55,14 +57,25 @@ export function MessageThread({
   }
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-2.5 border-b p-3">
+    <div className="flex min-w-0 flex-1 flex-col h-full">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-2.5 border-b p-3">
+        {onQuayLai && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden size-8 -ml-1 shrink-0"
+            onClick={onQuayLai}
+            aria-label="Quay lại danh sách"
+          >
+            <ArrowLeft className="size-4" />
+          </Button>
+        )}
         <div className="bg-secondary text-secondary-foreground flex size-8 shrink-0 items-center justify-center rounded-full text-[13px] font-medium">
           {chuCaiDau(tenKhachHang)}
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-sm font-medium">{tenKhachHang}</span>
-          <span className="text-muted-foreground text-xs">
+          <span className="text-muted-foreground text-xs truncate">
             {NHAN_KENH[chiTiet.channelType]} · {chiTiet.messageCount} tin nhắn
             {chiTiet.assignedUserName ? ` · ${chiTiet.assignedUserName} phụ trách` : ''}
           </span>

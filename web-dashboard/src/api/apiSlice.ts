@@ -47,6 +47,10 @@ export const apiSlice = createApi({
     'HoatDong',
     // Phân tích
     'BaoCao',
+    // Quản trị nền tảng (Admin Portal)
+    'AdminOverview',
+    'AdminTenants',
+    'AdminPlans',
   ],
   /**
    * Bao lâu thì bỏ cache của một truy vấn không còn component nào dùng (giây).

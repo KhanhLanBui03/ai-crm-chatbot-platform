@@ -1,8 +1,8 @@
 package com.thesis.crm.platform.repository;
 
-import com.thesis.crm.common.enums.UsageMetric;
 import com.thesis.crm.platform.entity.UsageRecord;
 import jakarta.persistence.LockModeType;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -12,22 +12,25 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-/** Không lọc tenant — RLS lo (ADR-0001). */
 @Repository
 public interface UsageRecordRepository extends JpaRepository<UsageRecord, UUID> {
+
+    List<UsageRecord> findBySubscriptionId(UUID subscriptionId);
+
+    Optional<UsageRecord> findBySubscriptionIdAndMetric(UUID subscriptionId, String metric);
 
     /**
      * Tạo dòng hạn mức của chu kỳ nếu chưa có. {@code quota_value} CHÉP từ gói hiện hành.
      *
-     * <p>{@code used_value} ban đầu (ADR-0020 (d)): chỉ số tồn kho ({@code stock = true}) chép mức
+     * <p>{@code used_value} ban đầu (ADR-0023 (d)): chỉ số tồn kho ({@code stock = true}) chép mức
      * đang có từ dòng cùng chỉ số của chu kỳ gần nhất TRƯỚC chu kỳ này — tài liệu không biến mất khi
      * sang tháng; chỉ số dòng chảy bắt đầu từ 0. {@code STORAGE_MB} đổi trần của gói từ MB sang
-     * BYTE (ADR-0020 (c)).
+     * BYTE (ADR-0023 (c)).
      *
-     * <p>Lẽ ra dòng này sinh lúc mở chu kỳ (UC005) — luồng đó chưa có, nên người tiêu thụ đầu
-     * tiên tạo. {@code ON CONFLICT DO NOTHING}: hai lượt đồng thời cùng chèn thì lượt sau chờ
-     * lượt trước commit rồi bỏ qua, không nổ trùng khoá. Truy vấn con chạy dưới RLS nên chỉ thấy
-     * chu kỳ của chính tenant.
+     * <p>Dòng thường đã có sẵn từ {@code register_tenant} (V118) hoặc lúc đổi gói; câu này là lưới
+     * cho chu kỳ chưa có dòng. {@code ON CONFLICT DO NOTHING}: hai lượt đồng thời cùng chèn thì
+     * lượt sau chờ lượt trước commit rồi bỏ qua, không nổ trùng khoá. Truy vấn con chạy dưới RLS
+     * nên chỉ thấy chu kỳ của chính tenant.
      */
     @Modifying
     @Query(nativeQuery = true, value = """
@@ -69,5 +72,5 @@ public interface UsageRecordRepository extends JpaRepository<UsageRecord, UUID> 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from UsageRecord u where u.subscriptionId = :subscriptionId and u.metric = :metric")
     Optional<UsageRecord> findForUpdate(@Param("subscriptionId") UUID subscriptionId,
-            @Param("metric") UsageMetric metric);
+            @Param("metric") String metric);
 }

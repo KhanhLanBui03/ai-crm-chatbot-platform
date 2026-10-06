@@ -1,7 +1,7 @@
 # Hợp đồng UC018 — Tải lên tài liệu tri thức
 
 **Trạng thái:** Nháp — chờ hai bên thống nhất rồi mới vá `docs/openapi/` và `docs/events/`
-(mục 9) · **Ngày:** 27/09/2026 · **Căn cứ:** đặc tả UC018 · ADR-0002 · ADR-0003 · ADR-0017 · ADR-0019 · ADR-0020
+(mục 9) · **Ngày:** 27/09/2026 · **Căn cứ:** đặc tả UC018 · ADR-0002 · ADR-0003 · ADR-0020 · ADR-0022 · ADR-0023
 
 **Nguồn sự thật là code, không phải tài liệu này.** Mọi chi tiết dưới đây chép từ:
 
@@ -23,7 +23,7 @@ ai-service kiểm URI thuộc tenant, kiểm nội dung thật của tệp, ghi 
 Nhận 202 thì java-core cộng hạn mức và ghi sự kiện outbox trong **cùng một transaction**.
 
 Ranh giới đặt ở **URI tệp**: java-core không đọc nội dung tệp, ai-service không ghi vào schema
-của Track A (ADR-0002, ADR-0017 quyết định 2).
+của Track A (ADR-0002, ADR-0020 quyết định 2).
 
 ```
 dashboard ──multipart──▶ java-core ──PutObject──▶ kho S3 (RustFS/AWS)
@@ -51,7 +51,7 @@ dashboard ──multipart──▶ java-core ──PutObject──▶ kho S3 (Ru
 | Trường | Bắt buộc | Luật (áp theo thứ tự: chuẩn hoá **NFC** → `strip` → đếm **code point**) |
 |---|---|---|
 | `file` | ✓ | ≤ **20 MiB** (= 20 × 1024 × 1024 byte = `20971520`). Đuôi ∈ `.pdf` `.docx` `.txt` `.md` `.markdown` `.html` `.htm`, không phân biệt hoa thường |
-| `title` | ✓ | 3–**255** code point sau NFC + strip (không phải 3–300 như đặc tả — ADR-0017 quyết định 3) |
+| `title` | ✓ | 3–**255** code point sau NFC + strip (không phải 3–300 như đặc tả — ADR-0020 quyết định 3) |
 | `description` | — | ≤ 500 code point. Rỗng hoặc toàn khoảng trắng coi như không có (`null`) |
 | `language` | — | `vi` \| `en`. Thiếu hoặc rỗng ⇒ `vi` |
 
@@ -134,7 +134,7 @@ tiếng Việt cho người dùng, `traceId`. Giao diện rẽ nhánh theo **`co
 | 5 | 415 | `UNSUPPORTED_FORMAT` | Đuôi không nằm trong danh sách nhận | Luồng phụ 4.1: hiện danh sách đuôi nhận được |
 | 6 | 409 | `SUBSCRIPTION_NOT_ACTIVE` | Không có thuê bao `TRIALING`/`ACTIVE` đang trong chu kỳ `[period_start, period_end)` · **[CẦN XÁC NHẬN]** — đặc tả chưa có mã này | Dẫn sang màn gói dịch vụ |
 | 7 | 409 | `DOCUMENT_QUOTA_EXCEEDED` | Số tài liệu đang có + 1 > `max_documents` — `data` là trạng thái hạn mức | Luồng phụ 6.1: đề nghị gỡ bớt tài liệu hoặc nâng gói |
-| 7b | 409 | `STORAGE_MB_QUOTA_EXCEEDED` | Dung lượng đang có + byte của tệp > `storage_mb` — `data` là trạng thái hạn mức (byte). ADR-0020 | Như trên, kèm số MB đang dùng / trần / tệp này |
+| 7b | 409 | `STORAGE_MB_QUOTA_EXCEEDED` | Dung lượng đang có + byte của tệp > `storage_mb` — `data` là trạng thái hạn mức (byte). ADR-0023 | Như trên, kèm số MB đang dùng / trần / tệp này |
 | 8 | 503 | `STORAGE_UNAVAILABLE` | Không ghi được lên kho S3, **hoặc** ai-service không đọc được kho S3 | "Thử lại sau" — không phải lỗi của tệp |
 | 9 | 415 / 413 / 422 | *(chuyển nguyên `code` của ai-service)* | ai-service từ chối nội dung tệp — ca thật: **nội dung không khớp đuôi** (PNG đổi đuôi `.pdf`, ZIP đổi đuôi `.docx`) | Như dòng 5 |
 | 10 | 503 | `AI_SERVICE_UNAVAILABLE` | ai-service không trả lời, quá thời gian chờ, hoặc trả 5xx | "Thử lại sau" |
@@ -236,7 +236,7 @@ s3://{bucket}/{tenant_id}/{upload_id}/{ten_da_lam_sach}
 
 | Phân đoạn | Nguồn | Vì sao |
 |---|---|---|
-| `bucket` | `S3_BUCKET`, mặc định `kb-tai-lieu` | Một bucket chung cho mọi tenant (ADR-0019 đánh đổi 4) |
+| `bucket` | `S3_BUCKET`, mặc định `kb-tai-lieu` | Một bucket chung cho mọi tenant (ADR-0022 đánh đổi 4) |
 | `tenant_id` | Claim `tenantId` của JWT, `UUID.toString()` | Cô lập ngay ở tầng lưu trữ. ai-service so **bằng đúng cả phân đoạn**, không so tiền tố chuỗi |
 | `upload_id` | `UUID.randomUUID()` mỗi lượt tải | Tải lại cùng tên tệp (bản mới của cùng tiêu đề) **không ghi đè** object mà version cũ đang trỏ tới — đúng luồng phụ 7.1 "giữ nguyên bản cũ" |
 | `ten_da_lam_sach` | Tên tệp gốc qua `KbObjectKey.sanitize` | Người xem kho (giao diện RustFS, S3 console) nhận ra tệp; không chứa ký tự ai-service từ chối |
@@ -254,7 +254,7 @@ Kết quả không bao giờ chứa phân đoạn rỗng, `.`, `..`, `\`, ký t�
 `application/octet-stream`: MIME trình duyệt khai không đáng tin, ai-service tự nhận diện.
 
 **Quyền trên kho:** java-core `PutObject` + `DeleteObject` (xoá object của lượt thất bại);
-ai-service `GetObject` (+ HEAD). Ở dev hai bên dùng chung tài khoản gốc RustFS — ADR-0019 đánh
+ai-service `GetObject` (+ HEAD). Ở dev hai bên dùng chung tài khoản gốc RustFS — ADR-0022 đánh
 đổi 5.
 
 ---
@@ -282,7 +282,7 @@ khoá ngắn hơn thì hai lượt tải đồng thời lúc `used = quota − 1
 ai-service nhận, và hạn mức bị vượt. Test `sauLuotDongThoiKhiConMotCho` khoá hành vi
 này: 6 lượt đồng thời ⇒ đúng 1 lượt 202, 5 lượt 409. Cái giá: các lượt tải **của cùng một
 tenant** xếp hàng nối tiếp nhau (tenant khác không bị chặn), và mỗi lượt giữ một kết nối CSDL
-trong lúc chờ ai-service — chấp nhận được ở quy mô SME, ghi ở mục Đánh đổi của ADR-0017.
+trong lúc chờ ai-service — chấp nhận được ở quy mô SME, ghi ở mục Đánh đổi của ADR-0020.
 
 **Ba khe không nhất quán đã biết** — không có giao dịch phân tán giữa hai dịch vụ:
 
@@ -297,7 +297,7 @@ trong lúc chờ ai-service — chấp nhận được ở quy mô SME, ghi ở 
 ## 5. Hạn mức — lượng ĐANG CÓ, cảnh báo 80%, chặn 100%
 
 **Hạn mức tài liệu là lượng đang có, không phải lượt tải trong chu kỳ** — nhóm chốt 27/09/2026,
-lập luận và đánh đổi ở ADR-0020. Hai chỉ số, cùng một cách kiểm:
+lập luận và đánh đổi ở ADR-0023. Hai chỉ số, cùng một cách kiểm:
 
 | Chỉ số | Đếm gì | Trần | Đơn vị |
 |---|---|---|---|
@@ -312,7 +312,7 @@ lập luận và đánh đổi ở ADR-0020. Hai chỉ số, cùng một cách k
   transaction với outbox `DocumentDeleted`. Vì vậy phản hồi gỡ của ai-service phải có
   `file_size_bytes` — ghi vào hợp đồng UC020.
 
-Mốc cần **migration V116** (Track A): `warned_at`, `blocked_at` trên `platform.usage_records` —
+Mốc cần **migration V126** (Track A): `warned_at`, `blocked_at` trên `platform.usage_records` —
 đặc tả UC018 ghi thẳng tên hai cột này, `dashboard-api.yaml` (`HanMucSuDung.warnedAt`/`blockedAt`)
 đã khai từ trước, nhưng V102 chưa có.
 
@@ -343,7 +343,7 @@ tenant được giữ, tenant khác không bị kẹt. Chưa có hàng đợi ch
 | `aggregate_type` | `document` |
 | `aggregate_id` | `document_id` từ ai-service |
 | `event_type` | `DocumentUploaded` |
-| `topic` | `crm.kb.document.uploaded` — theo đặc tả UC018 và Master Plan §2.6, chốt 27/09/2026 (ADR-0017 quyết định 4) |
+| `topic` | `crm.kb.document.uploaded` — theo đặc tả UC018 và Master Plan §2.6, chốt 27/09/2026 (ADR-0020 quyết định 4) |
 | `headers` | `{"X-Trace-Id": "…"}` — Trace ID đi ở header Kafka, không ở payload |
 | `payload` | bên dưới |
 
@@ -410,20 +410,20 @@ tin của B cùng ở phân vùng 2; header `X-Trace-Id`, không có header `__T
 | `docs/openapi/dashboard-api.yaml:1409` | `title: { maxLength: 300 }` | `minLength: 3, maxLength: 255`; thêm `description.maxLength: 500`, `language.enum: [vi, en]` |
 | `docs/openapi/dashboard-api.yaml:1421-1430` | Chỉ có 202 / 409 / 415 | Thêm 413, 422, 503; tách hai `code` của 409 |
 | `docs/openapi/dashboard-api.yaml:1413-1420` | 202 trả `TaiLieu` | `TaiLieu` + `jobId` + `documentQuota` + `storageQuota` (`MotHanMuc` + `warnedAt` + `blockedAt`) |
-| `docs/openapi/dashboard-api.yaml` — `HanMucSuDung` | Bốn hạn mức, không có dung lượng | Thêm `storage` (byte) — ADR-0020 |
+| `docs/openapi/dashboard-api.yaml` — `HanMucSuDung` | Bốn hạn mức, không có dung lượng | Thêm `storage` (byte) — ADR-0023 |
 | `docs/openapi/dashboard-api.yaml:2974` (`ApiResponse`) | Không có `code` | Thêm `code: string \| null` — đổi **vỏ chung** của mọi endpoint, giao diện rẽ nhánh theo nó |
-| `docs/openapi/ai-service-to-java-core.yaml:74-92` | `POST /v1/documents`, "multipart" | `POST /v1/ai/kb/documents`, JSON mục 2. Giữ ý "java-core kiểm `max_documents` và `STORAGE_MB`" — đúng với ADR-0020 |
+| `docs/openapi/ai-service-to-java-core.yaml:74-92` | `POST /v1/documents`, "multipart" | `POST /v1/ai/kb/documents`, JSON mục 2. Giữ ý "java-core kiểm `max_documents` và `STORAGE_MB`" — đúng với ADR-0023 |
 | `docs/events/` | Chỉ có `crm.document.v1.json` (payload TODO) | Thêm `crm.kb.document.uploaded.json` với payload mục 6; bảng topic ở `README.md` thêm dòng này (producer java-core, consumer `ingestion-cg`) |
 | `docs/openapi/ai-service-to-java-core.yaml:54` | "…qua topic `crm.document.v1`" | `crm.kb.document.uploaded` |
-| `docs/Dac-ta-UseCase-Module-AI.docx` — UC018 "Tham số và ngưỡng" | "Tiêu đề: 3–300 ký tự" | 3–255 (ADR-0017) |
-| `docs/Dac-ta-UseCase-Module-AI.docx` — UC018 hậu điều kiện | "Mức tiêu thụ tài liệu được cộng vào `usage_records` của chu kỳ hiện tại" | "…cộng vào số tài liệu và dung lượng đang có" (ADR-0020); UC006 bốn hạn mức → năm |
+| `docs/Dac-ta-UseCase-Module-AI.docx` — UC018 "Tham số và ngưỡng" | "Tiêu đề: 3–300 ký tự" | 3–255 (ADR-0020) |
+| `docs/Dac-ta-UseCase-Module-AI.docx` — UC018 hậu điều kiện | "Mức tiêu thụ tài liệu được cộng vào `usage_records` của chu kỳ hiện tại" | "…cộng vào số tài liệu và dung lượng đang có" (ADR-0023); UC006 bốn hạn mức → năm |
 
 ---
 
 ## 10. Còn treo — [CẦN XÁC NHẬN]
 
 1. ~~Hạn mức tài liệu là "lượt tải trong chu kỳ" hay "số tài liệu đang có"?~~ **Đã chốt 27/09:
-   lượng đang có, cả số lượng lẫn dung lượng** — ADR-0020, mục 5. Còn treo trong ADR đó: xoá mốc
+   lượng đang có, cả số lượng lẫn dung lượng** — ADR-0023, mục 5. Còn treo trong ADR đó: xoá mốc
    khi mức dùng tụt xuống (UC020) và job đối soát bộ đếm với ai-service.
 2. **Hai mã lỗi mới của java-core:** `SUBSCRIPTION_NOT_ACTIVE` (409) và `AI_SERVICE_UNAVAILABLE`
    (503 — mượn tên từ đặc tả UC041). Cùng ba mã phía ai-service đã đánh dấu ở mục 2.4.

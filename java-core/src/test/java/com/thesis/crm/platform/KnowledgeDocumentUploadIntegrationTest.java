@@ -11,14 +11,13 @@ import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import com.thesis.crm.security.RsaKeyProperties;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -32,7 +31,6 @@ import java.sql.Statement;
 import java.text.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -47,6 +45,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -69,10 +68,11 @@ import software.amazon.awssdk.services.s3.model.S3Object;
  * UC018 phía java-core, đầu-cuối qua HTTP thật (Tomcat thật — giới hạn multipart của servlet có
  * hiệu lực, MockMvc thì không).
  *
- * <p>Hạ tầng THẬT: Postgres chạy đủ V101–V116, ứng dụng nối bằng {@code crm_app} — role CHỊU RLS
+ * <p>Hạ tầng THẬT: Postgres chạy đủ V101–V126, ứng dụng nối bằng {@code crm_app} — role CHỊU RLS
  * (nối bằng {@code crm_owner} thì mọi kiểm tra cách ly tenant xanh giả vì chủ bảng bypass RLS);
- * RustFS cùng image với {@code docker-compose.yml}; JWT RS256 ký bằng khoá sinh trong test và đi
- * qua bộ giải mã thật của {@code SecurityConfig}. Chỉ ai-service là giả ({@link FakeAiService}).
+ * RustFS cùng image với {@code docker-compose.yml}; JWT RS256 ký bằng khoá của CHÍNH ứng dụng
+ * ({@code RsaKeyProperties}, sinh trong RAM lúc khởi động) và đi qua bộ giải mã thật của
+ * {@code SecurityConfig}. Chỉ ai-service là giả ({@link FakeAiService}).
  *
  * <p>Đây là chỗ DUY NHẤT đo được ca 409: ai-service không đọc được hạn mức gói.
  */
@@ -94,7 +94,7 @@ class KnowledgeDocumentUploadIntegrationTest {
     static final int MIB = 1024 * 1024;
     /** Gói TRIAL của V102: max_documents = 20. */
     static final int QUOTA_TRIAL = 20;
-    /** Gói TRIAL của V102: storage_mb = 100, lưu theo BYTE (ADR-0020 (c)). */
+    /** Gói TRIAL của V102: storage_mb = 100, lưu theo BYTE (ADR-0023 (c)). */
     static final long DUNG_LUONG_TRIAL = 100L * MIB;
     /** Chu kỳ ĐÃ HẾT của tenant B — ca chép mức tồn kho sang chu kỳ mới. */
     static final UUID SUB_B_CU = UUID.fromString("bbbbbbbb-0000-0000-0000-0000000000c0");
@@ -118,8 +118,8 @@ class KnowledgeDocumentUploadIntegrationTest {
             .waitingFor(Wait.forHttp("/health").forPort(9000).forStatusCode(200));
 
     static final FakeAiService AI = FakeAiService.start();
-    static final KeyPair KHOA = taoCapKhoa();
-    static final Path KHOA_CONG_KHAI = ghiKhoaCongKhai(KHOA);
+    /** Cặp khoá ứng dụng đang tin — gán ở {@link #nhanKhoaUngDung}, trước mọi test. */
+    static KeyPair KHOA;
 
     static S3Client s3;
 
@@ -133,7 +133,6 @@ class KnowledgeDocumentUploadIntegrationTest {
         r.add("crm.storage.s3.endpoint", () -> RUSTFS.getHost() + ":" + RUSTFS.getMappedPort(9000));
         r.add("crm.storage.s3.access-key", () -> S3_ACCESS);
         r.add("crm.storage.s3.secret-key", () -> S3_SECRET);
-        r.add("crm.security.jwt.public-key-location", () -> "file:" + KHOA_CONG_KHAI);
         // Tên dịch vụ "ai-service" vẫn đi qua LoadBalancer — chỉ danh sách instance trỏ vào bản giả.
         r.add("spring.cloud.discovery.client.simple.instances.ai-service[0].uri", AI::baseUrl);
         r.add("crm.ai-service.read-timeout", () -> "2s");
@@ -369,6 +368,11 @@ class KnowledgeDocumentUploadIntegrationTest {
 
     // ── 401 · 403 ────────────────────────────────────────────────────────────────
 
+    @Autowired
+    void nhanKhoaUngDung(RsaKeyProperties rsa) {
+        KHOA = new KeyPair(rsa.getPublicKey(), rsa.getPrivateKey());
+    }
+
     @Test
     void xacThuc401() throws Exception {
         byte[] x = "x".getBytes(UTF_8);
@@ -376,11 +380,10 @@ class KnowledgeDocumentUploadIntegrationTest {
         Instant now = Instant.now();
 
         assertThat(taiLen(null, "a.txt", x, f).status()).isEqualTo(401);
-        // Thiếu tenantId, tenantId không phải UUID chuẩn, hết hạn, ký bằng khoá lạ.
-        assertThat(taiLen(ky(KHOA, Map.of("sub", ADMIN_A.toString(), "roleCode", "TENANT_ADMIN"), now), "a.txt", x, f)
-                .status()).isEqualTo(401);
-        assertThat(taiLen(ky(KHOA, Map.of("sub", ADMIN_A.toString(), "roleCode", "TENANT_ADMIN",
-                "tenantId", "1-1-1-1-1"), now), "a.txt", x, f).status()).isEqualTo(401);
+        // Thiếu tenant_id, hết hạn, ký bằng khoá lạ. (Ca "tenant_id không phải UUID chuẩn" đã bỏ:
+        // token giờ do chính java-core phát hành từ UUID trong CSDL, không có dạng đó.)
+        assertThat(taiLen(ky(KHOA, Map.of("sub", ADMIN_A.toString(), "role", "TENANT_ADMIN", "scope", "TENANT"),
+                now), "a.txt", x, f).status()).isEqualTo(401);
         assertThat(taiLen(ky(KHOA, claims(TENANT_A, "TENANT_ADMIN"), now.minusSeconds(3600)), "a.txt", x, f)
                 .status()).isEqualTo(401);
         KetQua khoaLa = taiLen(ky(taoCapKhoa(), claims(TENANT_A, "TENANT_ADMIN"), now), "a.txt", x, f);
@@ -509,7 +512,7 @@ class KnowledgeDocumentUploadIntegrationTest {
     }
 
     /**
-     * Dung lượng tính theo BYTE đang có (ADR-0020). Tệp làm VƯỢT trần bị chặn dù mức dùng chưa đủ
+     * Dung lượng tính theo BYTE đang có (ADR-0023). Tệp làm VƯỢT trần bị chặn dù mức dùng chưa đủ
      * 100% — và lần bị chặn đó ghi {@code blocked_at}. Tệp lấp ĐÚNG trần thì vẫn được nhận.
      */
     @Test
@@ -533,7 +536,7 @@ class KnowledgeDocumentUploadIntegrationTest {
     }
 
     /**
-     * Hạn mức tài liệu là lượng ĐANG CÓ (ADR-0020 (d)): sang chu kỳ mới, dòng hạn mức mới chép mức
+     * Hạn mức tài liệu là lượng ĐANG CÓ (ADR-0023 (d)): sang chu kỳ mới, dòng hạn mức mới chép mức
      * tồn kho của chu kỳ trước chứ không về 0 — 7 tài liệu đang có thì lượt tải đầu chu kỳ là thứ 8.
      */
     @Test
@@ -785,10 +788,10 @@ class KnowledgeDocumentUploadIntegrationTest {
     }
 
     private static Map<String, Object> claims(UUID tenant, String vaiTro) {
-        return Map.of("sub", ADMIN_A.toString(), "tenantId", tenant.toString(), "roleCode", vaiTro);
+        return Map.of("sub", ADMIN_A.toString(), "tenant_id", tenant.toString(), "role", vaiTro, "scope", "TENANT");
     }
 
-    /** Ký RS256 như java-core sẽ phát hành ở UC002 — claim theo securitySchemes.tenantJwt. */
+    /** Ký RS256 với đúng bộ claim {@code JwtTokenProvider} phát hành: {@code tenant_id}, {@code role}, {@code scope}. */
     private static String ky(KeyPair khoa, Map<String, Object> claims, Instant phatHanh) {
         JWTClaimsSet.Builder b = new JWTClaimsSet.Builder()
                 .issueTime(Date.from(phatHanh))
@@ -810,20 +813,6 @@ class KnowledgeDocumentUploadIntegrationTest {
             return g.generateKeyPair();
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
-        }
-    }
-
-    private static Path ghiKhoaCongKhai(KeyPair khoa) {
-        String pem = "-----BEGIN PUBLIC KEY-----\n"
-                + Base64.getMimeEncoder(64, "\n".getBytes(UTF_8)).encodeToString(khoa.getPublic().getEncoded())
-                + "\n-----END PUBLIC KEY-----\n";
-        try {
-            Path p = Files.createTempFile("jwt-test-", ".pem");
-            Files.writeString(p, pem);
-            p.toFile().deleteOnExit();
-            return p;
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
         }
     }
 }

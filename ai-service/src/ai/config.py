@@ -57,6 +57,16 @@ class Settings(BaseSettings):
     # Bắt buộc bằng 0 để tái lập thí nghiệm (kế hoạch mục 8.1)
     llm_temperature: float = 0.0
 
+    # ── Định tuyến ý định (UC022) ────────────────────────────────────────
+    # Đường nhanh: confidence >= ngưỡng VÀ ý định thuộc nhóm đi nhanh — trả mẫu câu, 0 LLM.
+    fast_path_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
+    # Bỏ phiếu trắng (ADR-0019 §3.3): dưới ngưỡng thì hỏi lại thay vì đoán ý khách.
+    # Phải khớp ROUTER_ABSTENTION_THRESHOLD của ai-classify.
+    router_abstention_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
+    # Đặc tả UC022: hạn chờ 1.000 ms, thử lại một lần.
+    classify_timeout_s: float = Field(default=1.0, gt=0.0)
+    classify_retries: int = Field(default=1, ge=0)
+
     # ── RAG ──────────────────────────────────────────────────────────────
     embedding_model: str = "BAAI/bge-m3"
     embedding_dim: int = 1024
@@ -66,7 +76,7 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     refusal_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
 
-    # ── Kho tệp S3 — UC018 (ADR-0019) ────────────────────────────────────
+    # ── Kho tệp S3 — UC018 (ADR-0022) ────────────────────────────────────
     # java-core GHI tệp gốc vào bucket, ai-service chỉ ĐỌC. Key có dạng {tenant_id}/… — cô lập
     # ngay ở tầng lưu trữ, không chỉ ở truy vấn. Dev: RustFS trong compose. Cloud: AWS S3
     # (s3_endpoint = "s3.amazonaws.com", s3_secure = True).
@@ -91,7 +101,7 @@ class Settings(BaseSettings):
     # Cỡ đoạn mục tiêu, tính bằng token ƯỚC LƯỢNG (xem rag/ingest/chia_doan.py).
     kb_chunk_tokens: int = Field(default=500, gt=0)
 
-    # ── Nạp tài liệu — UC019 (2/2), ADR-0021 ────────────────────────────
+    # ── Nạp tài liệu — UC019 (2/2), ADR-0024 ────────────────────────────
     # Số đoạn mỗi lần gọi /v1/embed/batch và mỗi transaction ghi knowledge_chunks. Nhúng xong lô
     # nào ghi lô đó rồi bỏ vector khỏi bộ nhớ — tài liệu 3.000 đoạn không giữ 3.000 vector cùng lúc.
     kb_embed_batch: int = Field(default=32, gt=0, le=128)
@@ -108,8 +118,8 @@ class Settings(BaseSettings):
 
     # ── Kafka — worker nạp tài liệu ─────────────────────────────────────
     kafka_topic_tai_lieu: str = "crm.kb.document.uploaded"
-    # Master Plan §2.6: "Lỗi vĩnh viễn đẩy sang ai.dlq (giữ 30 ngày)". Bộ tên topic còn lại chưa
-    # chốt (ADR-0017 quyết định 4) — tên này chỉ ai-service ghi, không ai tiêu thụ tự động.
+    # Master Plan §2.6: "Lỗi vĩnh viễn đẩy sang ai.dlq (giữ 30 ngày)". Bộ tên topic đã
+    # chốt ở ADR-0017 (quyết định 2) — tên này chỉ ai-service ghi, không ai tiêu thụ tự động.
     kafka_topic_dlq: str = "ai.dlq"
 
     # ── Tầng suy luận — §3.4.1 ──────────────────────────────────────────

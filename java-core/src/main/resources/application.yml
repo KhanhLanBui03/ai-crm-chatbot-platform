@@ -10,6 +10,22 @@ spring:
   application:
     name: java-core
 
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
   servlet:
     multipart:
       # UC018: tệp tối đa 20 MiB — cùng một con số với ai-service (kb_max_file_bytes =
@@ -106,18 +122,12 @@ crm:
   tenant:
     # Biến phiên dùng cho RLS policy: SET LOCAL app.tenant_id = ...
     session-variable: app.tenant_id
-  security:
-    jwt:
-      # Khoá công khai RS256 dạng PEM (file:… hoặc classpath:…). Để trống thì MỌI request cần
-      # xác thực đều bị 401 — fail-closed, không có chế độ "tạm bỏ qua xác thực".
-      # Dev: scripts/dev-jwt.sh sinh cặp khoá vào .secrets/jwt/ và in token để gọi thử.
-      public-key-location: ${JWT_PUBLIC_KEY_LOCATION:}
   kb:
     # UC018 — nguồn duy nhất của giới hạn dung lượng; spring.servlet.multipart đọc lại từ đây.
     max-file-size: 20MB
   storage:
     s3:
-      # Cùng bộ biến S3_* với ai-service (docker-compose.yml). ADR-0019.
+      # Cùng bộ biến S3_* với ai-service (docker-compose.yml). ADR-0022.
       # endpoint để trống = AWS S3 mặc định theo region (cloud); dev trỏ vào RustFS.
       endpoint: ${S3_ENDPOINT:rustfs:9000}
       secure: ${S3_SECURE:false}

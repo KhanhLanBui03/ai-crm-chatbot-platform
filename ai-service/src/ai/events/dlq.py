@@ -1,10 +1,10 @@
-"""Dựng bản tin cho hàng đợi chết ``ai.dlq`` — Master Plan §2.6, ADR-0021. [PRODUCTION]
+"""Dựng bản tin cho hàng đợi chết ``ai.dlq`` — Master Plan §2.6, ADR-0024. [PRODUCTION]
 
 GIÁ TRỊ VÀ KHOÁ GIỮ NGUYÊN BYTE của bản tin gốc — phát lại từ DLQ phải đưa vào worker đúng thứ đã
 hỏng, không phải một bản đã qua tay mình. Lý do hỏng đi ở HEADER ``dlq.*``, cạnh các header gốc
 (``X-Trace-Id`` giữ nguyên để truy được về lượt tải ban đầu).
 
-Cái gì vào DLQ, cái gì không (ADR-0021):
+Cái gì vào DLQ, cái gì không (ADR-0024):
 
     VÀO   sự kiện KHÔNG biến được thành trạng thái tài liệu
           - sai lược đồ / loại hay phiên bản chưa hỗ trợ   → ngay lập tức

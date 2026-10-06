@@ -1,7 +1,7 @@
 """Truy cập ``knowledge.knowledge_documents`` — UC018 · UC019. [PRODUCTION]
 
 Mọi hàm nhận một ``AsyncSession`` ĐÃ gắn tenant (``src.ai.db.session.get_tenant_session``) —
-trừ ``tim_job_ket``, hàm duy nhất chạy trong phiên hệ thống (ADR-0021).
+trừ ``tim_job_ket``, hàm duy nhất chạy trong phiên hệ thống (ADR-0024).
 
 Ba điều cố ý:
 
@@ -125,7 +125,7 @@ async def them_tai_lieu_pending(
     return ket_qua.scalar_one()
 
 
-# ── UC019 — vòng đời nạp: nhận việc, ghi chặng, kết thúc (ADR-0021) ─────────
+# ── UC019 — vòng đời nạp: nhận việc, ghi chặng, kết thúc (ADR-0024) ─────────
 #
 # Mọi hàm ghi SAU bước nhận việc đều có điều kiện "status = 'PROCESSING' AND attempt_count = :lan"
 # — THẺ SỞ HỮU. Bộ quét trả tài liệu về hàng đợi và lượt khác nhận lại thì attempt_count tăng; lượt
@@ -272,7 +272,7 @@ async def danh_dau_that_bai(
     return ket_qua.rowcount > 0
 
 
-# ── Bộ quét job kẹt (ADR-0021) ───────────────────────────────────────────────
+# ── Bộ quét job kẹt (ADR-0024) ───────────────────────────────────────────────
 
 
 @dataclass(frozen=True, slots=True)

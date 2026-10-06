@@ -83,11 +83,11 @@ data/intent_test_human.jsonl   bộ vàng đã đóng băng   artifacts/DATA_HAS
 
 Hai tệp sau là **tập test đóng băng và sổ hash** — không bao giờ sửa để cải thiện điểm
 (đóng băng ở Ngày 2 và Ngày 6). Sửa được chúng thì mọi con số macro-F1 và recall@5 trong báo
-cáo mất ý nghĩa. *Chỗ đặt bộ vàng chưa chốt* — `ai-service/tests/eval/golden_set.jsonl` hay
-`data/golden_qa.jsonl`; dù nằm ở đâu, đóng băng rồi là cấm sửa.
+cáo mất ý nghĩa. *Chỗ đặt bộ vàng: đã chốt tại `ai-service/tests/eval/golden_set.jsonl` (ADR-0017)*;
+đóng băng rồi là cấm sửa.
 
 **Ngoại lệ có chủ đích về `java-core/`:** nhóm 2 người không có ai đóng vai Track A riêng, nên
-việc CRM mà module AI cần (migration **V117** — 3 cột `sales.lead_scores`, 5 endpoint
+việc CRM mà module AI cần (migration **V128** — 3 cột `sales.lead_scores`, 5 endpoint
 `/internal/*`, consumer `analytics-cg`) do chính hai người làm. Nhưng **agent vẫn bị chặn cứng** ở đó — phần java-core làm ở phiên
 chính, không giao cho agent AI.
 
@@ -144,7 +144,7 @@ Không ghi `Co-Authored-By: Claude` hay `Generated with Claude Code` vào commit
 | Cần biết | Đọc |
 |---|---|
 | Cây thư mục, "đặt file mới ở đâu" | `ai-service/README.md` · `ai-service/CLAUDE.md` |
-| Vì sao chọn như vậy | `docs/adr/` — 16 ADR (0001–0016), ADR kế tiếp là **0017** |
+| Vì sao chọn như vậy | `docs/adr/` — 24 ADR (0001–0024), ADR kế tiếp là **0025** |
 | Việc từng ngày, ngưỡng từng chỉ số | `docs/Ke-hoach-21-ngay-Module-AI-CRM.xlsx` — đọc sheet *Trạng thái xuất phát* trước |
 | Đặc tả 20 UC AI (17 trong phạm vi) | `docs/Dac-ta-UseCase-Module-AI.docx` |
 | Kiến trúc hai tầng, ngân sách độ trễ | `docs/MASTER_PLAN_AI_CRM_v8.md.docx` §3.2, §5.3 |
@@ -161,27 +161,26 @@ Không ghi `Co-Authored-By: Claude` hay `Generated with Claude Code` vào commit
 |---|---|---|
 | Số chiều vector | **1024** (không phải 768 như §4.2) | ADR-0015 |
 | Schema kho tri thức | **`knowledge.knowledge_*`** (không phải `ai.chunks`) | ADR-0015 |
-| Cổng chặn CI | **3 gói** `onnxruntime\|torch\|xgboost` (không phải 6) | ADR-0015 |
+| Cổng chặn CI | **3 gói** `onnxruntime\|torch\|xgboost` + **exit 1 khi $\ge 400$ MB** | ADR-0015, ADR-0017 |
 | Công cụ migration | **Flyway V2xx** (không phải Alembic) | ADR-0015 |
 | Tên role runtime | **`ai_app`** (Master Plan §4.2 ghi `ai_service` — sai) | ADR-0016 |
 | Nhãn huấn luyện UC030 | **`sales.lead_scores` + 3 cột**, KHÔNG tạo `ai.lead_features` | ADR-0016 |
 | Lịch và nhân sự | **3 tuần / 21 ngày · 2 người** · 17 UC (Master Plan ghi 7 tuần, 3 người, 20 UC) | kế hoạch 21 ngày |
+| Tên endpoint | **`/v1/ai/**`** (khớp Master Plan §2.5 và `service.py`) | ADR-0017 |
+| Bộ tên topic Kafka | **9 topic** (8 topic Master Plan §2.6 + `crm.deal.closed`) | ADR-0017 |
+| Chỗ đặt bộ vàng | **`ai-service/tests/eval/golden_set.jsonl`** | ADR-0017 |
+| Cỡ tập test người thật | **200 câu** cho nhóm 2 người trong 21 ngày | ADR-0017 |
 
 **Còn treo — hỏi, đừng tự quyết:**
 
 | Vấn đề | Trạng thái |
 |---|---|
-| **Tên endpoint** — `service.py` ghi `/v1/ai/**`, `docs/openapi/` ghi `/v1/answer` | Chốt **trước Ngày 3** (route đầu tiên). Đề xuất theo `/v1/ai/**` (§2.5) |
-| **Bộ tên topic Kafka** — 8 (§2.6) vs 5 `crm.*.v1` (repo) | Chốt **trước Ngày 5** (consumer đầu tiên). `crm.deal.closed` chưa có trong cả hai bộ mà UC030 cần ở Ngày 18 |
-| **Chỗ đặt bộ vàng** — `tests/eval/golden_set.jsonl` vs `data/golden_qa.jsonl` | Chốt **trước Ngày 6**. Hai chỗ đang song song, một file rỗng một file chưa tồn tại |
-| **Cỡ tập test người thật** — ADR-0016 ghi ≥ 250, lịch 21 ngày vừa 200 | Chốt **ở Ngày 2** (buổi gõ chung). Cả bốn dòng này gộp thành **ADR-0017** |
 | **Ngưỡng recall@5** — §1.6 ghi 0,85, `.claude/rules/rag-eval.md` ghi 0,80 | Kế hoạch 21 ngày theo **0,85**; sửa rule cho khớp khi viết `rag/` |
 | **Track A thêm 3 cột `sales.lead_scores`** | Đã soạn đề xuất, **chưa gửi**: `docs/contracts/de-xuat-track-a-lead-scores-outcome.md` |
 
-Với 2 người thay vì 3: buổi gõ tay chuyển về **Ngày 2**, kế hoạch 21 ngày đặt **200 câu**
-trong khi ADR-0016 ghi không dưới 250 (giả định 3 người). Chưa ADR nào chốt lại — quyết ở
-Ngày 2 và **ghi rõ lý do vào ADR-0017 lẫn báo cáo**; im lặng rồi nộp 200 mới là thứ mất điểm.
-Đây là điều kiện cần của toàn bộ Chương 5: không có tập test người thật thì hai nhánh đối
-chứng §5.9 đang so trên một bài toán giả. Tập test đóng băng ngay sau buổi gõ.
+Với 2 người thay vì 3: buổi gõ tay diễn ra ở **Ngày 2**, kế hoạch 21 ngày chốt **200 câu**
+đã ghi rõ lý do vào **ADR-0017** lẫn báo cáo Chương 5. Đây là điều kiện cần của toàn bộ
+thực nghiệm: không có tập test người thật thì hai nhánh đối chứng §5.9 đang so trên một
+bài toán giả. Tập test đóng băng ngay sau buổi gõ với mã hash trong `artifacts/DATA_HASHES.txt`.
 
 Luật nào không truy được về `docs/` thì ghi `[CẦN XÁC NHẬN]` và hỏi — đừng đoán.

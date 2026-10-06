@@ -6,7 +6,7 @@ Lược đồ cơ sở dữ liệu **chính thức** của hệ thống: **30 b�
 > Tài liệu này **đã được hiện thực và kiểm chứng**: 23 file migration Flyway (V101–V115,
 > V201–V209) chạy sạch trên PostgreSQL 16 + pgvector, qua đủ 6 mục kiểm ở [mục 16](#16-kiểm-chứng).
 > Mọi cột, mọi ràng buộc `CHECK` dưới đây lấy từ cơ sở dữ liệu đang chạy, không phải bản phác.
-> **V116** (27/09/2026, `usage_records.warned_at` / `blocked_at`) thêm sau đợt kiểm đó: đã chạy
+> **V126** (27/09/2026, `usage_records.warned_at` / `blocked_at`) thêm sau đợt kiểm đó: đã chạy
 > sạch qua Flyway trong test tích hợp java-core, **chưa** chạy lại 6 mục kiểm ở mục 16.
 
 ---
@@ -298,11 +298,11 @@ do RLS trên chính `user_roles` lo.
 | `tenant_id` | uuid | — | — | `tenants` | |
 | `subscription_id` | uuid | — | ✓ | `tenant_subscriptions` | Khoá ngoại phức hợp |
 | `metric` | varchar(30) | — | ✓ | — | `CONVERSATION` · `AI_TOKEN` · `DOCUMENT` · `STORAGE_MB` · `USER` |
-| `used_value` | bigint | — | — | — | Dòng chảy (`CONVERSATION`, `AI_TOKEN`): cộng dồn trong chu kỳ. Tồn kho (`DOCUMENT`, `STORAGE_MB`, `USER`): lượng **đang có**, chép sang chu kỳ sau — ADR-0020. `STORAGE_MB` tính bằng **byte** |
+| `used_value` | bigint | — | — | — | Dòng chảy (`CONVERSATION`, `AI_TOKEN`): cộng dồn trong chu kỳ. Tồn kho (`DOCUMENT`, `STORAGE_MB`, `USER`): lượng **đang có**, chép sang chu kỳ sau — ADR-0023. `STORAGE_MB` tính bằng **byte** |
 | `quota_value` | bigint | — | — | — | **Sao chép** từ gói lúc mở chu kỳ. `STORAGE_MB` = `storage_mb × 1048576` byte |
 | `last_calculated_at` | timestamptz | ✓ | — | — | |
-| `warned_at` | timestamptz | ✓ | — | — | **V116.** Lần đầu `used_value` chạm 80% trong chu kỳ — UC006 4.1 |
-| `blocked_at` | timestamptz | ✓ | — | — | **V116.** Lần đầu chạm 100%. `CHECK`: có `blocked_at` thì phải có `warned_at` — UC006 4.2, UC018 409 |
+| `warned_at` | timestamptz | ✓ | — | — | **V126.** Lần đầu `used_value` chạm 80% trong chu kỳ — UC006 4.1 |
+| `blocked_at` | timestamptz | ✓ | — | — | **V126.** Lần đầu chạm 100%. `CHECK`: có `blocked_at` thì phải có `warned_at` — UC006 4.2, UC018 409 |
 | `created_at` · `updated_at` | timestamptz | — | — | — | |
 
 `quota_value` sao chép chứ không đọc qua `plan_id` — đây **không** phải vi phạm 3NF mà là
@@ -714,7 +714,7 @@ vị chính xác thì phải quay về dữ liệu thô ở `ai.ai_interactions`
 | `language` | varchar(10) | — | — | — | `vi` · `en` |
 | `status` | varchar(30) | — | — | — | `PENDING` · `PROCESSING` · `READY` · `FAILED` · `ARCHIVED` |
 | `chunk_count` | int | — | — | — | Lúc đang nạp: số đoạn **dự kiến** (mẫu số thanh tiến độ SCR033). Từ `READY`: số đoạn thật đã kiểm đếm |
-| `attempt_count` | smallint | — | — | — | **V211.** Số lần nhận xử lý, trần 3. Cũng là **thẻ sở hữu**: mọi ghi sau bước nhận việc kèm `attempt_count = lượt của mình` (ADR-0021) |
+| `attempt_count` | smallint | — | — | — | **V211.** Số lần nhận xử lý, trần 3. Cũng là **thẻ sở hữu**: mọi ghi sau bước nhận việc kèm `attempt_count = lượt của mình` (ADR-0024) |
 | `ingest_step` | varchar(20) | ✓ | — | — | **V211.** `EXTRACTING` · `CHUNKING` · `EMBEDDING` · `INDEXING` — chặng đang chạy (`PROCESSING`) hoặc đã hỏng (`FAILED`); `NULL` ở trạng thái khác (`CHECK`) |
 | `ingest_started_at` | timestamptz | ✓ | — | — | **V211.** Lượt nạp hiện tại bắt đầu; `indexed_at − ingest_started_at` = thời gian nạp |
 | `error_message` | text | ✓ | — | — | `CHECK`: bắt buộc khi `FAILED` — hiển thị nguyên văn để người dùng sửa file |
@@ -726,7 +726,7 @@ vị chính xác thì phải quay về dữ liệu thô ở `ai.ai_interactions`
 Vòng đời nạp gộp vào cột `status` thay cho bảng `ingestion_jobs` riêng: một tài liệu có đúng một
 tiến trình nạp đang chạy. Giữ `version` để câu trả lời đã sinh vẫn trích dẫn được đúng bản đã dùng.
 
-**V211 (ADR-0021)** — nạp commit theo chặng thay vì một transaction, để SCR033 thấy 6 bước
+**V211 (ADR-0024)** — nạp commit theo chặng thay vì một transaction, để SCR033 thấy 6 bước
 `QUEUED → EXTRACTING → CHUNKING → EMBEDDING → INDEXING → DONE` (hai bước đầu-cuối suy từ `status`).
 Kèm theo: chỉ mục bộ phận `ix_doc_dang_nap (updated_at) WHERE status IN ('PENDING','PROCESSING')`
 cho bộ quét job kẹt; `updated_at` là nhịp tim. Hàm `knowledge.tim_job_ket(interval, int)` là
@@ -1060,7 +1060,7 @@ riêng chứ không gộp thành ký hiệu N–N: chúng mang cột riêng (`gr
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════════╗
-║  TRACK A — java-core · Flyway V101–V116 · platform / engagement / sales /        ║
+║  TRACK A — java-core · Flyway V101–V126 · platform / engagement / sales /        ║
 ║            analytics                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════════╝
 
@@ -1198,7 +1198,7 @@ case nào cho người dùng tự quản lý phiên.
 | V208 | `safety_flag` + cấu trúc `tool_schema_cache` | — (chỉ `ALTER`) |
 | V209 | Điểm bám nguồn, cờ dùng đệm, độ trễ kiểm duyệt, mô tả tài liệu | — (4 cột) |
 | V210 | `unaccent` · `knowledge.f_unaccent` IMMUTABLE · `content_segmented` GENERATED | — (thay 1 cột + GIN) |
-| V211 | Tiến độ nạp (3 cột) · chống trùng · hàm quét job kẹt `SECURITY DEFINER` — ADR-0021 | `ai.processed_events` |
+| V211 | Tiến độ nạp (3 cột) · chống trùng · hàm quét job kẹt `SECURITY DEFINER` — ADR-0024 | `ai.processed_events` |
 
 Track A chạy tự động khi khởi động java-core. Track B chạy bằng `bash scripts/migrate-ai.sh`.
 

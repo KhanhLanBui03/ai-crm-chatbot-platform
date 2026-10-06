@@ -38,7 +38,7 @@ export function ContextPanel({
 }) {
   if (dangTai || !nguCanh) {
     return (
-      <div className="flex w-80 shrink-0 flex-col gap-4 border-l p-4">
+      <div className="hidden xl:flex w-80 shrink-0 flex-col gap-4 border-l p-4">
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-40 w-full" />
@@ -67,7 +67,7 @@ export function ContextPanel({
         })} giây`
 
   return (
-    <div className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l p-4">
+    <div className="hidden xl:flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l p-4">
       <div className="flex items-center gap-2.5">
         <div className="bg-secondary text-secondary-foreground flex size-10 shrink-0 items-center justify-center rounded-full text-[15px] font-medium">
           {chuCaiDau(tenKhach)}

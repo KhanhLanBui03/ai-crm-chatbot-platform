@@ -31,7 +31,12 @@ export function ConversationList({
   onDoiBoLoc,
 }: Props) {
   return (
-    <div className="flex w-80 shrink-0 flex-col border-r">
+    <div
+      className={cn(
+        'flex flex-col border-r h-full',
+        idDangChon ? 'hidden md:flex md:w-80 md:shrink-0' : 'w-full md:w-80 md:shrink-0',
+      )}
+    >
       <div className="flex flex-col gap-2.5 border-b p-3">
         <div className="flex items-center gap-2">
           <span className="flex-1 text-base font-semibold">Hộp thư</span>

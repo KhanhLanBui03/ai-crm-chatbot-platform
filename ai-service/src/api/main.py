@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from src.ai.config import get_settings
+from src.ai.inference.clients import aclose_http_clients
 from src.ai.telemetry.logging import setup_logging
 from src.api import eureka
 from src.api.errors import dang_ky_xu_ly_loi
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         # TODO: dừng consumer Kafka, chờ xử lý nốt bản tin đang dở
+        await aclose_http_clients()
         await eureka.deregister()
         logger.info("ai-service đã tắt")
 

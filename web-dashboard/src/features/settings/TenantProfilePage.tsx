@@ -12,7 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useAppSelector } from '@/app/store/hooks'
+import { useAppDispatch, useAppSelector } from '@/app/store/hooks'
+import { capNhatTenantName } from '@/app/store/authSlice'
 import type { CheDoPhanCong, DoanhNghiep, GiongDieuAi } from '@/types/schema'
 
 const GIONG_DIEU: Record<GiongDieuAi, { nhan: string; moTa: string }> = {
@@ -46,6 +47,7 @@ const MUI_GIO = ['Asia/Ho_Chi_Minh', 'Asia/Bangkok', 'Asia/Singapore', 'UTC']
  */
 export function TenantProfilePage() {
   const laQuanTri = useAppSelector((s) => s.auth.nguoiDung?.roleCode === 'TENANT_ADMIN')
+  const dispatch = useAppDispatch()
   const truyVan = useHoSoDoanhNghiepQuery()
   const [luu, ketQua] = useCapNhatDoanhNghiepMutation()
 
@@ -78,8 +80,15 @@ export function TenantProfilePage() {
       onHuy={() => goc && datNhap(goc)}
       onLuu={async () => {
         if (!nhap) return
-        await luu(nhap).unwrap()
-        toast.success('Đã lưu hồ sơ doanh nghiệp.')
+        try {
+          const res = await luu(nhap).unwrap()
+          if (res?.name) {
+            dispatch(capNhatTenantName(res.name))
+          }
+          toast.success('Đã lưu hồ sơ doanh nghiệp thành công.')
+        } catch {
+          toast.error('Không thể lưu hồ sơ doanh nghiệp. Vui lòng thử lại sau.')
+        }
       }}
       muc={[
         {
@@ -94,6 +103,29 @@ export function TenantProfilePage() {
                   onChange={(e) => dat('name', e.target.value)}
                 />
               </Field>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field>
+                  <FieldLabel htmlFor="dn-email">Email liên hệ</FieldLabel>
+                  <Input
+                    id="dn-email"
+                    type="email"
+                    value={nhap.contactEmail ?? ''}
+                    onChange={(e) => dat('contactEmail', e.target.value)}
+                  />
+                  <FieldDescription>
+                    Email chính nhận thông báo hạn mức và tài khoản.
+                  </FieldDescription>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="dn-sdt">Số điện thoại</FieldLabel>
+                  <Input
+                    id="dn-sdt"
+                    type="tel"
+                    value={nhap.phone ?? ''}
+                    onChange={(e) => dat('phone', e.target.value || null)}
+                  />
+                </Field>
+              </div>
               <Field>
                 <FieldLabel htmlFor="dn-nganh">Ngành hàng</FieldLabel>
                 <Input

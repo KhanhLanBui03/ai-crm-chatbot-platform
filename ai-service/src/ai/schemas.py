@@ -1,43 +1,54 @@
 """DTO vào/ra của ai-service.
 
 MẪU cho tầng schemas. Pydantic model ở đây là GIAO ƯỚC với java-core — mọi thay đổi phải
-đồng bộ với docs/openapi/ai-service-to-java-core.yaml.
+đồng bộ với docs/openapi/ai-service-to-java-core.yaml (``ChatRequest``, ``ChatResponse``,
+``Citation``). Sửa ở đây mà không sửa ở đó là đơn phương đổi hợp đồng liên làn.
 
 Không dùng lại các model này làm entity CSDL. ORM model nằm ở src/ai/db/models/.
 """
 
 import unicodedata
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# Bốn giá trị route của hợp đồng. Bảy nhánh nội bộ (ai_interactions.branch, V204) được
+# chiếu xuống bốn giá trị này ở orchestrator/router.py — java-core không cần biết bảy nhánh.
+ChatRoute = Literal["FAST_PATH", "RAG", "FALLBACK", "HANDOFF"]
 
 
 class Citation(BaseModel):
     """Một căn cứ mà câu trả lời dựa vào. Bắt buộc có để chống bịa đặt (thí nghiệm E6)."""
 
-    chunk_id: str
-    document_title: str
-    section_path: str | None = None
+    chunk_id: UUID
+    document_id: UUID
+    title: str | None = None
+    snippet: str | None = None
     score: float
 
 
-class AnswerRequest(BaseModel):
+class HistoryMessage(BaseModel):
+    role: Literal["user", "assistant", "system"]
+    content: str
+
+
+class ChatRequest(BaseModel):
     """java-core yêu cầu ai-service trả lời một lượt hội thoại."""
 
-    conversation_id: str
-    message: str
-    history: list[dict[str, str]] = Field(default_factory=list)
+    conversation_id: UUID
+    message: str = Field(min_length=1)
+    history: list[HistoryMessage] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class AnswerResponse(BaseModel):
-    """Kết quả một lượt đi qua đồ thị LangGraph."""
+class ChatResponse(BaseModel):
+    """Kết quả một lượt đi qua router ý định và nhánh xử lý."""
 
-    answer: str | None
+    answer: str
     citations: list[Citation] = Field(default_factory=list)
-    # Nhánh đã chọn — đo độ chính xác định tuyến ĐỘC LẬP với độ chính xác câu trả lời (E5)
-    route: str
+    route: ChatRoute
     # Từ chối khi không đủ căn cứ. Đây là hành vi đúng, không phải lỗi (E7).
     refused: bool = False
     handoff: bool = False
@@ -57,12 +68,12 @@ class KbDocumentCreate(BaseModel):
     bị bỏ qua trong im lặng — bỏ qua thì không ai biết phía gọi đang hiểu sai hợp đồng.
 
     ``title`` tối đa 255 chứ không phải 300 như đặc tả: khớp ``varchar(255)`` của V202, để
-    tiêu đề dài bị 422 ở đây thay vì nổ 500 ở CSDL. Độ lệch ghi ở ADR-0017.
+    tiêu đề dài bị 422 ở đây thay vì nổ 500 ở CSDL. Độ lệch ghi ở ADR-0020.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    # URI object trong kho S3: s3://{bucket}/{tenant_id}/…/{ten-tep} (ADR-0019).
+    # URI object trong kho S3: s3://{bucket}/{tenant_id}/…/{ten-tep} (ADR-0022).
     # Kiểm thuộc tenant ở rag/ingest/luu_tru.py.
     file_uri: str = Field(min_length=1, max_length=2048)
     # Tên gốc để hiển thị và để biết đuôi tệp người dùng khai — không dùng để đọc tệp.

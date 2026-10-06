@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # Giai đoạn phát triển: chạy Vite dev server, có hot reload.
 # Khi triển khai thật sẽ đổi sang build tĩnh + Nginx phục vụ (xem TODO ở README).
 FROM node:22-alpine

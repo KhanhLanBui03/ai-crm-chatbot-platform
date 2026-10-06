@@ -16,7 +16,7 @@ import jakarta.validation.constraints.Pattern;
  * thứ tự ai-service làm ({@code schemas.py::_nfc_roi_strip} chạy {@code mode="before"}).
  *
  * @param title       3–255 code point. Đặc tả ghi 3–300; 255 khớp {@code varchar(255)} của V202
- *                    (ADR-0017 quyết định 3)
+ *                    (ADR-0020 quyết định 3)
  * @param description tối đa 500 code point; rỗng hoặc toàn khoảng trắng thành {@code null}
  * @param language    {@code vi} | {@code en}; thiếu hoặc rỗng thành {@code vi}
  */

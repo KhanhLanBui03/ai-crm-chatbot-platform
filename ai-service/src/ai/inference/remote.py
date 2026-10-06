@@ -24,7 +24,7 @@ ngân sách của ai-service < idle_timeout của ALB (120 s). Đặt ngược t
 kết nối trước khi ứng dụng kịp trả lỗi tử tế, và log không cho biết gì.
 
 HIỆN CÓ (Ngày 5): ``RemoteEmbedClient`` — KHÔNG có circuit breaker, KHÔNG tự thử lại. Việc thử
-lại của luồng nạp tài liệu nằm ở tầng job (``attempt_count``, ADR-0021): thử lại ở đây nữa là
+lại của luồng nạp tài liệu nằm ở tầng job (``attempt_count``, ADR-0024): thử lại ở đây nữa là
 nhân số lần thử lên, và một lô 32 đoạn treo 60 s × 3 lần ở client × 3 lượt job là 9 phút giữ
 worker. Đường chat (Ngày 9) mới cần breaker — nó có ngân sách độ trễ, luồng nạp thì không.
 TODO: ``CircuitBreaker`` ba trạng thái + đếm lỗi theo cửa sổ trượt.

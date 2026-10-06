@@ -1,6 +1,6 @@
 """Cô lập tenant ở TẦNG KHO LƯU TRỮ — UC018. [PRODUCTION]
 
-java-core ghi tệp vào bucket S3 dưới key ``{tenant_id}/…`` rồi gửi URI sang đây (ADR-0019).
+java-core ghi tệp vào bucket S3 dưới key ``{tenant_id}/…`` rồi gửi URI sang đây (ADR-0022).
 RLS chỉ bảo vệ các dòng trong CSDL — nó không biết gì về kho S3. Nếu ai-service tải bất cứ
 object nào được gửi tới, thì một URI trỏ sang key của tenant khác sẽ được đọc, cắt đoạn, nhúng
 vector rồi ghi vào kho tri thức của tenant đang gọi — đúng kiểu rò rỉ chéo tenant mà chỉ số

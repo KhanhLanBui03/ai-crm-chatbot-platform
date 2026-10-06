@@ -14,7 +14,7 @@ import java.util.UUID;
  * @param jobId         bằng {@code id} — một tài liệu có đúng một tiến trình nạp (V202)
  * @param documentQuota số tài liệu đang có SAU lượt này so với trần của gói; {@code warnedAt ≠ null}
  *                      thì hiện cảnh báo 80%
- * @param storageQuota  dung lượng tài liệu đang chiếm SAU lượt này, tính bằng BYTE (ADR-0020)
+ * @param storageQuota  dung lượng tài liệu đang chiếm SAU lượt này, tính bằng BYTE (ADR-0023)
  */
 public record DocumentUploadResponse(
         UUID id,

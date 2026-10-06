@@ -615,13 +615,13 @@ if CONG_PARITY_DAT:
 else:
     print(f"\n[TRƯỢT] Cổng parity: min = {min_tong:.5f} < 0,995")
     print("  KHÔNG hạ ngưỡng. Hoãn phán quyết tới Ngày 7: đo Recall@5 fp32 vs INT8 trên")
-    print("  bộ vàng — đó mới là chỉ số đích, cosine chỉ là chỉ số thay thế. ADR-0018.")
+    print("  bộ vàng — đó mới là chỉ số đích, cosine chỉ là chỉ số thay thế. ADR-0021.")
 
 # %% [markdown]
 # ### Tổng kết vào sổ đăng ký
 
 # %%
-# Xoá artifact vô dụng: bản int8-matmul tốn 1 298 MB mà parity không đổi (xem ADR-0018).
+# Xoá artifact vô dụng: bản int8-matmul tốn 1 298 MB mà parity không đổi (xem ADR-0021).
 for _ten in ["bge-m3-int8-matmul.onnx", "bge-m3-int8-matmul.onnx.data"]:
     _p = THU_MUC / _ten
     if _p.exists():
@@ -663,7 +663,7 @@ so_dang_ky["parity"] = {
         "TRUOT nguong 0,995. Tap tong hop, chua phai van ban nghiep vu that. "
         "Da BAC BO gia thuyet 'bang nhung la nguyen nhan': loai Gather khoi luong tu hoa "
         "cho mean 0,98503, khong doi so voi 0,98476 — sai so nam o activation cua 24 tang "
-        "MatMul. KHONG ha nguong; hoan phan quyet toi Ngay 7 (ADR-0018)."
+        "MatMul. KHONG ha nguong; hoan phan quyet toi Ngay 7 (ADR-0021)."
     ),
 }
 so_dang_ky["do_tre_1cau_12token_ms"] = {**do_tre, "may": "Kaggle CPU — KHONG tai lap duoc"}

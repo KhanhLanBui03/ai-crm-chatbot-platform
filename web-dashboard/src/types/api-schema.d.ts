@@ -2097,7 +2097,8 @@ export interface paths {
                         content: string;
                         /**
                          * Format: uuid
-                         * @description Khi ghi chú mở từ khung bên cạnh hội thoại
+                         * @description Khi ghi chú mở từ khung bên cạnh hội thoại. Phải là hội thoại của CHÍNH khách
+                         *     hàng này, cùng doanh nghiệp — không thì 422.
                          */
                         conversationId?: string | null;
                     };
@@ -2115,12 +2116,112 @@ export interface paths {
                         };
                     };
                 };
+                /** @description Khách hàng đã hợp nhất hoặc đã ẩn danh hoá — không ghi thêm thông tin */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
+                    };
+                };
             };
         };
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contacts/{contactId}/notes/{noteId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contactId: components["parameters"]["ContactId"];
+                noteId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Xoá mềm ghi chú
+         * @description UC017 — thêm 06/10. Chỉ tác giả hoặc quản trị viên. Xoá mềm (`deleted_at`): không còn trả
+         *     về ở danh sách nhưng còn trong CSDL để truy vết. Ghi kiểm toán `NOTE_DELETED`.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    contactId: components["parameters"]["ContactId"];
+                    noteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: components["responses"]["OkRong"];
+                /** @description Không phải tác giả hoặc quản trị viên */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["KhongThay"];
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Sửa nội dung và/hoặc ghim ghi chú
+         * @description UC017 — thêm 06/10. Chỉ tác giả hoặc quản trị viên (`canEdit`), không thì 403.
+         *     Trường để trống (null) là không đổi. Đổi `content` thì cập nhật `editedAt`; ghim/bỏ ghim
+         *     KHÔNG đổi `editedAt`. Ghi nhật ký kiểm toán `NOTE_UPDATED` (không chép nội dung).
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    contactId: components["parameters"]["ContactId"];
+                    noteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        content?: string | null;
+                        isPinned?: boolean | null;
+                    };
+                };
+            };
+            responses: {
+                /** @description Ghi chú sau khi sửa */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"] & {
+                            data?: components["schemas"]["GhiChu"];
+                        };
+                    };
+                };
+                /** @description Không phải tác giả hoặc quản trị viên */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["KhongThay"];
+            };
+        };
         trace?: never;
     };
     "/api/v1/tags": {
@@ -2160,8 +2261,11 @@ export interface paths {
         /**
          * Tạo thẻ
          * @description UC017 luồng 8.1. Trùng tên kể cả khi khác chữ hoa chữ thường hoặc khác dấu thì trả về
-         *     **thẻ đã có** với mã 200, không tạo bản ghi trùng — so sánh trên `lower(unaccent(name))`.
-         *     Chạm `plans.max_tags` thì 409.
+         *     **thẻ đã có** với mã 200, không tạo bản ghi trùng — so sánh trên `engagement.fold_vi(name)`
+         *     (bỏ dấu + viết thường, V125). Chạm `plans.max_tags` thì 409; doanh nghiệp không có thuê
+         *     bao hiệu lực tính như gói TRIAL. Không gửi `color` thì hệ thống tự gán từ bảng 8 màu theo tên.
+         *
+         *     Sửa 06/10: giới hạn khớp CSDL (V105) — `name` ≤ 50 (trước ghi 60), `color` đúng `#RRGGBB`.
          */
         post: {
             parameters: {
@@ -2231,7 +2335,8 @@ export interface paths {
         get?: never;
         /**
          * Gắn thẻ cho khách hàng
-         * @description Thẻ gắn ở **cấp khách hàng**, không phải cấp hội thoại.
+         * @description Thẻ gắn ở **cấp khách hàng**, không phải cấp hội thoại. Gắn lại thẻ đã gắn: 200, không đổi
+         *     gì. Khách đã hợp nhất / ẩn danh hoá: 409. Ghi kiểm toán `CONTACT_TAGGED`.
          */
         put: {
             parameters: {
@@ -2246,10 +2351,21 @@ export interface paths {
             requestBody?: never;
             responses: {
                 200: components["responses"]["OkRong"];
+                404: components["responses"]["KhongThay"];
+                /** @description Khách hàng đã hợp nhất hoặc đã ẩn danh hoá */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
             };
         };
         post?: never;
-        /** Gỡ thẻ khỏi khách hàng */
+        /**
+         * Gỡ thẻ khỏi khách hàng
+         * @description Gỡ thẻ chưa gắn — 200, không đổi gì. Ghi kiểm toán `CONTACT_UNTAGGED`.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -2263,6 +2379,7 @@ export interface paths {
             requestBody?: never;
             responses: {
                 200: components["responses"]["OkRong"];
+                404: components["responses"]["KhongThay"];
             };
         };
         options?: never;
@@ -4702,7 +4819,7 @@ export interface components {
          * @description `platform.roles.code`. ERD chỉ có hai vai trò; doanh nghiệp không tự tạo vai trò mới.
          * @enum {string}
          */
-        MaVaiTro: "TENANT_ADMIN" | "AGENT";
+        MaVaiTro: "TENANT_ADMIN" | "AGENT" | "PLATFORM_ADMIN";
         /** @enum {string} */
         TrangThaiNguoiDung: "PENDING" | "ACTIVE" | "DISABLED";
         /** @enum {string} */
@@ -4848,6 +4965,11 @@ export interface components {
             permissions: string[];
             tenantName: string;
             planName: string;
+            /**
+             * @description Phạm vi: TENANT = doanh nghiệp, PLATFORM = quản trị nền tảng
+             * @enum {string}
+             */
+            scope?: "TENANT" | "PLATFORM";
         };
         NguoiDung: {
             /** Format: uuid */
@@ -5284,11 +5406,16 @@ export interface components {
             /** Format: uuid */
             authorUserId: string;
             authorName: string;
+            /** @description Ghim lên đầu danh sách (thêm 06/10, UC017) */
+            isPinned?: boolean;
             /** @description Có dấu hiệu chứa dữ liệu cá nhân nhạy cảm — hệ thống nhắc, không chặn */
             flaggedSensitive?: boolean;
             /** @description Chỉ tác giả hoặc quản trị viên sửa được */
             canEdit?: boolean;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Lần sửa NỘI DUNG gần nhất (`edited_at`, V125) — ghim không tính
+             */
             editedAt?: string | null;
             /** Format: date-time */
             createdAt: string;

@@ -8,7 +8,7 @@ pod worker có giới hạn bộ nhớ: OOM-kill giữa chừng, và lượt th�
 đúng chỗ đó. Nhúng lô nào ghi lô đó thì đỉnh bộ nhớ là MỘT lô (~1 MB với lô 32), bất kể tài liệu
 dài bao nhiêu — ``tests/unit/test_nhung_theo_lo.py`` đo điều này bằng ``tracemalloc``.
 
-Mỗi lần ghi lô cũng là một NHỊP TIM của job (ADR-0021) — bộ quét không nhầm một tài liệu dài đang
+Mỗi lần ghi lô cũng là một NHỊP TIM của job (ADR-0024) — bộ quét không nhầm một tài liệu dài đang
 nhúng với một tiến trình đã chết.
 
 Module này không chạm CSDL: việc ghi do ``ghi_lo`` (nơi gọi truyền vào) làm.

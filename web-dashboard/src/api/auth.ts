@@ -14,6 +14,35 @@ export interface ThanDangKy {
   password: string
   timezone?: string
   acceptedTerms: boolean
+  otpCode?: string
+}
+
+export interface ThanGuiOtp {
+  email: string
+  companyName?: string
+  purpose?: 'REGISTER' | 'FORGOT_PASSWORD'
+}
+
+export interface ThanXacThucOtp {
+  email: string
+  otpCode: string
+  purpose?: 'REGISTER' | 'FORGOT_PASSWORD'
+}
+
+export interface KetQuaXacThucOtp {
+  valid: boolean
+  resetToken?: string
+}
+
+export interface ThanDatLaiMatKhau {
+  email?: string
+  otpCode?: string
+  token?: string
+  newPassword: string
+}
+
+export interface ThanQuenMatKhau {
+  email: string
 }
 
 /**
@@ -27,6 +56,14 @@ export const authApi = apiSlice.injectEndpoints({
   endpoints: (build) => ({
     dangNhap: build.mutation<KetQuaDangNhap, ThanDangNhap>({
       query: (than) => ({ url: '/api/v1/auth/login', method: 'POST', body: than }),
+    }),
+
+    guiOtp: build.mutation<null, ThanGuiOtp>({
+      query: (than) => ({ url: '/api/v1/auth/send-otp', method: 'POST', body: than }),
+    }),
+
+    xacThucOtp: build.mutation<KetQuaXacThucOtp, ThanXacThucOtp>({
+      query: (than) => ({ url: '/api/v1/auth/verify-otp', method: 'POST', body: than }),
     }),
 
     // ── SCR001 — đăng ký doanh nghiệp ─────────────────────────────────────────
@@ -49,12 +86,17 @@ export const authApi = apiSlice.injectEndpoints({
     }),
 
     // ── SCR004 · SCR005 — quên và đặt lại mật khẩu ────────────────────────────
-    quenMatKhau: build.mutation<null, { email: string }>({
+    quenMatKhau: build.mutation<null, ThanQuenMatKhau>({
       query: (than) => ({ url: '/api/v1/auth/forgot-password', method: 'POST', body: than }),
     }),
 
-    datLaiMatKhau: build.mutation<null, { token: string; newPassword: string }>({
+    datLaiMatKhau: build.mutation<null, ThanDatLaiMatKhau>({
       query: (than) => ({ url: '/api/v1/auth/reset-password', method: 'POST', body: than }),
+    }),
+
+    /** Đăng xuất: thu hồi refresh token và xóa phiên */
+    dangXuat: build.mutation<null, void>({
+      query: () => ({ url: '/api/v1/auth/logout', method: 'POST' }),
     }),
 
     /** Hồ sơ của chính người đang đăng nhập. Máy chủ đọc tenant từ JWT, không nhận tham số nào. */
@@ -67,10 +109,13 @@ export const authApi = apiSlice.injectEndpoints({
 
 export const {
   useDangNhapMutation,
+  useGuiOtpMutation,
+  useXacThucOtpMutation,
   useDangKyMutation,
   useXacThucThuMutation,
   useGuiLaiThuXacThucMutation,
   useQuenMatKhauMutation,
   useDatLaiMatKhauMutation,
+  useDangXuatMutation,
   useHoSoCuaToiQuery,
 } = authApi

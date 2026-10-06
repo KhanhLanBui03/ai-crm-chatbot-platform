@@ -4,9 +4,9 @@ Sơ đồ thực thể — quan hệ **đầy đủ cột, kiểu và khoá** c�
 + 2 hạ tầng) trên **7 schema** PostgreSQL 16 + pgvector.
 
 > **Nguồn duy nhất của tài liệu này là mã DDL đang chạy**, không phải bản phác:
-> `java-core/src/main/resources/db/migration/` (V101–V116) và `ai-service/migration/`
+> `java-core/src/main/resources/db/migration/` (V101–V126) và `ai-service/migration/`
 > (V201–V209). Mọi cột, kiểu, giá trị `CHECK` dưới đây đọc thẳng từ 25 file đó — kể cả các cột
-> thêm bằng `ALTER TABLE ... ADD COLUMN` ở V113/V114/V115/V116/V208/V209.
+> thêm bằng `ALTER TABLE ... ADD COLUMN` ở V113/V114/V115/V126/V208/V209.
 >
 > Tài liệu diễn giải thiết kế (lập luận, bảng đã cân nhắc rồi bỏ, RLS, chỉ mục) nằm ở
 > [`erd-ai-crm.md`](erd-ai-crm.md). File này chỉ là **hình vẽ**.
@@ -20,7 +20,7 @@ Sơ đồ thực thể — quan hệ **đầy đủ cột, kiểu và khoá** c�
 | [0](#0-tổng-quan--32-bảng) | *Tổng quan* | — | — | — | cả 32 |
 | [1](#1-identity--access) | Identity & Access | `platform` | A | V103 | 3 |
 | [2](#2-tenant-management) | Tenant Management | `platform` | A | V102 · V113 | 1 |
-| [3](#3-subscription) | Subscription | `platform` | A | V102 · V115 · V116 | 3 |
+| [3](#3-subscription) | Subscription | `platform` | A | V102 · V115 · V126 | 3 |
 | [4](#4-messaging) | Messaging | `engagement` | A | V106 · V107 · V114 | 4 |
 | [5](#5-contact-management) | Contact Management | `engagement` | A | V105 | 4 |
 | [6](#6-knowledge-base) | Knowledge Base | `knowledge` | **B** | V202 · V203 · V209 | 2 |
@@ -216,7 +216,7 @@ erDiagram
 
 ## 3. Subscription
 
-`platform` · V102 + V115 + V116 · **3 bảng**. `subscription_plans` là **ngoại lệ không có `tenant_id`**:
+`platform` · V102 + V115 + V126 · **3 bảng**. `subscription_plans` là **ngoại lệ không có `tenant_id`**:
 danh mục gói do quản trị nền tảng định nghĩa, mọi tenant đọc chung, không bật RLS.
 
 `usage_records` dùng FK kép `(subscription_id, tenant_id)` → `tenant_subscriptions (id, tenant_id)`
@@ -264,11 +264,11 @@ erDiagram
         uuid        tenant_id          FK
         uuid        subscription_id    FK,UK "FK kép với tenant_id"
         varchar(30) metric             UK    "CONVERSATION/AI_TOKEN/DOCUMENT/STORAGE_MB/USER"
-        bigint      used_value               "tồn kho hoặc dòng chảy theo metric · STORAGE_MB = byte (ADR-0020)"
+        bigint      used_value               "tồn kho hoặc dòng chảy theo metric · STORAGE_MB = byte (ADR-0023)"
         bigint      quota_value              "chụp lại hạn mức tại thời điểm tính"
         timestamptz last_calculated_at
-        timestamptz warned_at                "V116 · lần đầu chạm 80% trong chu kỳ"
-        timestamptz blocked_at               "V116 · lần đầu chạm 100% trong chu kỳ"
+        timestamptz warned_at                "V126 · lần đầu chạm 80% trong chu kỳ"
+        timestamptz blocked_at               "V126 · lần đầu chạm 100% trong chu kỳ"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -535,7 +535,7 @@ erDiagram
 
 `ai.processed_events` (V211) không vẽ trong sơ đồ dưới — nó không nối với bảng nào. Khoá kép
 `(consumer_group, event_id)`, cột `tenant_id` + `aggregate_id` + `processed_at`, có RLS. Bản sao có
-chủ ý của `analytics.processed_events`: `ai_app` không được chạm schema của Track A (ADR-0021).
+chủ ý của `analytics.processed_events`: `ai_app` không được chạm schema của Track A (ADR-0024).
 
 `ai_tool_calls` là **sổ kiểm toán mọi lần tác tử chạm vào công cụ ngoài** — kể cả lần bị chặn:
 `decision=BLOCKED` buộc phải có `block_reason`, `decision=NEEDS_APPROVAL` buộc phải có
@@ -908,7 +908,7 @@ erDiagram
 | 1 | `tenants` | `platform` | A | V102, V113 | 19 | `uuid` |
 | 2 | `subscription_plans` | `platform` | A | V102, V115 | 15 | `uuid` |
 | 3 | `tenant_subscriptions` | `platform` | A | V102 | 13 | `uuid` |
-| 4 | `usage_records` | `platform` | A | V102, V116 | 11 | `uuid` |
+| 4 | `usage_records` | `platform` | A | V102, V126 | 11 | `uuid` |
 | 5 | `users` | `platform` | A | V103 | 16 | `uuid` |
 | 6 | `roles` | `platform` | A | V103 | 9 | `uuid` |
 | 7 | `user_roles` | `platform` | A | V103 | 7 | kép `(user_id, role_id)` |
@@ -947,7 +947,7 @@ erDiagram
 2. `subscription_plans` — danh mục dùng chung, không bật RLS, `crm_app` chỉ có `SELECT`.
 3. `analytics.processed_events` — có cột `tenant_id` nhưng **không bật RLS**: là hạ tầng chống xử
    lý trùng, consumer đọc xuyên tenant. Bản của Track B, `ai.processed_events` (V211), thì **có**
-   RLS: consumer của ai-service đọc tenant từ vỏ sự kiện trước khi ghi (ADR-0021).
+   RLS: consumer của ai-service đọc tenant từ vỏ sự kiện trước khi ghi (ADR-0024).
 
 ### Ba chỗ bắc qua ranh giới hai làn — không có khoá ngoại
 

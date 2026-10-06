@@ -4,7 +4,7 @@ Cổng ra Ngày 4: PDF scan chuyển ``FAILED`` kèm ``error_message`` — mã l
 (``PARSE_NO_TEXT_EXTRACTED``), chỉ đo được khi có parser.
 
 Ngày 4 viết các test này trên ``phan_tich_tai_lieu`` (dừng ở ``PROCESSING`` + đoạn trong bộ nhớ).
-Ngày 5 thay hàm đó bằng ``nap_tai_lieu`` chạy tới ``READY`` (ADR-0021), nên test đọc đoạn từ
+Ngày 5 thay hàm đó bằng ``nap_tai_lieu`` chạy tới ``READY`` (ADR-0024), nên test đọc đoạn từ
 ``knowledge_chunks`` thay vì từ bộ nhớ — cùng khẳng định, kiểm ở chỗ chặt hơn. Test của riêng
 Ngày 5 (nhúng, chống trùng, thử lại, mất quyền, bộ quét, tiến độ) ở ``test_nap_tai_lieu.py``.
 
@@ -101,7 +101,7 @@ async def test_kho_s3_chet_thi_thu_lai_va_tai_lieu_quay_ve_pending(
     """Lỗi TẠM THỜI: tài liệu về PENDING (giữ attempt_count), nơi gọi thử lại sau.
 
     Nếu nuốt lỗi này thành FAILED thì một lần S3 chớp tắt làm hỏng vĩnh viễn một tệp tốt.
-    (Ngày 4: ném ra để transaction huỷ. Ngày 5, ADR-0021: PROCESSING đã commit sớm nên phải tự
+    (Ngày 4: ném ra để transaction huỷ. Ngày 5, ADR-0024: PROCESSING đã commit sớm nên phải tự
     trả về hàng đợi — hết lượt thì FAILED, xem ``test_nap_tai_lieu.py``.)
     """
     factory, cau_hinh = ha_tang

@@ -105,7 +105,7 @@ class ParseTimeoutError(AiServiceError):
     code = "PARSE_TIMEOUT"
 
 
-# ── Nạp tài liệu — UC019 (2/2), ADR-0021 ─────────────────────────────────────
+# ── Nạp tài liệu — UC019 (2/2), ADR-0024 ─────────────────────────────────────
 
 
 class DocumentNotFoundError(AiServiceError):
@@ -147,7 +147,7 @@ class EmbeddingModelMismatchError(AiServiceError):
 class IngestOwnershipLostError(AiServiceError):
     """Lượt nạp này không còn giữ tài liệu — bộ quét đã trả nó về hàng đợi và lượt khác đã nhận.
 
-    Không phải lỗi của tài liệu: lượt hiện tại chỉ việc dừng, không ghi gì thêm (ADR-0021).
+    Không phải lỗi của tài liệu: lượt hiện tại chỉ việc dừng, không ghi gì thêm (ADR-0024).
     """
 
     code = "INGEST_OWNERSHIP_LOST"

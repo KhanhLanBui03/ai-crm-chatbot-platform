@@ -1,4 +1,4 @@
-"""FACADE DUY NHẤT của khối AI — §3.9.2.
+r"""FACADE DUY NHẤT của khối AI — §3.9.2.
 
 Đây là bề mặt duy nhất mà ``src/api/`` và ``src/worker/`` được phép gọi vào. Mọi
 năng lực bên dưới (``rag/``, ``orchestrator/``, ``mcp_client/``, ``extraction/``,
@@ -27,13 +27,13 @@ CHIỀU PHỤ THUỘC
           ├──► ai/service.py ──► rag · orchestrator · mcp_client · extraction · scoring
     worker┘                  └──► db · events · telemetry · inference · integrations
 
-TODO: các phương thức của facade — bám theo 10 endpoint §2.5 và hai topic §2.6:
-    answer_turn()      UC022/023/025/028   POST /v1/ai/chat
+Các phương thức của facade — bám theo 10 endpoint §2.5 và hai topic §2.6:
+    answer_turn()      UC022/023/025/028   POST /v1/ai/chat     ĐÃ CÓ (UC022; RAG chưa nối)
     extract_signal()   UC029               POST /v1/ai/extract
     score_lead()       UC030               POST /v1/ai/lead-score
     index_document()   UC018/019           POST /v1/ai/kb/documents
     nap_tai_lieu()     UC019               (bất đồng bộ, từ crm.kb.document.uploaded) — Ngày 4–5
-    quet_job_ket()     UC019               (bộ quét trong worker, ADR-0021) — Ngày 5
+    quet_job_ket()     UC019               (bộ quét trong worker, ADR-0024) — Ngày 5
     tien_do_nap()      UC019               GET /v1/ai/kb/ingestion-jobs/{job_id} — Ngày 5
     delete_document()  UC020               DELETE /v1/ai/kb/documents/{id}
     reindex_tenant()   UC020               POST /v1/ai/kb/reindex
@@ -77,8 +77,20 @@ from src.ai.exceptions import (
     ParseTimeoutError,
     StoredFileNotFoundError,
 )
-from src.ai.inference.clients import EmbedClient, KetQuaNhung
+from src.ai.inference.clients import (
+    ClassifyClient,
+    EmbedClient,
+    KetQuaNhung,
+    get_classify_client,
+)
 from src.ai.integrations import object_storage
+from src.ai.orchestrator.turn import (
+    KnowledgeAnswerer,
+    LogTurnRecorder,
+    PendingKnowledgeAnswerer,
+    TurnRecorder,
+    run_turn,
+)
 from src.ai.rag.ingest import tien_do
 from src.ai.rag.ingest.chia_doan import Doan
 from src.ai.rag.ingest.duong_ong import chia_doan_tu_khoi, trich_khoi_tu_s3
@@ -86,6 +98,8 @@ from src.ai.rag.ingest.luu_tru import kiem_uri_thuoc_tenant
 from src.ai.rag.ingest.mime import nhan_dien_tep
 from src.ai.rag.ingest.nhung import nhung_va_ghi_theo_lo
 from src.ai.schemas import (
+    ChatRequest,
+    ChatResponse,
     IngestionJobProgress,
     IngestionStep,
     KbDocumentAccepted,
@@ -93,6 +107,33 @@ from src.ai.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def answer_turn(
+    *,
+    tenant_id: str,
+    request: ChatRequest,
+    classifier: ClassifyClient | None = None,
+    answerer: KnowledgeAnswerer | None = None,
+    recorder: TurnRecorder | None = None,
+) -> ChatResponse:
+    """Một lượt hội thoại: guardrails -> phân loại -> định tuyến -> trả lời -> ghi (UC022).
+
+    ``tenant_id`` đến từ header đã xác thực (``api/deps.py``), không bao giờ từ ``request``.
+    Ba phụ thuộc để trống thì lấy bản mặc định; test truyền bản giả vào.
+    """
+    settings = get_settings()
+    return await run_turn(
+        tenant_id=tenant_id,
+        request=request,
+        classifier=classifier or get_classify_client(),
+        answerer=answerer or PendingKnowledgeAnswerer(),
+        recorder=recorder or LogTurnRecorder(),
+        fast_path_threshold=settings.fast_path_threshold,
+        abstention_threshold=settings.router_abstention_threshold,
+        classify_timeout_s=settings.classify_timeout_s,
+        classify_retries=settings.classify_retries,
+    )
 
 
 async def index_document(
@@ -152,7 +193,7 @@ async def index_document(
     )
 
 
-# ── UC019 — nạp tài liệu: phân tích, chia đoạn, nhúng, lập chỉ mục (ADR-0021) ──
+# ── UC019 — nạp tài liệu: phân tích, chia đoạn, nhúng, lập chỉ mục (ADR-0024) ──
 
 # Lỗi VĨNH VIỄN: thử lại bao nhiêu lần cũng ra cùng kết quả → tài liệu chuyển FAILED ngay, người
 # dùng sửa tệp rồi tải lại. Mọi lỗi khác (StorageUnavailableError, EmbeddingUnavailableError, lỗi
@@ -215,7 +256,7 @@ async def nap_tai_lieu(
     """UC019 — một lượt nạp trọn vẹn:
     nhận việc → EXTRACTING → CHUNKING → EMBEDDING → INDEXING → READY.
 
-    MỖI CHẶNG MỘT TRANSACTION (ADR-0021, phương án 2) — để SCR033 thấy được tiến độ, và để một
+    MỖI CHẶNG MỘT TRANSACTION (ADR-0024, phương án 2) — để SCR033 thấy được tiến độ, và để một
     tài liệu 3.000 đoạn không giữ một transaction mở hàng phút. Hệ quả phải trả, và cách trả:
 
     - Tiến trình chết giữa chừng để lại ``PROCESSING`` ⇒ bộ quét (``quet_job_ket``) nhặt lại.
@@ -350,7 +391,7 @@ async def _ket_thuc_that_bai(
     return True
 
 
-# ── UC019 — bộ quét job kẹt (ADR-0021) ───────────────────────────────────────
+# ── UC019 — bộ quét job kẹt (ADR-0024) ───────────────────────────────────────
 
 
 @dataclass(frozen=True, slots=True)

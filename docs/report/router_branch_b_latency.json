@@ -1,0 +1,19 @@
+{
+  "p95_cpu_ms": 72.35,
+  "p50_cpu_ms": 34.92,
+  "variant": "int8_dynamic",
+  "fp32": {
+    "p50_ms": 56.81,
+    "p95_ms": 91.77,
+    "samples": 200
+  },
+  "int8_dynamic": {
+    "p50_ms": 34.92,
+    "p95_ms": 72.35,
+    "samples": 200
+  },
+  "cpu_threads": 2,
+  "model_size_mb": 1077.0,
+  "measured_on": "LAPTOP-SHG7O1F4 CPU · Intel64 Family 6 Model 154 Stepping 4, GenuineIntel · torch 2.14.1+cpu",
+  "note": "batch 1, gồm tokenize; CPU Kaggle khác CPU production — đo lại trên máy đích nếu cần"
+}

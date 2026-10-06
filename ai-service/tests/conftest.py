@@ -22,7 +22,7 @@ không lấy ``get_connection_url()`` — hàm đó mặc định sinh chuỗi `
 và sẽ kéo theo một driver dự án không dùng.
 
 Kho tệp S3 cũng thật: fixture ``kho_s3`` dựng RustFS bằng CÙNG image với
-``docker-compose.yml`` (ADR-0019). Không dùng module MinIO của testcontainers — nó kéo image
+``docker-compose.yml`` (ADR-0022). Không dùng module MinIO của testcontainers — nó kéo image
 ``minio/minio``, mà image đó đã bị gỡ khỏi Docker Hub.
 """
 

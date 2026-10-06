@@ -1,12 +1,15 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { toast } from 'sonner'
 
 import { useAppSelector } from '@/app/store/hooks'
+import { AdminShell } from '@/components/layout/AdminShell'
 import { AppShell } from '@/components/layout/AppShell'
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RegisterPage } from '@/features/auth/RegisterPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
 import { VerifyEmailPage } from '@/features/auth/VerifyEmailPage'
+import { LandingPage } from '@/features/landing/LandingPage'
 import { AiInteractionsPage } from '@/features/ai-agent/AiInteractionsPage'
 import { AiPerformancePage } from '@/features/ai-agent/AiPerformancePage'
 import { McpServersPage } from '@/features/ai-agent/McpServersPage'
@@ -42,6 +45,11 @@ import { UsageDailyPage } from '@/features/settings/UsageDailyPage'
 import { UsagePage } from '@/features/settings/UsagePage'
 import { UsersPage } from '@/features/settings/UsersPage'
 import { WidgetConfigPage } from '@/features/settings/WidgetConfigPage'
+import { AdminOverviewPage } from '@/features/admin/AdminOverviewPage'
+import { AdminAnalyticsPage } from '@/features/admin/AdminAnalyticsPage'
+import { AdminTenantsPage } from '@/features/admin/AdminTenantsPage'
+import { AdminPlansPage } from '@/features/admin/AdminPlansPage'
+import { AdminAiUsagePage } from '@/features/admin/AdminAiUsagePage'
 
 /** Chặn route khi chưa đăng nhập, nhớ đường dẫn đích để quay lại sau khi đăng nhập xong. */
 function CanDangNhap({ children }: { children: React.ReactNode }) {
@@ -54,9 +62,44 @@ function CanDangNhap({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+/**
+ * Chặn route `/admin/**` nếu không phải PLATFORM_ADMIN.
+ * Kiểm tra `roleCode` hoặc `scope` — cả hai đều đáng tin vì đến từ JWT do server ký.
+ */
+function CanVaoAdmin({ children }: { children: React.ReactNode }) {
+  const nguoiDung = useAppSelector((s) => s.auth.nguoiDung)
+
+  const laAdmin =
+    nguoiDung?.roleCode === 'PLATFORM_ADMIN' || nguoiDung?.scope === 'PLATFORM'
+
+  if (!laAdmin) {
+    toast.error('Bạn không có quyền truy cập Cổng Quản trị Nền tảng')
+    return <Navigate to="/hop-thu" replace />
+  }
+  return <>{children}</>
+}
+
+/**
+ * Chặn tài khoản PLATFORM_ADMIN vào Cổng Doanh nghiệp.
+ * Tài khoản Quản trị Nền tảng chỉ được phép hoạt động trong phạm vi Cổng Quản trị `/admin/**`.
+ */
+function CanVaoTenant({ children }: { children: React.ReactNode }) {
+  const nguoiDung = useAppSelector((s) => s.auth.nguoiDung)
+  const laAdmin =
+    nguoiDung?.roleCode === 'PLATFORM_ADMIN' || nguoiDung?.scope === 'PLATFORM'
+
+  if (laAdmin) {
+    return <Navigate to="/admin/tong-quan" replace />
+  }
+  return <>{children}</>
+}
+
 export function Router() {
   return (
     <Routes>
+      {/* Trang chủ Landing Page giới thiệu sản phẩm */}
+      <Route path="/" element={<LandingPage />} />
+
       {/* C2 — vòng đời tài khoản, nằm NGOÀI `AppShell` vì chưa có phiên đăng nhập */}
       <Route path="/dang-nhap" element={<LoginPage />} />
       <Route path="/dang-ky" element={<RegisterPage />} />
@@ -64,10 +107,31 @@ export function Router() {
       <Route path="/quen-mat-khau" element={<ForgotPasswordPage />} />
       <Route path="/dat-lai-mat-khau" element={<ResetPasswordPage />} />
 
+      {/* ── Cổng Quản trị Nền tảng (Platform Admin Portal) ─────────────────── */}
       <Route
         element={
           <CanDangNhap>
-            <AppShell />
+            <CanVaoAdmin>
+              <AdminShell />
+            </CanVaoAdmin>
+          </CanDangNhap>
+        }
+      >
+        <Route path="/admin" element={<Navigate to="/admin/tong-quan" replace />} />
+        <Route path="/admin/tong-quan" element={<AdminOverviewPage />} />
+        <Route path="/admin/phan-tich" element={<AdminAnalyticsPage />} />
+        <Route path="/admin/doanh-nghiep" element={<AdminTenantsPage />} />
+        <Route path="/admin/goi-dich-vu" element={<AdminPlansPage />} />
+        <Route path="/admin/tai-nguyen-ai" element={<AdminAiUsagePage />} />
+      </Route>
+
+      {/* ── Cổng Doanh nghiệp (Tenant Portal) ─────────────────────────────── */}
+      <Route
+        element={
+          <CanDangNhap>
+            <CanVaoTenant>
+              <AppShell />
+            </CanVaoTenant>
           </CanDangNhap>
         }
       >
@@ -126,3 +190,4 @@ export function Router() {
     </Routes>
   )
 }
+

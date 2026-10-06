@@ -84,3 +84,5 @@ data/pilot/
 *.swp
 .DS_Store
 Thumbs.db
+.agents/
+scratch/

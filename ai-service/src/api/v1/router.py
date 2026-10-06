@@ -9,13 +9,14 @@ Gateway định tuyến ``/ai/v1/**`` tới ``lb://ai-service`` và cắt tiền
 
 from fastapi import APIRouter
 
-from src.api.v1.endpoints import documents
+from src.api.v1.endpoints import chat, documents
 
 api_router = APIRouter()
 
+api_router.include_router(chat.router)  # /v1/ai/chat — UC022
 api_router.include_router(documents.router)  # /v1/ai/kb/documents — UC018 · /ingestion-jobs — UC019
 
-# TODO: answer, summarize, scoring
+# TODO: summarize, scoring
 # Đặc tả giao ước: docs/openapi/ai-service-to-java-core.yaml (hạn chốt 07/09)
 #
 # LƯU Ý: health và metrics KHÔNG nằm ở đây. Chúng là bề mặt vận hành, không phải giao ước

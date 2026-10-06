@@ -5,7 +5,7 @@ package com.thesis.crm.common.enums;
  * {@code platform.usage_records} (V102) — thêm giá trị ở đây mà quên migration thì ghi xuống
  * CSDL nổ ngay, không lặng lẽ.
  *
- * <p>Hai loại chỉ số, khác nhau ở chỗ sang chu kỳ mới (ADR-0020):
+ * <p>Hai loại chỉ số, khác nhau ở chỗ sang chu kỳ mới (ADR-0023):
  *
  * <ul>
  *   <li><b>Dòng chảy</b> — tiêu thụ trong chu kỳ, sang chu kỳ mới về 0: hội thoại, token.
@@ -17,7 +17,7 @@ public enum UsageMetric {
     CONVERSATION(false),
     AI_TOKEN(false),
     DOCUMENT(true),
-    /** Tính bằng BYTE ở cả {@code used_value} lẫn {@code quota_value}, dù tên là MB (ADR-0020 (c)). */
+    /** Tính bằng BYTE ở cả {@code used_value} lẫn {@code quota_value}, dù tên là MB (ADR-0023 (c)). */
     STORAGE_MB(true),
     USER(true);
 

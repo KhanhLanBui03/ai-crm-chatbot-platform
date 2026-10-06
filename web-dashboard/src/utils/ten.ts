@@ -32,3 +32,17 @@ export function vietTatDoanhNghiep(ten: string): string {
   if (nguon.length === 1) return nguon[0].slice(0, 2).toUpperCase()
   return (nguon[0][0] + nguon[nguon.length - 1][0]).toUpperCase()
 }
+
+/**
+ * Bỏ dấu + chữ thường — khớp hàm `engagement.fold_vi` phía máy chủ, để giao diện so tên thẻ
+ * đúng như cách máy chủ chống trùng ("Khách VIP" = "khach vip").
+ */
+export function boDau(s: string): string {
+  return s
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim()
+}

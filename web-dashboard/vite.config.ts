@@ -15,8 +15,11 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true, // cần thiết khi chạy trong Docker
+    watch: {
+      usePolling: true,
+      interval: 100,
+    },
     proxy: {
-      // Mọi lời gọi API đi qua gateway, không gọi thẳng java-core/ai-service
       '/api': {
         target: process.env.VITE_GATEWAY_URL ?? 'http://localhost:8080',
         changeOrigin: true,
@@ -29,6 +32,11 @@ export default defineConfig({
         target: process.env.VITE_GATEWAY_URL ?? 'http://localhost:8080',
         ws: true,
         changeOrigin: true,
+      },
+      '/resend-api': {
+        target: 'https://api.resend.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/resend-api/, ''),
       },
     },
   },

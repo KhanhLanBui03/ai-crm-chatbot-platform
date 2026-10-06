@@ -17,7 +17,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 
 /**
- * Client S3 cho kho tệp tài liệu — RustFS ở dev, AWS S3 trên cloud (ADR-0019).
+ * Client S3 cho kho tệp tài liệu — RustFS ở dev, AWS S3 trên cloud (ADR-0022).
  *
  * <p>Ba chỗ cấu hình khác mặc định của SDK, mỗi chỗ vì một lý do:
  *

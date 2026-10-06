@@ -4,7 +4,7 @@
      EXTRACTING      EXTRACTING                     CHUNKING         CHUNKING      EMBEDDING
 
 Tách thành từng hàm theo CHẶNG của SCR033 để ``service.nap_tai_lieu`` ghi được chặng vào CSDL
-giữa hai bước (ADR-0021). Chặng nhúng ở ``nhung.py``.
+giữa hai bước (ADR-0024). Chặng nhúng ở ``nhung.py``.
 
 Module này KHÔNG chạm CSDL — trạng thái tài liệu do ``service.nap_tai_lieu`` quản, để đường ống
 chạy lại được y hệt trong ``tests/eval/`` mà không cần Postgres.

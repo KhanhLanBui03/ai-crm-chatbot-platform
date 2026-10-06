@@ -40,6 +40,10 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
 
         <!-- Dữ liệu -->
         <dependency>
@@ -107,7 +111,7 @@
             <version>8.0</version>
         </dependency>
 
-        <!-- Kho tệp tài liệu gốc — giao thức S3: RustFS ở dev, AWS S3 trên cloud (ADR-0019).
+        <!-- Kho tệp tài liệu gốc — giao thức S3: RustFS ở dev, AWS S3 trên cloud (ADR-0022).
              SDK chính chủ của AWS thay vì SDK của MinIO: đích production là AWS S3 + IAM role,
              và không phụ thuộc thư viện của một công ty đã lưu trữ máy chủ mã nguồn mở.
              Bỏ client Netty: java-core chỉ gọi đồng bộ, client Apache mặc định là đủ. -->

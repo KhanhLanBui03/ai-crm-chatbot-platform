@@ -132,7 +132,7 @@ services:
     networks: [crm]
 
   rustfs:
-    # Kho tệp tài liệu gốc (UC018) — object storage nói giao thức S3 (ADR-0019).
+    # Kho tệp tài liệu gốc (UC018) — object storage nói giao thức S3 (ADR-0022).
     # Dev dùng RustFS; cloud dùng AWS S3. Code không đổi, chỉ đổi S3_ENDPOINT.
     #
     # KHÔNG dùng image minio/minio: MinIO ngừng phát hành image từ 10/2025, repo bị lưu
@@ -237,7 +237,7 @@ services:
       DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:-changeme}
       REDIS_HOST: redis
       KAFKA_BOOTSTRAP: kafka:9092
-      # Kho tệp S3 (ADR-0019). java-core GHI tệp gốc của UC018, ai-service đọc.
+      # Kho tệp S3 (ADR-0022). java-core GHI tệp gốc của UC018, ai-service đọc.
       S3_ENDPOINT: rustfs:9000
       S3_SECURE: "false"
       S3_REGION: ${S3_REGION:-us-east-1}
@@ -246,11 +246,8 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:-changeme-dev}
       # Dự phòng khi ai-service chưa tự đăng ký Eureka — LoadBalancer hỏi Eureka trước.
       AI_SERVICE_URL: http://ai-service:8000
-      # Trống = mọi API nghiệp vụ trả 401 (fail-closed). Dev: chạy scripts/dev-jwt.sh rồi đặt
-      # JWT_PUBLIC_KEY_LOCATION=file:/run/secrets/jwt/dev-public.pem trong .env.
-      JWT_PUBLIC_KEY_LOCATION: ${JWT_PUBLIC_KEY_LOCATION:-}
-    volumes:
-      - ./.secrets/jwt:/run/secrets/jwt:ro
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -276,8 +273,12 @@ services:
     ports:
       - "5173:5173"
     environment:
-      VITE_GATEWAY_URL: http://localhost:8080
-      VITE_WS_URL: ws://localhost:8080/ws
+      VITE_GATEWAY_URL: http://gateway:8080
+      VITE_WS_URL: ws://gateway:8080/ws
+      VITE_USE_MOCK: "false"
+    volumes:
+      - ./web-dashboard:/app
+      - /app/node_modules
     depends_on:
       - gateway
     networks: [crm]
@@ -321,7 +322,7 @@ services:
       MCP_SERVER_URL: ${MCP_SERVER_URL:-http://host.docker.internal:9000}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       LLM_TEMPERATURE: "0"
-      # Kho tệp S3 (ADR-0019). ai-service chỉ ĐỌC tệp java-core đã ghi.
+      # Kho tệp S3 (ADR-0022). ai-service chỉ ĐỌC tệp java-core đã ghi.
       S3_ENDPOINT: rustfs:9000
       S3_SECURE: "false"
       S3_REGION: ${S3_REGION:-us-east-1}
@@ -345,7 +346,7 @@ services:
       start_period: 40s
     networks: [crm]
 
-  # Cùng image với ai-service, vai trò consumer Kafka (§3.9.1) — UC019 nạp tài liệu (ADR-0021).
+  # Cùng image với ai-service, vai trò consumer Kafka (§3.9.1) — UC019 nạp tài liệu (ADR-0024).
   # Không cổng, không Eureka: không ai gọi vào nó, nó chỉ đọc crm.kb.document.uploaded.
   # Scale bằng replica (cùng group ingestion-cg, Kafka chia partition), KHÔNG tăng tiến trình.
   ai-worker:

@@ -115,7 +115,7 @@ async def get_tenant_session(
 async def get_system_session(
     factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> AsyncIterator[AsyncSession]:
-    """Phiên KHÔNG gắn tenant — chỉ để gọi ``knowledge.tim_job_ket`` (SECURITY DEFINER, ADR-0021).
+    """Phiên KHÔNG gắn tenant — chỉ để gọi ``knowledge.tim_job_ket`` (SECURITY DEFINER, ADR-0024).
 
     An toàn theo cấu tạo, không theo kỷ luật: ``app.tenant_id`` không được đặt, nên mọi câu đụng
     tới một bảng có RLS FORCE đều ném 42501 từ ``ai.current_tenant()`` (V201). Lỡ tay truy vấn

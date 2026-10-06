@@ -10,17 +10,18 @@ import com.thesis.crm.platform.entity.UsageRecord;
 import com.thesis.crm.platform.repository.TenantSubscriptionRepository;
 import com.thesis.crm.platform.repository.UsageRecordRepository;
 import com.thesis.crm.platform.service.UsageQuotaService;
+import com.thesis.crm.security.CurrentActor;
 import java.time.Instant;
-import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Cài đặt hạn mức. Mốc 80% và 100% ghi MỘT LẦN mỗi chu kỳ (V116) — đó là "thời điểm chạm mốc"
+ * Cài đặt hạn mức. Mốc 80% và 100% ghi MỘT LẦN mỗi chu kỳ (V126) — đó là "thời điểm chạm mốc"
  * UC006 4.1–4.2 hiển thị, nên không ghi đè khi các lượt sau vẫn ở trên ngưỡng.
  */
 @Service
@@ -29,9 +30,12 @@ public class UsageQuotaServiceImpl implements UsageQuotaService {
     /** UC006 "Tham số và ngưỡng": cảnh báo 80%, chặn 100%. */
     static final int NGUONG_CANH_BAO_PHAN_TRAM = 80;
 
-    /** Chỉ hai trạng thái này được tiêu thụ; PAST_DUE/EXPIRED là chế độ chỉ đọc. */
-    private static final Set<SubscriptionStatus> DUOC_TIEU_THU =
-            EnumSet.of(SubscriptionStatus.TRIALING, SubscriptionStatus.ACTIVE);
+    /**
+     * Chỉ hai trạng thái này được tiêu thụ; PAST_DUE/EXPIRED là chế độ chỉ đọc. Cột {@code status}
+     * là chuỗi trong entity (bản của UC005), enum chỉ còn làm nguồn tên hằng.
+     */
+    private static final Set<String> DUOC_TIEU_THU =
+            Set.of(SubscriptionStatus.TRIALING.name(), SubscriptionStatus.ACTIVE.name());
 
     private final TenantSubscriptionRepository subscriptions;
     private final UsageRecordRepository usageRecords;
@@ -43,7 +47,7 @@ public class UsageQuotaServiceImpl implements UsageQuotaService {
     }
 
     /**
-     * {@code noRollbackFor}: lúc từ chối có thể vừa ghi {@code blocked_at} lần đầu (ADR-0020 (e)).
+     * {@code noRollbackFor}: lúc từ chối có thể vừa ghi {@code blocked_at} lần đầu (ADR-0023 (e)).
      * Không khai thì Spring đánh dấu transaction chung là rollback-only ngay khi ngoại lệ đi qua
      * đây, dù phía gọi có khai hay không — người dùng nhận 500 thay vì 409 (đã kiểm ngược).
      */
@@ -51,13 +55,14 @@ public class UsageQuotaServiceImpl implements UsageQuotaService {
     @Transactional(propagation = Propagation.MANDATORY, noRollbackFor = QuotaExceededException.class)
     public UsageRecord lockForConsumption(UsageMetric metric, long amount) {
         Instant now = Instant.now();
-        TenantSubscription thueBao = subscriptions.findEffective(DUOC_TIEU_THU, now).stream()
+        UUID tenantId = CurrentActor.requireTenantId();
+        TenantSubscription thueBao = subscriptions.findEffective(tenantId, DUOC_TIEU_THU, now).stream()
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(HttpStatus.CONFLICT, "SUBSCRIPTION_NOT_ACTIVE",
                         "Doanh nghiệp chưa có gói dịch vụ đang hiệu lực. Hãy gia hạn hoặc chọn gói."));
 
         usageRecords.insertIfAbsent(thueBao.getId(), metric.name(), metric.isStock());
-        UsageRecord dong = usageRecords.findForUpdate(thueBao.getId(), metric)
+        UsageRecord dong = usageRecords.findForUpdate(thueBao.getId(), metric.name())
                 .orElseThrow(() -> new IllegalStateException(
                         "Không đọc lại được dòng hạn mức vừa tạo — RLS hoặc app.tenant_id sai"));
 
@@ -82,7 +87,7 @@ public class UsageQuotaServiceImpl implements UsageQuotaService {
 
     /**
      * Ghi mốc theo mức dùng HIỆN TẠI của dòng. Thứ tự 80% rồi 100% là bắt buộc: ràng buộc
-     * {@code ck_usage_moc_theo_thu_tu} (V116) từ chối dòng có {@code blocked_at} mà thiếu
+     * {@code ck_usage_moc_theo_thu_tu} (V126) từ chối dòng có {@code blocked_at} mà thiếu
      * {@code warned_at}. Nhân chéo thay vì chia để khỏi sai số dấu phẩy động ở đúng ngưỡng.
      */
     private static void ghiMocNeuTrong(UsageRecord r, Instant now) {
@@ -97,7 +102,7 @@ public class UsageQuotaServiceImpl implements UsageQuotaService {
     }
 
     /**
-     * Lượt bị từ chối vì hạn mức là "chạm trần" (ADR-0020 (e)) dù mức dùng chưa đủ 100% — với dung
+     * Lượt bị từ chối vì hạn mức là "chạm trần" (ADR-0023 (e)) dù mức dùng chưa đủ 100% — với dung
      * lượng, tệp bị chặn thường là tệp làm VƯỢT trần chứ không phải tệp lấp đúng trần. Ghi cả mốc
      * 80% nếu còn trống để giữ ràng buộc {@code ck_usage_moc_theo_thu_tu}.
      */

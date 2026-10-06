@@ -17,7 +17,9 @@ import com.thesis.crm.platform.entity.UsageRecord;
 import com.thesis.crm.platform.service.KnowledgeDocumentService;
 import com.thesis.crm.platform.service.OutboxService;
 import com.thesis.crm.platform.service.UsageQuotaService;
-import com.thesis.crm.security.TenantContext;
+import com.thesis.crm.security.CurrentActor;
+import com.thesis.crm.security.SecurityUtils;
+import com.thesis.crm.security.TenantTransactionScope;
 import com.thesis.crm.security.TraceIdFilter;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -51,7 +53,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
      */
     static final List<String> DUOI_NHAN = List.of(".pdf", ".docx", ".txt", ".md", ".markdown", ".html", ".htm");
 
-    /** Tên theo đặc tả UC018 và Master Plan §2.6 — chốt 27/09/2026 (ADR-0017 quyết định 4). */
+    /** Tên theo đặc tả UC018 và Master Plan §2.6 — chốt 27/09/2026 (ADR-0020 quyết định 4). */
     static final String TOPIC = "crm.kb.document.uploaded";
     static final String AGGREGATE_TYPE = "document";
     static final String EVENT_TYPE = "DocumentUploaded";
@@ -63,14 +65,17 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final ObjectStorageClient objectStorage;
     private final AiServiceClient aiService;
     private final KbProperties kb;
+    private final TenantTransactionScope tenantScope;
 
     public KnowledgeDocumentServiceImpl(UsageQuotaService usageQuotaService, OutboxService outboxService,
-            ObjectStorageClient objectStorage, AiServiceClient aiService, KbProperties kb) {
+            ObjectStorageClient objectStorage, AiServiceClient aiService, KbProperties kb,
+            TenantTransactionScope tenantScope) {
         this.usageQuotaService = usageQuotaService;
         this.outboxService = outboxService;
         this.objectStorage = objectStorage;
         this.aiService = aiService;
         this.kb = kb;
+        this.tenantScope = tenantScope;
     }
 
     /**
@@ -83,7 +88,10 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     @Override
     @Transactional(noRollbackFor = QuotaExceededException.class)
     public DocumentUploadResponse upload(MultipartFile file, UploadDocumentRequest request) {
-        UUID tenantId = TenantContext.requireTenantId();
+        UUID tenantId = CurrentActor.requireTenantId();
+        // SET LOCAL app.tenant_id NGAY đầu transaction, trước mọi truy vấn — RLS của các bảng hạn mức
+        // và outbox dựa vào nó. Filter không đặt được vì nó chạy ngoài transaction.
+        tenantScope.apply(tenantId);
 
         // ── Kiểm rẻ, chưa ghi gì ────────────────────────────────────────────────────────
         // 413 lớp hai. Lớp một là giới hạn multipart của servlet, cùng đọc crm.kb.max-file-size.
@@ -104,7 +112,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                             + String.join(", ", DUOI_NHAN));
         }
 
-        // ── Hạn mức tồn kho (ADR-0020): khoá hai dòng tới hết transaction ─────────────
+        // ── Hạn mức tồn kho (ADR-0023): khoá hai dòng tới hết transaction ─────────────
         // Thứ tự DOCUMENT → STORAGE_MB là cố định ở mọi đường gọi; khoá ngược thứ tự là deadlock.
         UsageRecord soTaiLieu = usageQuotaService.lockForConsumption(UsageMetric.DOCUMENT, 1);
         UsageRecord dungLuong = usageQuotaService.lockForConsumption(UsageMetric.STORAGE_MB, file.getSize());
@@ -113,7 +121,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         String key = KbObjectKey.build(tenantId, UUID.randomUUID(), tenTep);
         String fileUri = objectStorage.put(key, file, file.getSize());
 
-        UUID nguoiTai = TenantContext.currentUserId().orElse(null);
+        UUID nguoiTai = SecurityUtils.getCurrentUserId();
         KbDocumentAccepted daNhan;
         try {
             daNhan = aiService.createKbDocument(tenantId, MDC.get(TraceIdFilter.MDC_KEY), new KbDocumentCreate(

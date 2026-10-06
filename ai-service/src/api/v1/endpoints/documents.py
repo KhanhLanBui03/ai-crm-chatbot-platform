@@ -1,11 +1,11 @@
 """Kho tri thức — UC018 tải lên tài liệu · UC019 tiến độ nạp. [PRODUCTION]
 
 Chỉ java-core gọi endpoint này, SAU KHI đã kiểm hạn mức gói (409), dung lượng (413), đuôi tệp
-và ghi tệp vào kho S3 (ADR-0019). Đặc tả UC018 đặt ranh giới ở URI tệp: java-core không
+và ghi tệp vào kho S3 (ADR-0022). Đặc tả UC018 đặt ranh giới ở URI tệp: java-core không
 đọc nội dung tệp, ai-service không ghi vào schema của Track A (ADR-0002).
 
 Tên đường dẫn ``/v1/ai/kb/documents`` theo đặc tả UC018 và ``service.py`` — hợp đồng
-``docs/openapi/ai-service-to-java-core.yaml`` còn ghi ``/v1/documents``, ghi nợ ở ADR-0017.
+``docs/openapi/ai-service-to-java-core.yaml`` còn ghi ``/v1/documents``, ghi nợ ở ADR-0020.
 """
 
 from uuid import UUID

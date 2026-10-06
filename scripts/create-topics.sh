@@ -12,14 +12,29 @@ REPLICATION="${KAFKA_REPLICATION:-1}"
 
 # Khóa phân vùng của MỌI topic là tenant_id: giữ đúng thứ tự trong phạm vi một khách hàng,
 # và cho phép mở rộng bằng cách tăng số phân vùng mà không phá vỡ tính nhất quán.
+#
+# Danh sách 9 topic chính thức chốt theo Master Plan §2.6 và ADR-0017:
 TOPICS=(
-  "crm.conversation.v1"    # producer: java-core   consumers: analytics-cg, scoring-cg
-  "crm.lead.v1"            # producer: java-core   consumers: analytics-cg, notification-cg
-  "crm.ai-interaction.v1"  # producer: ai-service  consumers: analytics-cg
-  "crm.usage.v1"           # producer: java-core   consumers: billing-cg
-  "crm.document.v1"        # DocumentUpdated/Deleted — chờ chốt bộ tên topic (ADR-0017 quyết định 4)
-  # UC018 → UC019. Đặc tả ghi 12 phân vùng; dev dùng chung PARTITIONS như các topic khác.
-  "crm.kb.document.uploaded"  # producer: java-core   consumers: ingestion-cg (ai-service)
+  # --- 1. Sự kiện từ java-core (CRM) sang ai-service ---
+  "crm.kb.document.uploaded"   # producer: java-core   consumers: ingestion-cg (ai-service UC018/019)
+  "crm.conversation.closed"    # producer: java-core   consumers: summarizer-cg (ai-service UC026)
+  "crm.deal.closed"            # producer: java-core   consumers: scoring-feedback-cg (ai-service UC030)
+
+  # --- 2. Sự kiện từ ai-service sang java-core / analytics ---
+  "ai.kb.document.indexed"     # producer: ai-service  consumers: analytics-cg, notification-cg (UC019)
+  "ai.lead.signal.detected"    # producer: ai-service  consumers: sales-cg (java-core UC029)
+  "ai.handoff.requested"       # producer: ai-service  consumers: live-agent-cg (java-core UC022)
+  "ai.tool_call.audited"       # producer: ai-service  consumers: audit-cg (java-core UC024/028)
+  "ai.turn.completed"          # producer: ai-service  consumers: analytics-cg, billing-cg (UC006/039)
+  # ai.dlq KHÔNG nằm ở đây: tạo riêng bên dưới với retention 30 ngày. Để trong vòng lặp
+  # thì nó được tạo trước với retention mặc định 7 ngày và --if-not-exists nuốt khối sau.
+
+  # --- 3. Topics legacy duy trì tương thích ngược (kế hoạch mục 4.3) ---
+  "crm.conversation.v1"        # producer: java-core   consumers: analytics-cg, scoring-cg
+  "crm.lead.v1"                # producer: java-core   consumers: analytics-cg, notification-cg
+  "crm.ai-interaction.v1"      # producer: ai-service  consumers: analytics-cg
+  "crm.usage.v1"               # producer: java-core   consumers: billing-cg
+  "crm.document.v1"            # producer: java-core   consumers: ingestion-cg
 )
 
 echo "Tạo topic trên ${CONTAINER} (${BOOTSTRAP})..."
@@ -33,7 +48,7 @@ for t in "${TOPICS[@]}"; do
   echo "  ok: $t"
 done
 
-# Hàng đợi chết của ai-service (Master Plan §2.6, ADR-0021). Giữ 30 ngày thay vì mặc định 7:
+# Hàng đợi chết của ai-service (Master Plan §2.6, ADR-0024). Giữ 30 ngày thay vì mặc định 7:
 # đủ để sửa lỗi rồi phát lại, và khớp hạn dọn ai.processed_events — quá hạn đó không còn bản tin
 # nào để nhận trùng. Khoá vẫn là tenant_id (giữ nguyên khoá của bản tin gốc).
 DLQ_RETENTION_MS=$((30 * 24 * 60 * 60 * 1000))

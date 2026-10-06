@@ -1,4 +1,4 @@
-"""Đọc tệp gốc từ kho S3 — RustFS ở dev, AWS S3 trên cloud (ADR-0019). [PRODUCTION]
+"""Đọc tệp gốc từ kho S3 — RustFS ở dev, AWS S3 trên cloud (ADR-0022). [PRODUCTION]
 
 ai-service chỉ ĐỌC: java-core ghi tệp, ai-service lấy dung lượng và tải về để kiểm định dạng
 (UC018) hoặc để phân tích cú pháp (UC019). Không có hàm ghi hay xoá ở đây — thêm khi UC020 và
