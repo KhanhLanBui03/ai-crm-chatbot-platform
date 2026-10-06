@@ -35,9 +35,11 @@ Mỗi quyết định kiến trúc một file. Nguồn trực tiếp cho **chư�
 | 0018 | Bỏ nhánh A (TF-IDF + LinearSVC), ưu tiên nhánh C (ai-embed) và nhánh B (XLM-R) | Quyết định phạm vi Ngày 4-5 |
 | 0019 | Chốt nhánh ship Intent Router (Nhánh C qua ONNX INT8) và thiết lập ngưỡng Abstention | Quyết định ship Ngày 6 (UC022 3/4) |
 | 0020 | Chốt hợp đồng liên làn đợt 1: endpoint `/v1/ai/**`, ranh giới UC018, `title` ≤ 255 (phần topic, bộ vàng, cỡ tập test do 0017 chốt) | Mâu thuẫn tài liệu |
-| 0021 | Cổng parity INT8 trượt: hoãn phán quyết, phân xử bằng Recall@5 ở Ngày 7 | Đo thực nghiệm |
+| 0021 | Cổng parity INT8 trượt: hoãn phán quyết, phân xử bằng Recall@5 ở Ngày 7 — **06/10: ship INT8, bỏ phân xử fp32** | Đo thực nghiệm |
 | 0022 | Tệp tài liệu gốc lưu ở object storage S3 (RustFS ở dev, AWS S3 trên cloud) | Thiết kế UC018 |
 | 0023 | Hạn mức tài liệu tính theo lượng đang có (số lượng + dung lượng), không theo lượt tải | Chốt của nhóm 27/09 |
 | 0024 | Nạp tài liệu commit theo chặng; chống trùng ở `ai.processed_events`; bộ quét job kẹt qua hàm `SECURITY DEFINER`; DLQ chỉ cho sự kiện chưa thành trạng thái | Thiết kế UC019 Ngày 5 |
+| 0025 | _(để dành — chưa viết)_ Làn từ khoá theo âm tiết | Thiết kế UC019 Ngày 4 |
+| 0026 | Bỏ fine-tune embedding — ship bge-m3 pretrained INT8 | Quyết định phạm vi 27/09 |
 
 `KH` = tài liệu `Ke-hoach-do-an-Chatbot-AI-CRM-v2-nhom-2-nguoi.docx`.

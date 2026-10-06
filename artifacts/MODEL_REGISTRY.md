@@ -12,8 +12,8 @@ Không có Model Card thì artifact không được coi là đã bàn giao (§6.
 
 | model_id | Vai trò | Service | UC | Cấp vCPU | sha256 | parity | p95 đo thật | Trạng thái |
 |---|---|---|---|---|---|---|---|---|
-| `bge-m3-int8` | encoder | `ai-embed` | UC019, UC023 | chốt Ngày 15 | `71e2aa91…2723510` (.onnx)<br>`65925f1e…3f2703` (.onnx.data) | **0,98476 — TRƯỢT** | ⚠️ chưa đo | 🔴 Hoãn phán quyết tới Ngày 7 — [ADR-0021](../docs/adr/0021-cong-parity-int8-truot-phan-xu-bang-recall.md) |
-| `bge-m3-fp32` | encoder (đối chứng) | — | — | — | `ff81fec3…415fa5f` (.onnx)<br>`303112e4…d8e1f0` (.data) | — (mốc gốc) | ⚠️ chưa đo | Giữ tới hết Ngày 7 làm đối chứng |
+| `bge-m3-int8` | encoder | `ai-embed` | UC019, UC023 | chốt Ngày 15 | `71e2aa91…2723510` (.onnx)<br>`65925f1e…3f2703` (.onnx.data) | **0,98476 — TRƯỢT, chưa phân xử** | ⚠️ chưa đo (thông lượng lô 1: 9,8 đoạn/s, 4 luồng, macOS) | 🟢 **Ship 06/10** — lô 1, image `ai-inference:dev` 383 MB; recall@5 hybrid 0,740 / dense 0,800 trên bộ vàng v1 — [ADR-0021](../docs/adr/0021-cong-parity-int8-truot-phan-xu-bang-recall.md) |
+| `bge-m3-fp32` | encoder (đối chứng) | — | — | — | `ff81fec3…415fa5f` (.onnx)<br>`303112e4…d8e1f0` (.data) | — (mốc gốc) | — | ⚪ **Bỏ đo đối chứng 06/10** — `.data` không có trên máy dev, không tải (ADR-0021 cập nhật 2) |
 
 > **Cột `p95 đo thật` cố ý để trống tới Ngày 15.** Đã đo thử trên Kaggle nhưng **con số không
 > tái lập**: cùng một notebook, hai lượt chạy cho `fp32 124,5 / 63,8 ms` và `76,5 / 37,2 ms`

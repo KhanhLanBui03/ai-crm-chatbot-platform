@@ -19,31 +19,32 @@ thì không có kết luận khoa học, chỉ có mô tả tính năng.
 
 E10 là thí nghiệm chung của **cả hai làn**; còn lại thuộc Track B.
 
-## Khung file
+## Khung file — một file MỘT cấu hình
+
+Harness `tests/eval/danh_gia_truy_hoi.py` nhận nhiều file; file ĐẦU TIÊN là baseline, các file sau
+được so theo cặp với nó (paired bootstrap KTC 95%).
 
 ```yaml
-id: E3
-name: "Chế độ truy hồi"
-dataset: ../golden_set.jsonl
-repeats: 3            # mục 8.1 — một lần chạy duy nhất không đủ để kết luận
-seed: 42
-llm:
-  temperature: 0      # bắt buộc, để tái lập
-  model: claude-sonnet-5
-metrics: [recall@5, ndcg@10]
-baseline:
-  retrieval: vector_only
-variants:
-  - { retrieval: bm25_only }
-  - { retrieval: hybrid_rrf, rrf_k: 60 }
-report:
-  formats: [csv, html]
-  out_dir: ../reports
+id: e3-hybrid
+mo_ta: "Hai làn, hợp nhất RRF k=60 — cấu hình ship"
+bo_vang: ../golden_set.jsonl   # tương đối với file cấu hình
+che_do: hybrid                 # dense | sparse | hybrid — cùng MỘT câu SQL, tắt một làn
+tenant: eeeeeeee-0000-0000-0000-000000000001   # tenant gốc của gieo_kho.py
+k: 5
+ung_vien: 30                   # mỗi làn
+ef_search: 100
+quet_lap: relaxed_order        # "off" PHẢI trong ngoặc kép — YAML đọc off trần thành False
+nhung:                         # danh tính ai-embed trả về; lệch thì harness dừng
+  model: BAAI/bge-m3
+  version: int8-71e2aa91
 ```
+
+Hiện có: `e3_dense` · `e3_sparse` · `e3_hybrid` · `e3_hybrid_khong_quet_lap` (đối chứng ngược cho
+phép so 1 ↔ 20 tenant).
 
 ## Ba con số phải có bằng mọi giá (mục 8.2)
 
-1. **Truy hồi:** Recall@5 ≥ **0,80** nhờ tìm kiếm lai và xếp hạng lại — mốc **M5, hạn 26/10**.
+1. **Truy hồi:** Recall@5 ≥ **0,85** (§1.6 — không phải 0,80) nhờ tìm kiếm lai và xếp hạng lại — mốc **M5, hạn 26/10**.
 2. **Độ tin cậy:** tỉ lệ bịa đặt giảm rõ rệt nhờ ràng buộc trích dẫn + bước xác minh.
 3. **Giá trị nghiệp vụ:** mô hình chấm điểm Lead vượt baseline luật theo AUC-ROC
    **trên dữ liệu thật của doanh nghiệp pilot**.

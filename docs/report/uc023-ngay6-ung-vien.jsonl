@@ -1,0 +1,134 @@
+{"stt": 1, "question": "may giat cua ngan ha gia tu bao nhieu tien", "loai": "con_so", "kieu_go": "khong_dau", "_tep": "bang-gia"}
+{"stt": 2, "question": "may loc nuoc bao lau thi phai thay loi mot lan", "loai": "con_so", "kieu_go": "khong_dau", "_tep": "may-loc"}
+{"stt": 3, "question": "trả góp qua thẻ tín dụng với qua công ty tài chính khác nhau chỗ nào", "loai": "lua_chon", "kieu_go": "co_dau", "_tep": "tra-gop"}
+{"stt": 4, "question": "shop có thu cũ đổi mới tủ lạnh không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "NGOAI_KHO"}
+{"stt": 5, "question": "máy lạnh bảo hành máy nén mấy năm", "loai": "con_so", "kieu_go": "co_dau", "_tep": "faq-bh"}
+{"stt": 6, "question": "what documents do I need to make a warranty claim", "loai": "dieu_kien", "kieu_go": "tieng_anh", "_tep": "en"}
+{"stt": 7, "question": "khi nhận hàng có được mở hộp kiểm tra trước rồi mới ký không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "van-chuyen"}
+{"stt": 8, "question": "nhà tôi ở tầng 5 không có thang máy, giao tủ lạnh lên có tính thêm tiền không", "loai": "tinh_huong", "kieu_go": "co_dau", "_tep": "van-chuyen"}
+{"stt": 9, "question": "làm sao để đăng ký thành viên", "loai": "cach_lam", "kieu_go": "co_dau", "_tep": "than-thiet"}
+{"stt": 10, "question": "trả hàng thì bao lâu nhận lại tiền", "loai": "con_so", "kieu_go": "co_dau", "_tep": "doi-tra"}
+{"stt": 11, "question": "tháng 10 tủ lạnh inverter giảm bao nhiêu phần trăm", "loai": "con_so", "kieu_go": "co_dau", "_tep": "khuyen-mai"}
+{"stt": 12, "question": "muốn xuất hóa đơn công ty thì làm sao", "loai": "cach_lam", "kieu_go": "co_dau", "_tep": "thanh-toan"}
+{"stt": 13, "question": "muốn đổi ngày giao hàng thì làm sao", "loai": "cach_lam", "kieu_go": "co_dau", "_tep": "van-chuyen"}
+{"stt": 14, "question": "sp bị vô nước có đc bh ko", "loai": "dieu_kien", "kieu_go": "viet_tat", "_tep": "bao-hanh"}
+{"stt": 15, "question": "gói Care+ được thêm quyền lợi gì so với bảo hành thường", "loai": "lua_chon", "kieu_go": "co_dau", "_tep": "faq-bh"}
+{"stt": 16, "question": "is damage from a power surge covered by the warranty", "loai": "dieu_kien", "kieu_go": "tieng_anh", "_tep": "en"}
+{"stt": 17, "question": "mới mua 2 tuần máy giặt bị lỗi thì được đổi máy mới không", "loai": "tinh_huong", "kieu_go": "co_dau", "_tep": "bao-hanh"}
+{"stt": 18, "question": "mua máy lạnh tháng này có được miễn phí công lắp không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "khuyen-mai"}
+{"stt": 19, "question": "tôi đang là thành viên hạng bạc, năm nay mua sắm khá nhiều, muốn biết phải chi tiêu bao nhiêu nữa thì lên được hạng vàng", "loai": "dieu_kien", "kieu_go": "dai", "_tep": "than-thiet"}
+{"stt": 20, "question": "khiếu nại bao lâu thì được giải quyết xong", "loai": "con_so", "kieu_go": "co_dau", "_tep": "khieu-nai"}
+{"stt": 21, "question": "diem tich luy dung de lam gi", "loai": "cach_lam", "kieu_go": "khong_dau", "_tep": "than-thiet"}
+{"stt": 22, "question": "giao hàng trễ hẹn thì khách được bồi thường gì", "loai": "tinh_huong", "kieu_go": "co_dau", "_tep": "khieu-nai"}
+{"stt": 23, "question": "nồi chiên không dầu được bảo hành bao lâu", "loai": "con_so", "kieu_go": "co_dau", "_tep": "noi-chien"}
+{"stt": 24, "question": "khieu nai nhu the nao thi duoc xep muc do khan cap", "loai": "dieu_kien", "kieu_go": "khong_dau", "_tep": "khieu-nai"}
+{"stt": 25, "question": "mình đặt online cái tủ lạnh hôm qua, đã chuyển khoản rồi nhưng giờ đổi ý muốn hủy, như vậy tiền có được hoàn lại không và bao lâu thì nhận được", "loai": "tinh_huong", "kieu_go": "dai", "_tep": "dat-hang"}
+{"stt": 26, "question": "mã NGANHA10 giảm được bao nhiêu", "loai": "con_so", "kieu_go": "co_dau", "_tep": "khuyen-mai"}
+{"stt": 27, "question": "không đồng ý với cách giải quyết khiếu nại thì làm gì tiếp", "loai": "cach_lam", "kieu_go": "co_dau", "_tep": "khieu-nai"}
+{"stt": 28, "question": "hoàn tiền về thẻ mất mấy ngày", "loai": "con_so", "kieu_go": "co_dau", "_tep": "thanh-toan"}
+{"stt": 29, "question": "áp lực nước nhà yếu thì có lắp máy lọc RO được không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "may-loc"}
+{"stt": 30, "question": "how do I apply for a job at Ngan Ha", "loai": "cach_lam", "kieu_go": "tieng_anh", "_tep": "NGOAI_KHO"}
+{"stt": 31, "question": "mua xe máy điện trả góp được không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "NGOAI_KHO"}
+{"stt": 32, "question": "mua máy lạnh chỗ khác thì có nhờ bên mình lắp được không", "loai": "tinh_huong", "kieu_go": "co_dau", "_tep": "phi-sua"}
+{"stt": 33, "question": "hôm trước thợ bên mình qua lắp máy lạnh xong thì giờ chỗ ống thoát nước cứ nhỏ giọt xuống tường, đã gần 2 tháng rồi, vậy thợ có qua sửa miễn phí không", "loai": "tinh_huong", "kieu_go": "dai", "_tep": "van-chuyen"}
+{"stt": 34, "question": "mua online rồi ra cửa hàng lấy được không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "dat-hang"}
+{"stt": 35, "question": "lõi lọc thay thế của máy lọc nước giá bao nhiêu một cái", "loai": "con_so", "kieu_go": "co_dau", "_tep": "bang-gia"}
+{"stt": 36, "question": "gia vang hom nay bao nhieu", "loai": "con_so", "kieu_go": "khong_dau", "_tep": "NGOAI_KHO"}
+{"stt": 37, "question": "máy lọc nước nhà tôi dạo này nước ra chậm hẳn và có mùi hơi lạ, đã dùng được khoảng 8 tháng, không biết có phải tới lúc thay lõi chưa hay là máy bị hỏng", "loai": "tinh_huong", "kieu_go": "dai", "_tep": "may-loc"}
+{"stt": 38, "question": "bh tại nhà có mất phí đi lại ko", "loai": "dieu_kien", "kieu_go": "viet_tat", "_tep": "faq-bh"}
+{"stt": 39, "question": "làm sao kiểm tra máy tôi gửi bảo hành đang sửa tới đâu rồi", "loai": "cach_lam", "kieu_go": "co_dau", "_tep": "bao-hanh"}
+{"stt": 40, "question": "rửa lòng nồi chiên bằng gì để không tróc lớp chống dính", "loai": "cach_lam", "kieu_go": "co_dau", "_tep": "noi-chien"}
+{"stt": 41, "question": "giao hàng không thành công thì sao", "loai": "tinh_huong", "kieu_go": "co_dau", "_tep": "giao-hang"}
+{"stt": 42, "question": "đã bóc hộp dùng thử rồi có trả lại được không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "doi-tra"}
+{"stt": 43, "question": "co phieu cong ty ngan ha gia bao nhieu", "loai": "con_so", "kieu_go": "khong_dau", "_tep": "NGOAI_KHO"}
+{"stt": 44, "question": "mua hàng trưng bày giảm giá có được đổi trả không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "doi-tra"}
+{"stt": 45, "question": "nhập mã giảm giá ở bước nào", "loai": "cach_lam", "kieu_go": "co_dau", "_tep": "dat-hang"}
+{"stt": 46, "question": "nhân viên lắp đặt có khoan đục tường giúp không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "van-chuyen"}
+{"stt": 47, "question": "lam sao huy don hang da dat", "loai": "cach_lam", "kieu_go": "khong_dau", "_tep": "dat-hang"}
+{"stt": 48, "question": "nồi chiên mới mua về có mùi nhựa thì phải làm gì trước khi dùng", "loai": "cach_lam", "kieu_go": "co_dau", "_tep": "noi-chien"}
+{"stt": 49, "question": "mua 1 triệu thì được tích bao nhiêu điểm", "loai": "con_so", "kieu_go": "co_dau", "_tep": "than-thiet"}
+{"stt": 50, "question": "hđ vat xuất trong bn ngày", "loai": "con_so", "kieu_go": "viet_tat", "_tep": "thanh-toan"}
+{"stt": 51, "question": "thành viên hạng nào được vệ sinh máy lạnh miễn phí", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "than-thiet"}
+{"stt": 52, "question": "mẹ mình lớn tuổi muốn mua trả góp cái tivi nhưng không có thẻ tín dụng, chỉ có căn cước thôi thì có làm hồ sơ trả góp được không", "loai": "dieu_kien", "kieu_go": "dai", "_tep": "tra-gop"}
+{"stt": 53, "question": "dữ liệu cá nhân của khách được lưu trong bao lâu", "loai": "con_so", "kieu_go": "co_dau", "_tep": "du-lieu"}
+{"stt": 54, "question": "máy lọc nước báo mã lỗi E1 là bị gì", "loai": "tinh_huong", "kieu_go": "co_dau", "_tep": "may-loc"}
+{"stt": 55, "question": "hết bảo hành rồi thợ tới kiểm tra mất phí bao nhiêu", "loai": "con_so", "kieu_go": "co_dau", "_tep": "phi-sua"}
+{"stt": 56, "question": "xài máy lạnh 2 năm đầu tốn khoảng bao nhiêu tiền", "loai": "con_so", "kieu_go": "co_dau", "_tep": "may-lanh"}
+{"stt": 57, "question": "tra gop qua the tin dung mat phi chuyen doi bao nhieu", "loai": "con_so", "kieu_go": "khong_dau", "_tep": "tra-gop"}
+{"stt": 58, "question": "co giao hang ra tinh khong", "loai": "dieu_kien", "kieu_go": "khong_dau", "_tep": "giao-hang"}
+{"stt": 59, "question": "trung tâm bảo hành có làm việc chủ nhật không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "gio-mo-cua"}
+{"stt": 60, "question": "bao nhiêu tuổi thì được vay trả góp qua công ty tài chính", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "tra-gop"}
+{"stt": 61, "question": "how long does a warranty repair usually take", "loai": "con_so", "kieu_go": "tieng_anh", "_tep": "en"}
+{"stt": 62, "question": "điểm thưởng có bị hết hạn không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "than-thiet"}
+{"stt": 63, "question": "cửa hàng mở cửa từ mấy giờ đến mấy giờ", "loai": "con_so", "kieu_go": "co_dau", "_tep": "gio-mo-cua"}
+{"stt": 64, "question": "có cho thuê máy lạnh theo tháng không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "NGOAI_KHO"}
+{"stt": 65, "question": "đặt hàng trên website như thế nào", "loai": "cach_lam", "kieu_go": "co_dau", "_tep": "dat-hang"}
+{"stt": 66, "question": "lam sao de khong nhan tin nhan quang cao nua", "loai": "cach_lam", "kieu_go": "khong_dau", "_tep": "du-lieu"}
+{"stt": 67, "question": "nhà mình mới mua cái máy giặt hồi đầu tháng, giờ tới bước vắt thì kêu rất to rồi báo lỗi, mình không biết nên gọi người tới nhà hay tự mang ra trung tâm, mang ra thì có tốn tiền không", "loai": "tinh_huong", "kieu_go": "dai", "_tep": "bao-hanh"}
+{"stt": 68, "question": "thông tin của tôi có bị bán cho bên thứ ba không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "du-lieu"}
+{"stt": 69, "question": "can I get a replacement if my product breaks in the first month", "loai": "tinh_huong", "kieu_go": "tieng_anh", "_tep": "en"}
+{"stt": 70, "question": "đổi trả trong bn ngày v shop", "loai": "con_so", "kieu_go": "viet_tat", "_tep": "doi-tra"}
+{"stt": 71, "question": "công ty tôi muốn mua 30 cái máy lạnh thì có giá sỉ không", "loai": "tinh_huong", "kieu_go": "co_dau", "_tep": "dat-hang"}
+{"stt": 72, "question": "mất hóa đơn rồi thì còn được bảo hành không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "bao-hanh"}
+{"stt": 73, "question": "vay trả góp 20 triệu cần giấy tờ gì", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "tra-gop"}
+{"stt": 74, "question": "đổi trả có mất phí không", "loai": "con_so", "kieu_go": "co_dau", "_tep": "doi-tra"}
+{"stt": 75, "question": "may giat khong vat thi sua het bao nhieu", "loai": "con_so", "kieu_go": "khong_dau", "_tep": "phi-sua"}
+{"stt": 76, "question": "chương trình thành viên có mấy hạng", "loai": "con_so", "kieu_go": "co_dau", "_tep": "than-thiet"}
+{"stt": 77, "question": "bên mình có bán bảo hiểm xe ô tô không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "NGOAI_KHO"}
+{"stt": 78, "question": "sản phẩm nào thì được kỹ thuật đến tận nhà để bảo hành", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "bao-hanh"}
+{"stt": 79, "question": "phòng 20 m2 nên mua máy lạnh mấy ngựa", "loai": "lua_chon", "kieu_go": "co_dau", "_tep": "may-lanh"}
+{"stt": 80, "question": "máy lọc nước RO lọc được bao nhiêu lít một giờ", "loai": "con_so", "kieu_go": "co_dau", "_tep": "may-loc"}
+{"stt": 81, "question": "tet co mo cua ban hang khong", "loai": "dieu_kien", "kieu_go": "khong_dau", "_tep": "gio-mo-cua"}
+{"stt": 82, "question": "có giao hàng vào chủ nhật không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "giao-hang"}
+{"stt": 83, "question": "tivi 55 inch bên mình giá khoảng bao nhiêu", "loai": "con_so", "kieu_go": "co_dau", "_tep": "bang-gia"}
+{"stt": 84, "question": "lắp máy lạnh thì ống đồng tính tiền thế nào", "loai": "con_so", "kieu_go": "co_dau", "_tep": "van-chuyen"}
+{"stt": 85, "question": "tôi gọi tổng đài phản ánh việc giao hàng trễ 3 ngày mà tới giờ chưa ai liên hệ lại, quy trình khiếu nại bên các bạn xử lý trong bao lâu", "loai": "con_so", "kieu_go": "dai", "_tep": "khieu-nai"}
+{"stt": 86, "question": "nạp gas máy lạnh giá bao nhiêu", "loai": "con_so", "kieu_go": "co_dau", "_tep": "phi-sua"}
+{"stt": 87, "question": "thay block tủ lạnh hết bao nhiêu tiền", "loai": "con_so", "kieu_go": "co_dau", "_tep": "phi-sua"}
+{"stt": 88, "question": "máy hư đi hư lại cùng một lỗi nhiều lần thì có được đổi máy mới không", "loai": "tinh_huong", "kieu_go": "co_dau", "_tep": "bao-hanh"}
+{"stt": 89, "question": "muốn khiếu nại thì gửi qua kênh nào", "loai": "cach_lam", "kieu_go": "co_dau", "_tep": "khieu-nai"}
+{"stt": 90, "question": "mua ml đc tặng công lắp k", "loai": "dieu_kien", "kieu_go": "viet_tat", "_tep": "khuyen-mai"}
+{"stt": 91, "question": "goi bao hanh mo rong care+ gia bao nhieu", "loai": "con_so", "kieu_go": "khong_dau", "_tep": "bao-hanh"}
+{"stt": 92, "question": "tuần lễ gia dụng diễn ra từ ngày nào", "loai": "con_so", "kieu_go": "co_dau", "_tep": "khuyen-mai"}
+{"stt": 93, "question": "ship về tỉnh mất bn ngày", "loai": "con_so", "kieu_go": "viet_tat", "_tep": "van-chuyen"}
+{"stt": 94, "question": "mới lắp máy lọc nước xong có uống được liền không", "loai": "cach_lam", "kieu_go": "co_dau", "_tep": "may-loc"}
+{"stt": 95, "question": "how long is the warranty on a washing machine", "loai": "con_so", "kieu_go": "tieng_anh", "_tep": "en"}
+{"stt": 96, "question": "sửa vào buổi tối hoặc cuối tuần có tính phụ phí không", "loai": "con_so", "kieu_go": "co_dau", "_tep": "phi-sua"}
+{"stt": 97, "question": "bên mình có bán điện thoại iPhone 17 không", "loai": "lua_chon", "kieu_go": "co_dau", "_tep": "NGOAI_KHO"}
+{"stt": 98, "question": "chào shop, mình định mua máy lạnh cho phòng khách khoảng 30 mét vuông, nhà hướng tây nắng chiều nhiều, không biết nên chọn công suất bao nhiêu cho đủ lạnh mà không tốn điện", "loai": "lua_chon", "kieu_go": "dai", "_tep": "may-lanh"}
+{"stt": 99, "question": "di vang nhieu ngay thi may loc nuoc can lam gi", "loai": "tinh_huong", "kieu_go": "khong_dau", "_tep": "may-loc"}
+{"stt": 100, "question": "thanh vien hang vang duoc uu dai them gi trong thang 10", "loai": "dieu_kien", "kieu_go": "khong_dau", "_tep": "khuyen-mai"}
+{"stt": 101, "question": "giá tủ lạnh inverter rẻ nhất bên mình là bao nhiêu", "loai": "con_so", "kieu_go": "co_dau", "_tep": "bang-gia"}
+{"stt": 102, "question": "máy lọc không khí giá bao nhiêu", "loai": "con_so", "kieu_go": "co_dau", "_tep": "NGOAI_KHO"}
+{"stt": 103, "question": "có chi nhánh ở Đà Nẵng không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "NGOAI_KHO"}
+{"stt": 104, "question": "có dịch vụ sửa điện nước tại nhà không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "NGOAI_KHO"}
+{"stt": 105, "question": "có giao hàng ra nước ngoài không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "NGOAI_KHO"}
+{"stt": 106, "question": "có thanh toán bằng ví điện tử được không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "thanh-toan"}
+{"stt": 107, "question": "laptop mua ở đây bảo hành bao lâu", "loai": "con_so", "kieu_go": "co_dau", "_tep": "NGOAI_KHO"}
+{"stt": 108, "question": "máy lạnh inverter dòng nào tiết kiệm điện nhất", "loai": "lua_chon", "kieu_go": "co_dau", "_tep": "may-lanh"}
+{"stt": 109, "question": "công ty thu thập những thông tin cá nhân gì của khách", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "du-lieu"}
+{"stt": 110, "question": "phong ngu nho cho em be nen chon may lanh nao", "loai": "lua_chon", "kieu_go": "khong_dau", "_tep": "may-lanh"}
+{"stt": 111, "question": "gói trả góp 0% lãi suất có những kỳ hạn mấy tháng", "loai": "con_so", "kieu_go": "co_dau", "_tep": "tra-gop"}
+{"stt": 112, "question": "mua về không ưng thì được đổi trả trong mấy ngày", "loai": "con_so", "kieu_go": "co_dau", "_tep": "doi-tra"}
+{"stt": 113, "question": "tk thành viên bị khóa vì sao v", "loai": "tinh_huong", "kieu_go": "viet_tat", "_tep": "than-thiet"}
+{"stt": 114, "question": "mua đồ khuyến mãi có quà tặng kèm thì khi trả hàng có phải trả lại quà không", "loai": "tinh_huong", "kieu_go": "co_dau", "_tep": "doi-tra"}
+{"stt": 115, "question": "noi chien bi boc khoi trang khi dang chien", "loai": "tinh_huong", "kieu_go": "khong_dau", "_tep": "noi-chien"}
+{"stt": 116, "question": "dat hang o noi thanh bao lau thi giao toi", "loai": "con_so", "kieu_go": "khong_dau", "_tep": "van-chuyen"}
+{"stt": 117, "question": "muốn tất toán khoản trả góp trước hạn có bị phạt không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "tra-gop"}
+{"stt": 118, "question": "công ty có đang tuyển nhân viên kỹ thuật không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "NGOAI_KHO"}
+{"stt": 119, "question": "giá niêm yết trên bảng giá đã bao gồm VAT chưa", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "bang-gia"}
+{"stt": 120, "question": "mua xong mấy hôm thấy giá giảm thì có được hoàn tiền chênh lệch k", "loai": "tinh_huong", "kieu_go": "viet_tat", "_tep": "bang-gia"}
+{"stt": 121, "question": "đặt trước hàng chưa về thì phải cọc bao nhiêu", "loai": "con_so", "kieu_go": "co_dau", "_tep": "thanh-toan"}
+{"stt": 122, "question": "nhung san pham nao khong duoc doi tra", "loai": "dieu_kien", "kieu_go": "khong_dau", "_tep": "doi-tra"}
+{"stt": 123, "question": "sửa bảo hành quá lâu chưa xong thì bên mình xử lý sao", "loai": "tinh_huong", "kieu_go": "co_dau", "_tep": "bao-hanh"}
+{"stt": 124, "question": "số tổng đài hỗ trợ là số mấy", "loai": "con_so", "kieu_go": "co_dau", "_tep": "gio-mo-cua"}
+{"stt": 125, "question": "tl inverter bh may nam z", "loai": "con_so", "kieu_go": "viet_tat", "_tep": "bao-hanh"}
+{"stt": 126, "question": "mua tivi 50 inch có được tặng giá treo không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "khuyen-mai"}
+{"stt": 127, "question": "tôi muốn xóa hết dữ liệu cá nhân thì gửi yêu cầu ở đâu", "loai": "cach_lam", "kieu_go": "co_dau", "_tep": "du-lieu"}
+{"stt": 128, "question": "duyệt hồ sơ trả góp mất bao lâu", "loai": "con_so", "kieu_go": "co_dau", "_tep": "tra-gop"}
+{"stt": 129, "question": "san pham nao duoc lap dat mien phi", "loai": "dieu_kien", "kieu_go": "khong_dau", "_tep": "van-chuyen"}
+{"stt": 130, "question": "nhan duoc tin nhan doi chuyen khoan vao tai khoan ca nhan co phai cua shop khong", "loai": "tinh_huong", "kieu_go": "khong_dau", "_tep": "thanh-toan"}
+{"stt": 131, "question": "có được lót giấy bạc trong nồi chiên không dầu không", "loai": "dieu_kien", "kieu_go": "co_dau", "_tep": "noi-chien"}
+{"stt": 132, "question": "đặt hàng sát Tết thì có giao kịp trước Tết không", "loai": "tinh_huong", "kieu_go": "co_dau", "_tep": "gio-mo-cua"}
+{"stt": 133, "question": "tivi được bảo hành mấy năm", "loai": "con_so", "kieu_go": "co_dau", "_tep": "bao-hanh"}
+{"stt": 134, "question": "phí giao hàng tính như thế nào", "loai": "con_so", "kieu_go": "co_dau", "_tep": "van-chuyen"}

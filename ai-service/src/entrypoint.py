@@ -33,6 +33,14 @@ import sys
 
 def main() -> None:
     """Chọn vai trò theo ``RUN_MODE`` rồi chạy. Giá trị lạ thì thoát ngay, không đoán."""
+    from src.ai.config import get_settings
+
+    # ``AI_MODE`` có hai nơi đọc: ``Settings`` (nạp cả ``ai-service/.env``) và
+    # ``inference.clients.get_ai_mode()`` (chỉ đọc ``os.environ``). Chạy trên máy thì giá trị nằm
+    # trong ``.env``, chỉ nơi thứ nhất thấy — đẩy nó sang môi trường để hai nơi cùng một giá trị.
+    # Docker/K8s đã đặt ``AI_MODE`` thật ⇒ ``setdefault`` không đổi gì.
+    os.environ.setdefault("AI_MODE", get_settings().ai_mode)
+
     mode = os.getenv("RUN_MODE", "api")
 
     if mode == "api":
