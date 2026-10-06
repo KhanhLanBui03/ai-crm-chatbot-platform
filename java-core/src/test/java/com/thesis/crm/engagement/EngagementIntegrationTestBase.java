@@ -70,6 +70,8 @@ abstract class EngagementIntegrationTestBase {
         r.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         r.add("ai-service.url", AI::baseUrl);
         r.add("ai-service.chat-timeout", () -> "2s");
+        // Job quá hạn hàng chờ: test gọi runOnce() trực tiếp, không để lịch chạy chen ngang
+        r.add("inbox.watchdog.enabled", () -> "false");
     }
 
     static final UUID TENANT_A = UUID.randomUUID();

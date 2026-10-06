@@ -6,6 +6,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thesis.crm.common.audit.AuditLogWriter;
 import com.thesis.crm.common.exception.AppException;
 import com.thesis.crm.common.response.PageResponse;
+import com.thesis.crm.engagement.assignment.AssignmentRepository.Assignee;
+import com.thesis.crm.engagement.assignment.AssignmentRepository.HandoffEventRow;
+import com.thesis.crm.engagement.assignment.AssignmentRepository.QueueStatus;
+import com.thesis.crm.engagement.assignment.AssignmentService;
 import com.thesis.crm.engagement.dto.response.ContactDtos.ContactDto;
 import com.thesis.crm.engagement.dto.response.ContactDtos.TagDto;
 import com.thesis.crm.engagement.inbox.InboxDtos.CitationDto;
@@ -64,23 +68,27 @@ public class InboxService {
     private final TenantTransactionScope scope;
     private final AuditLogWriter audit;
     private final ObjectMapper json;
+    private final AssignmentService assignment;
 
     public InboxService(InboxRepository repo, ContactQueryRepository contacts, TenantTransactionScope scope,
-                        AuditLogWriter audit, ObjectMapper json) {
+                        AuditLogWriter audit, ObjectMapper json, AssignmentService assignment) {
         this.repo = repo;
         this.contacts = contacts;
         this.scope = scope;
         this.audit = audit;
         this.json = json;
+        this.assignment = assignment;
     }
 
     // ── UC012: đọc ──────────────────────────────────────────────────────────────
 
-    @Transactional(readOnly = true)
+    /** Không {@code readOnly}: đồng thời ghi mốc "đang trực" của người đang mở Hộp thư (UC014 6.1). */
+    @Transactional
     public PageResponse<ConversationSummary> list(UUID tenantId, Actor actor, String scopeParam,
                                                   List<String> statuses, String channelType, UUID tagId,
                                                   String keyword, int page, int size) {
         scope.apply(tenantId);
+        assignment.touchPresence(tenantId, actor.userId());
         String sc = scopeParam == null ? "all" : scopeParam;
         if (!Set.of("all", "mine", "unassigned").contains(sc)) {
             throw invalid("scope chỉ nhận all, mine hoặc unassigned.");
@@ -161,6 +169,7 @@ public class InboxService {
         if (r.assignedUserId() == null) {
             // Gửi tin vào hội thoại chưa ai nhận = tự nhận; AI ngừng tự trả lời
             repo.assign(tenantId, conversationId, actor.userId());
+            assignment.accepted(tenantId, conversationId, actor.userId());
             audit.recordUserAction(tenantId, actor.userId(), "CONVERSATION_ASSIGNED", "CONVERSATION",
                     conversationId, Map.of("assigneeUserId", actor.userId().toString(), "via", "FIRST_REPLY"));
         } else if (!r.assignedUserId().equals(actor.userId()) && !actor.admin()) {
@@ -198,6 +207,7 @@ public class InboxService {
             throw invalid("Người được giao không thuộc doanh nghiệp hoặc đã bị khoá.");
         }
         repo.assign(tenantId, conversationId, target);
+        assignment.accepted(tenantId, conversationId, target);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("assigneeUserId", target.toString());
         data.put("previousAssigneeUserId", r.assignedUserId() == null ? null : r.assignedUserId().toString());
@@ -219,7 +229,7 @@ public class InboxService {
         if (CLOSED.contains(r.status())) {
             throw new AppException("Hội thoại đã đóng.", HttpStatus.CONFLICT);
         }
-        Instant now = Instant.now();
+        HandoffEventRow ev;
         if ("AGENT_TO_BOT".equals(direction)) {
             requireHolderOrAdmin(r, actor);
             if ("BOT_HANDLING".equals(r.status())) {
@@ -230,20 +240,67 @@ public class InboxService {
                         + "Nâng cấp gói hoặc để nhân viên tiếp tục hỗ trợ.", HttpStatus.CONFLICT);
             }
             repo.returnToBot(tenantId, conversationId);
+            ev = assignment.recordHandoff(tenantId, conversationId, direction, reason, "AGENT", actor.userId());
         } else if ("BOT_TO_AGENT".equals(direction)) {
             if (!"BOT_HANDLING".equals(r.status())) {
                 throw new AppException("Hội thoại đã ở phía nhân viên.", HttpStatus.CONFLICT);
             }
             repo.handoffToAgent(tenantId, conversationId, reason);
+            ev = assignment.recordHandoff(tenantId, conversationId, direction, reason, "AGENT", actor.userId());
+            // UC014 b6 — nhân viên lấy khỏi AI thì cũng tự giao theo chế độ của doanh nghiệp
+            assignment.autoAssign(tenantId, conversationId, null);
+            ev = assignment.event(tenantId, ev.id()).orElse(ev);
         } else {
             throw invalid("direction chỉ nhận BOT_TO_AGENT hoặc AGENT_TO_BOT.");
         }
         audit.recordUserAction(tenantId, actor.userId(), "CONVERSATION_HANDOFF", "CONVERSATION", conversationId,
                 Map.of("direction", direction, "reason", reason));
-        // Hết hạn mức không phải lỗi của AI — không tính vào chất lượng (hợp đồng SuKienChuyenGiao)
-        boolean countsAgainstAi = "BOT_TO_AGENT".equals(direction) && !"QUOTA_EXCEEDED".equals(reason);
-        return new HandoffEvent(UUID.randomUUID(), direction, reason, "AGENT", countsAgainstAi, null,
-                "BOT_TO_AGENT".equals(direction) ? now : null, null, now);
+        return new HandoffEvent(ev.id(), ev.direction(), ev.reason(), ev.triggeredBy(),
+                ev.countsAgainstAiQuality(), ev.toUserId(), ev.queuedAt(), ev.acceptedAt(), ev.occurredAt());
+    }
+
+    /**
+     * UC015 1a — trả hội thoại về hàng chờ, bắt nhập lý do. Rồi tự giao lại theo chế độ của doanh nghiệp,
+     * KHÔNG giao lại cho chính người vừa trả (nếu không thì vừa trả xong đã bị giao về lại).
+     */
+    @Transactional
+    public ConversationSummary release(UUID tenantId, Actor actor, UUID conversationId, String reason) {
+        scope.apply(tenantId);
+        String why = reason == null ? "" : reason.strip();
+        if (why.length() < 5 || why.length() > 200) {
+            throw invalid("Lý do trả về hàng chờ cần từ 5 đến 200 ký tự.");
+        }
+        ConvRow r = repo.lock(tenantId, conversationId).orElseThrow(InboxService::notFound);
+        if (CLOSED.contains(r.status())) {
+            throw new AppException("Hội thoại đã đóng.", HttpStatus.CONFLICT);
+        }
+        if (r.assignedUserId() == null) {
+            throw new AppException("Hội thoại đang ở hàng chờ rồi.", HttpStatus.CONFLICT);
+        }
+        requireHolderOrAdmin(r, actor);
+        assignment.unassign(tenantId, conversationId);
+        audit.recordUserAction(tenantId, actor.userId(), "CONVERSATION_RELEASED", "CONVERSATION", conversationId,
+                Map.of("previousAssigneeUserId", r.assignedUserId().toString(), "reasonLength", why.length()));
+        assignment.autoAssign(tenantId, conversationId, r.assignedUserId());
+        ConvRow after = require(tenantId, conversationId);
+        return summary(after, repo.tagsOf(tenantId, after.contactId() == null ? List.of() : List.of(after.contactId())));
+    }
+
+    /** UC015 b3 — ô "Giao cho…": ai đang trực, đang giữ bao nhiêu hội thoại. */
+    @Transactional(readOnly = true)
+    public List<Assignee> assignees(UUID tenantId) {
+        scope.apply(tenantId);
+        return assignment.assignees(tenantId);
+    }
+
+    /** Thanh cảnh báo của quản trị viên (UC014 6.2, 7.2). */
+    @Transactional(readOnly = true)
+    public QueueStatus queueStatus(UUID tenantId, Actor actor) {
+        scope.apply(tenantId);
+        if (!actor.admin()) {
+            throw new AppException("Chỉ quản trị viên xem được tình trạng hàng chờ.", HttpStatus.FORBIDDEN);
+        }
+        return assignment.queueStatus(tenantId);
     }
 
     @Transactional

@@ -64,6 +64,9 @@ public final class InboxDtos {
 
     public record HandoffRequest(String direction, String reason) {}
 
+    /** UC015 1a — trả về hàng chờ, bắt nhập lý do. */
+    public record ReleaseRequest(String reason) {}
+
     /** Tên trường theo hợp đồng: {@code closedReason}. */
     public record StatusRequest(String status, String closedReason) {}
 }
