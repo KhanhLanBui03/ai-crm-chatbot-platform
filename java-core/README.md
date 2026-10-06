@@ -102,6 +102,19 @@ chưa cài đặt. Nhưng chúng **compile được**: `mvn -f java-core/pom.xml
 - **Kafka:** sản xuất `crm.kb.document.uploaded` (UC018, ADR-0020), `crm.conversation.v1`, `crm.lead.v1`,
   `crm.usage.v1` — ba topic sau chờ chốt bộ tên (Master Plan §2.6 hay `crm.*.v1`)
 
+## Chạy trên máy (hạ tầng trong Docker)
+
+```bash
+docker compose up -d postgres redis kafka rustfs-init   # ở gốc repo
+cd java-core && mvn spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+Profile `local` (`application-local.yml`) đổi tên máy trong `application.yml` từ container
+(`postgres`, `kafka:9092`, `rustfs:9000`, `eureka-server`) sang `localhost` + cổng máy chủ, và nạp
+`.env` ở gốc repo cho `SPRING_MAIL_*` và `POSTGRES_HOST_PORT`. Docker, e2e và test không bật profile
+này. Gateway có profile cùng tên. Khoá RSA của JWT sinh lại mỗi lần khởi động ⇒ đăng nhập lại và
+khởi động lại gateway.
+
 ## Hai tài khoản CSDL — không được nhầm
 
 | Biến | Dùng cho | Lý do |

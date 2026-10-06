@@ -1,0 +1,11 @@
+# Profile `local` — chạy gateway TRÊN MÁY (mvn spring-boot:run), hạ tầng trong Docker Compose.
+#
+#   cd gateway && mvn spring-boot:run -Dspring-boot.run.profiles=local
+#
+# application.yml giữ mặc định cho container; file này chỉ đổi tên máy sang localhost. Các khoá viết
+# HOA là tên placeholder application.yml đang đọc. Biến môi trường thật vẫn thắng giá trị ở đây.
+EUREKA_URL: http://localhost:8761/eureka
+# java-core sinh khoá RSA trong RAM mỗi lần khởi động ⇒ khởi động lại java-core thì khởi động lại
+# cả gateway để nạp lại JWKS.
+JWK_SET_URI: http://localhost:8081/.well-known/jwks.json
+REDIS_HOST: localhost
