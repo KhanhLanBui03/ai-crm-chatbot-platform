@@ -67,7 +67,7 @@ async def test_nap_tron_ven_ready_co_vector_va_chunk_count(ha_tang, kho_s3, tena
 
 
 async def test_vector_luu_dung_gia_tri_mock_da_sinh(ha_tang, kho_s3, tenant_a):
-    """Chuỗi hoá vector (``_vector_sang_chuoi``) không làm lệch giá trị: cosine với chính nó = 1."""
+    """Chuỗi hoá vector (``vector_sang_chuoi``) không làm lệch giá trị: cosine với chính nó = 1."""
     factory, _ = ha_tang
     doc = await tai_lieu_pending(factory, kho_s3, tenant_a, "gio-mo-cua-chi-nhanh.txt", "TXT")
     await nap(factory, tenant_a, doc)
