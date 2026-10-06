@@ -69,7 +69,7 @@ số `DOCUMENT` và `STORAGE_MB`.** Cụ thể:
    java-core commit hỏng) làm đếm thiếu một tài liệu; UC020 gỡ hỏng giữa chừng có thể làm lệch
    ngược lại. Cần một job đối soát định kỳ với số liệu của ai-service — **chưa làm**, ghi nợ.
 2. **Tên `STORAGE_MB` nói dối về đơn vị.** Ai đọc bảng mà không đọc ADR này sẽ hiểu sai; bù lại bằng
-   `COMMENT ON COLUMN` ở V126 và chú thích ở ERD. Đổi tên chỉ số cần sửa `CHECK` — không đáng.
+   `COMMENT ON COLUMN` ở V128 và chú thích ở ERD. Đổi tên chỉ số cần sửa `CHECK` — không đáng.
 3. **Lệch câu chữ đặc tả UC018** ("cộng vào mức tiêu thụ của chu kỳ") và UC006 (chỉ nêu bốn hạn mức,
    không có dung lượng). Phải sửa đặc tả và thêm ô dung lượng vào màn hạn mức.
 4. **Mỗi lượt tải khoá hai dòng thay vì một** — cùng tenant vẫn xếp hàng như trước, không tệ hơn.
@@ -80,7 +80,7 @@ số `DOCUMENT` và `STORAGE_MB`.** Cụ thể:
 
 - **Code java-core:** `UsageQuotaService` nhận lượng cần thêm; câu tạo dòng hạn mức chép mức tồn kho
   của chu kỳ trước; phản hồi 202 thêm `storageQuota` (byte); lỗi mới `STORAGE_MB_QUOTA_EXCEEDED`.
-- **Lược đồ:** không thêm cột. V126 ghi chú đơn vị của `STORAGE_MB`.
+- **Lược đồ:** không thêm cột. V128 ghi chú đơn vị của `STORAGE_MB`.
 - **Hợp đồng:** UC018 mục 5 viết lại; UC020 phải có `file_size_bytes` trong phản hồi gỡ của
   ai-service; `dashboard-api.yaml` — `HanMucSuDung` thêm ô dung lượng.
 - **Đặc tả:** UC018 hậu điều kiện "cộng vào mức tiêu thụ của chu kỳ" → "cộng vào lượng tài liệu

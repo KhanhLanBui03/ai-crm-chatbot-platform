@@ -5,7 +5,7 @@ import java.time.Instant;
 
 /**
  * Trạng thái một hạn mức — hình {@code MotHanMuc} của {@code dashboard-api.yaml} cộng hai mốc
- * {@code warnedAt}/{@code blockedAt} (V126).
+ * {@code warnedAt}/{@code blockedAt} (V128).
  *
  * @param percent {@code used × 100 / quota}, làm tròn một chữ số thập phân; quota 0 thì 100
  */

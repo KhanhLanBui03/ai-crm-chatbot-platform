@@ -68,7 +68,7 @@ import software.amazon.awssdk.services.s3.model.S3Object;
  * UC018 phía java-core, đầu-cuối qua HTTP thật (Tomcat thật — giới hạn multipart của servlet có
  * hiệu lực, MockMvc thì không).
  *
- * <p>Hạ tầng THẬT: Postgres chạy đủ V101–V126, ứng dụng nối bằng {@code crm_app} — role CHỊU RLS
+ * <p>Hạ tầng THẬT: Postgres chạy đủ V101–V129, ứng dụng nối bằng {@code crm_app} — role CHỊU RLS
  * (nối bằng {@code crm_owner} thì mọi kiểm tra cách ly tenant xanh giả vì chủ bảng bypass RLS);
  * RustFS cùng image với {@code docker-compose.yml}; JWT RS256 ký bằng khoá của CHÍNH ứng dụng
  * ({@code RsaKeyProperties}, sinh trong RAM lúc khởi động) và đi qua bộ giải mã thật của
@@ -562,7 +562,7 @@ class KnowledgeDocumentUploadIntegrationTest {
     /**
      * Doanh nghiệp đăng ký qua luồng THẬT ({@code register_tenant}, V118) có sẵn dòng
      * {@code STORAGE_MB} từ lúc đăng ký, và {@code insertIfAbsent} không ghi đè dòng có sẵn. Trước
-     * V127, dòng đó mang trần {@code storage_mb} của gói nguyên văn — 100 MB bị hiểu thành 100 BYTE —
+     * V129, dòng đó mang trần {@code storage_mb} của gói nguyên văn — 100 MB bị hiểu thành 100 BYTE —
      * nên tệp 1 KB đã nhận 409.
      */
     @Test

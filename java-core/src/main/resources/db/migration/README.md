@@ -22,7 +22,7 @@ V1<nn>__<mo_ta_khong_dau>.sql
 
 Không dấu tiếng Việt trong tên file. Nội dung và comment thì viết tiếng Việt bình thường.
 
-## Đã có — 27 file, 26 bảng
+## Đã có — 29 file, 26 bảng
 
 Nguồn: `docs/erd-ai-crm.md`. Sửa lược đồ thì sửa ERD trước, migration sau.
 
@@ -53,8 +53,10 @@ Nguồn: `docs/erd-ai-crm.md`. Sửa lược đồ thì sửa ERD trước, migr
 | V123 | `current_tenant()` cho `PLATFORM_ADMIN` + policy đa tenant — UC007 | — |
 | V124 | Danh bạ: cho phép trùng, đồng ý xử lý dữ liệu, tìm không dấu (`fold_vi`) — UC016 | — (4 cột + 2 chỉ mục + trigger trên `contacts`) |
 | V125 | Ghi chú và gắn thẻ — UC017 | — (4 cột trên `contact_notes`, chỉ mục duy nhất trên `tags`, trigger đếm thẻ) |
-| V126 | Mốc chạm 80% / 100% của hạn mức — UC006, UC018. Viết khi còn mang số V116; đổi số lúc merge develop 06/10 vì V116 đã thuộc luồng đăng ký | — (2 cột + 1 `CHECK` trên `usage_records`) |
-| V127 | `register_tenant` ghi trần `STORAGE_MB` theo BYTE + sửa dòng đã ghi theo MB — UC001, UC018 (ADR-0023 (c)) | — |
+| V126 | Căn cứ câu trả lời AI lưu cùng tin nhắn — UC010 | — (cột `metadata` trên `messages`) |
+| V127 | Mỗi doanh nghiệp đúng một Web Widget — UC009 | — (chỉ mục duy nhất `uq_channels_one_widget`) |
+| V128 | Mốc chạm 80% / 100% của hạn mức — UC006, UC018. Viết với số V116; đổi hai lần khi merge develop 06/10 vì trùng số với migration của Dev B | — (2 cột + 1 `CHECK` trên `usage_records`) |
+| V129 | `register_tenant` ghi trần `STORAGE_MB` theo BYTE + sửa dòng đã ghi theo MB — UC001, UC018 (ADR-0023 (c)). Viết với số V127 | — |
 
 Migration chạy tự động khi khởi động java-core (`application.yml` → `spring.flyway`).
 Chạy tay bằng Flyway CLI:

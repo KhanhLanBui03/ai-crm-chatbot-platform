@@ -1,7 +1,7 @@
--- V127 — STORAGE_MB tính theo BYTE ở cả luồng đăng ký (ADR-0023 (c)). UC001 · UC018
+-- V129 — STORAGE_MB tính theo BYTE ở cả luồng đăng ký (ADR-0023 (c)). UC001 · UC018
 --
 -- VẤN ĐỀ: register_tenant (V118) ghi trần STORAGE_MB = subscription_plans.storage_mb nguyên văn,
--- tức số MB. UC018 hiểu cột này theo BYTE (V126, UsageRecordRepository.insertIfAbsent nhân
+-- tức số MB. UC018 hiểu cột này theo BYTE (V128, UsageRecordRepository.insertIfAbsent nhân
 -- 1048576), và insertIfAbsent gặp dòng có sẵn thì ON CONFLICT DO NOTHING — nên doanh nghiệp đăng
 -- ký qua luồng thật có trần 100 BYTE với gói TRIAL: tệp 1 KB đã bị 409 STORAGE_MB_QUOTA_EXCEEDED.
 --
@@ -67,7 +67,7 @@ BEGIN
     INSERT INTO platform.tenant_subscriptions (id, tenant_id, plan_id, status, period_start, period_end, auto_renew, changed_by, created_at, updated_at)
     VALUES (v_sub_id, p_tenant_id, v_plan.id, 'TRIALING', v_now, v_period_end, true, v_user_id, v_now, v_now);
 
-    -- 5. Tạo usage records. STORAGE_MB đổi MB của gói sang BYTE — V127, ADR-0023 (c).
+    -- 5. Tạo usage records. STORAGE_MB đổi MB của gói sang BYTE — V129, ADR-0023 (c).
     INSERT INTO platform.usage_records (id, tenant_id, subscription_id, metric, used_value, quota_value, created_at, updated_at)
     VALUES
         (gen_random_uuid(), p_tenant_id, v_sub_id, 'CONVERSATION',  0, v_plan.conversation_quota,        v_now, v_now),
@@ -83,7 +83,7 @@ REVOKE ALL ON FUNCTION platform.register_tenant(uuid, varchar, varchar, varchar,
 GRANT EXECUTE ON FUNCTION platform.register_tenant(uuid, varchar, varchar, varchar, varchar, varchar, varchar, varchar) TO crm_app;
 
 
--- Sửa các doanh nghiệp đã đăng ký trước V127: dòng STORAGE_MB còn mang đúng số MB của gói. Điều
+-- Sửa các doanh nghiệp đã đăng ký trước V129: dòng STORAGE_MB còn mang đúng số MB của gói. Điều
 -- kiện quota_value = storage_mb chỉ khớp dòng sai — dòng đúng (byte) lớn hơn hàng triệu lần.
 -- Flyway chạy bằng crm_owner (rolbypassrls) nên thấy mọi tenant.
 UPDATE platform.usage_records u

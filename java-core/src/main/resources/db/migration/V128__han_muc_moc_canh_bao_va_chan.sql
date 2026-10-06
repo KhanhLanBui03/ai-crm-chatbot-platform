@@ -1,4 +1,4 @@
--- V126 — Mốc chạm 80% và mốc chạm 100% của từng hạn mức.
+-- V128 — Mốc chạm 80% và mốc chạm 100% của từng hạn mức.
 -- UC006 · UC018
 --
 -- UC018 "Tham số và ngưỡng": "Ngưỡng cảnh báo hạn mức 80% (warned_at), ngưỡng chặn 100%
@@ -32,7 +32,7 @@ COMMENT ON COLUMN platform.usage_records.blocked_at IS
 
 -- Đơn vị của used_value / quota_value theo chỉ số — ADR-0023. Ghi ở đây vì tên STORAGE_MB (V102)
 -- nói sai đơn vị: lưu MB thì tệp vài KB làm tròn thành 0 hoặc 1 MB, và trừ lại lúc gỡ tài liệu
--- không bao giờ khớp số đã cộng. Bản này (khi còn mang số V116) chưa chạy trên CSDL lâu dài nào
+-- không bao giờ khớp số đã cộng. Bản này (khi còn mang số V116, rồi V126) chưa chạy trên CSDL lâu dài nào
 -- khi thêm đoạn này (27/09).
 COMMENT ON COLUMN platform.usage_records.used_value IS
     'DOCUMENT, STORAGE_MB, USER: lượng ĐANG CÓ (tồn kho), chép sang chu kỳ sau. CONVERSATION, '

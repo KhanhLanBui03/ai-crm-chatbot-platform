@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Cài đặt hạn mức. Mốc 80% và 100% ghi MỘT LẦN mỗi chu kỳ (V126) — đó là "thời điểm chạm mốc"
+ * Cài đặt hạn mức. Mốc 80% và 100% ghi MỘT LẦN mỗi chu kỳ (V128) — đó là "thời điểm chạm mốc"
  * UC006 4.1–4.2 hiển thị, nên không ghi đè khi các lượt sau vẫn ở trên ngưỡng.
  */
 @Service
@@ -87,7 +87,7 @@ public class UsageQuotaServiceImpl implements UsageQuotaService {
 
     /**
      * Ghi mốc theo mức dùng HIỆN TẠI của dòng. Thứ tự 80% rồi 100% là bắt buộc: ràng buộc
-     * {@code ck_usage_moc_theo_thu_tu} (V126) từ chối dòng có {@code blocked_at} mà thiếu
+     * {@code ck_usage_moc_theo_thu_tu} (V128) từ chối dòng có {@code blocked_at} mà thiếu
      * {@code warned_at}. Nhân chéo thay vì chia để khỏi sai số dấu phẩy động ở đúng ngưỡng.
      */
     private static void ghiMocNeuTrong(UsageRecord r, Instant now) {

@@ -613,8 +613,8 @@ paths:
       tags: [Kênh]
       summary: SCR016 — danh sách kênh đã kết nối
       description: |
-        Chỉ Zalo OA và Facebook nằm ở `channel_integrations`. Web Widget **không** là một dòng của
-        bảng này — nó có bảng cấu hình riêng (`widget_configs`), xem `/api/v1/widget-config`.
+        Web Widget là một dòng `engagement.channels` loại `WEB_WIDGET`, cấu hình nằm trong cột
+        `config` (CSDL không có bảng `widget_configs`) — quản lý riêng qua `/api/v1/widget-config`.
 
         Không bao giờ trả `credentialsEncrypted` hay `webhookSecretEncrypted` — bí mật của kênh là
         bề mặt tấn công T1, chúng không có lý do gì để rời khỏi máy chủ.
@@ -726,7 +726,7 @@ paths:
       summary: SCR018 — cấu hình Web Widget
       description: |
         Một cấu hình cho mỗi doanh nghiệp. Giao diện widget đọc động từ máy chủ, nên đổi màu hay
-        lời chào **không** cần sinh lại mã nhúng (UC009 luồng 4a).
+        lời chào **không** cần sinh lại mã nhúng (UC009 luồng 4a). Mọi nhân viên xem được.
       responses:
         '200':
           description: Cấu hình widget
@@ -736,12 +736,34 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/ApiResponse'
                   - properties: { data: { $ref: '#/components/schemas/CauHinhWidget' } }
+        '404':
+          description: Chưa sinh mã nhúng — giao diện hiện nút "Sinh mã nhúng"
+    post:
+      tags: [Kênh]
+      summary: Sinh mã nhúng — UC009 bước 6–7
+      description: |
+        Tạo kênh `WEB_WIDGET` kèm khoá công khai `wk_` + 32 ký tự hex, ghi `audit_logs`
+        (`WIDGET_CREATED`). Mỗi doanh nghiệp một widget. Chỉ quản trị viên.
+      responses:
+        '201':
+          description: Đã sinh
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/CauHinhWidget' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '409': { $ref: '#/components/responses/Trung' }
     put:
       tags: [Kênh]
       summary: Lưu cấu hình Web Widget
       description: |
-        `allowedDomains` là danh sách trắng tên miền được nhúng; widget đối chiếu tên miền gốc ở
-        mỗi lần khởi tạo và ghi nhận nỗ lực truy cập bị từ chối.
+        `allowedDomains` là danh sách trắng tên miền được nhúng; máy chủ đối chiếu tên miền gốc ở
+        mỗi request của widget và ghi nhận nỗ lực truy cập bị từ chối (`WIDGET_ORIGIN_REJECTED`).
+        Khai `congtya.vn` là nhận cả `www.congtya.vn`; `*.congtya.vn` nhận mọi tên miền con;
+        `localhost` chỉ nhận khi khai rõ. Máy chủ chuẩn hoá (`https://Shop.vn/` → `shop.vn`) và
+        bỏ trùng. `isActive: false` tắt widget ngay trên mọi trang. Chỉ quản trị viên.
       requestBody:
         required: true
         content:
@@ -757,6 +779,59 @@ paths:
                   - $ref: '#/components/schemas/ApiResponse'
                   - properties: { data: { $ref: '#/components/schemas/CauHinhWidget' } }
         '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '404': { $ref: '#/components/responses/KhongThay' }
+
+  /api/v1/widget-config/test-chat:
+    post:
+      tags: [Kênh]
+      summary: Thử chatbot trên trang cấu hình (UC009 bước 4)
+      description: |
+        Gọi AI THẬT (`/v1/ai/chat` của ai-service) nhưng **không ghi gì** vào CSDL: không hội
+        thoại, không hồ sơ khách, không tính hạn mức. Lịch sử thử do trình duyệt giữ và gửi lại
+        (tối đa 10 lượt cuối được dùng). Chỉ quản trị viên. 503 khi dịch vụ AI không phản hồi.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string, minLength: 1, maxLength: 1000 }
+                history:
+                  type: array
+                  items:
+                    type: object
+                    required: [role, content]
+                    properties:
+                      role: { type: string, enum: [user, assistant] }
+                      content: { type: string }
+      responses:
+        '200':
+          description: Câu trả lời thử
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: object
+                        required: [answer, citations, handoff, refused]
+                        properties:
+                          answer: { type: string }
+                          citations:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                documentId: { type: [string, 'null'] }
+                                title: { type: [string, 'null'] }
+                                snippet: { type: [string, 'null'] }
+                          handoff: { type: boolean, description: 'Trên site thật, lượt này sẽ chuyển cho nhân viên' }
+                          refused: { type: boolean }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '503': { description: Dịch vụ AI không phản hồi }
 
   /api/v1/widget-config/snippet:
     get:
@@ -3564,14 +3639,15 @@ components:
     LuuCauHinhWidgetRequest:
       type: object
       properties:
-        primaryColor: { type: [string, 'null'], maxLength: 9 }
+        primaryColor: { type: [string, 'null'], pattern: '^#[0-9A-Fa-f]{6}$' }
         position:
           type: string
           enum: [BOTTOM_RIGHT, BOTTOM_LEFT]
-        greetingMessage: { type: [string, 'null'] }
-        avatarUrl: { type: [string, 'null'] }
+        greetingMessage: { type: [string, 'null'], maxLength: 300 }
+        avatarUrl: { type: [string, 'null'], description: 'Chỉ nhận https://' }
         allowedDomains:
           type: array
+          maxItems: 20
           items: { type: string }
         isActive: { type: boolean }
 

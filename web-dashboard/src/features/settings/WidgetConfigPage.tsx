@@ -1,14 +1,19 @@
-import { Check, Copy, MessageCircle, X } from 'lucide-react'
+import { Check, Copy, MessageCircle, MessageSquareDashed, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { laLoiTruyVan } from '@/api/baseQuery'
 import {
   useCauHinhWidgetQuery,
   useLuuCauHinhWidgetMutation,
   useMaNhungWidgetQuery,
+  useSinhMaNhungWidgetMutation,
 } from '@/api/channels'
+import { useAppSelector } from '@/app/store/hooks'
 import { SettingsPage } from '@/components/layout/SettingsPage'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
@@ -20,6 +25,7 @@ import {
 } from '@/components/ui/select'
 import { StatusChip } from '@/components/ui/status-chip'
 import { Textarea } from '@/components/ui/textarea'
+import { WidgetTestChat } from '@/features/settings/WidgetTestChat'
 import type { CauHinhWidget } from '@/types/schema'
 import { cn } from '@/utils/cn'
 
@@ -32,13 +38,23 @@ import { cn } from '@/utils/cn'
  */
 export function WidgetConfigPage() {
   const truyVan = useCauHinhWidgetQuery()
-  const maNhung = useMaNhungWidgetQuery()
+  // Chưa có widget thì máy chủ trả 404 — đó là trạng thái "chưa sinh mã", không phải lỗi
+  const chuaCoWidget = laLoiTruyVan(truyVan.error) && truyVan.error.status === 404
+  const maNhung = useMaNhungWidgetQuery(undefined, { skip: !truyVan.data })
   const [luu, ketQua] = useLuuCauHinhWidgetMutation()
+  const [sinhMa, ketQuaSinh] = useSinhMaNhungWidgetMutation()
+  const laQuanTri = useAppSelector((s) => s.auth.nguoiDung?.roleCode === 'TENANT_ADMIN')
   const [nhap, datNhap] = useState<CauHinhWidget | null>(null)
   const [daChep, datDaChep] = useState(false)
+  // Giữ NGUYÊN văn bản ô tên miền: nếu dựng lại từ mảng đã lọc dòng trống thì vừa bấm Enter,
+  // dòng mới đã bị lọc mất — không bao giờ gõ được tên miền thứ hai.
+  const [vanBanTenMien, datVanBanTenMien] = useState('')
 
   useEffect(() => {
-    if (truyVan.data) datNhap(truyVan.data)
+    if (truyVan.data) {
+      datNhap(truyVan.data)
+      datVanBanTenMien(truyVan.data.allowedDomains.join('\n'))
+    }
   }, [truyVan.data])
 
   const goc = truyVan.data
@@ -46,21 +62,85 @@ export function WidgetConfigPage() {
   const dat = <K extends keyof CauHinhWidget>(k: K, v: CauHinhWidget[K]) =>
     datNhap((cu) => (cu ? { ...cu, [k]: v } : cu))
 
+  if (chuaCoWidget) {
+    return (
+      <SettingsPage
+        tieuDe="Web Widget"
+        moTa="Khung chat nhúng trên website của bạn. Đổi ở đây là đổi trên mọi trang đã nhúng."
+        coThayDoi={false}
+        onLuu={() => {}}
+        onHuy={() => {}}
+        muc={[
+          {
+            tieuDe: 'Bắt đầu',
+            noiDung: (
+              <EmptyState
+                BieuTuong={MessageSquareDashed}
+                tieuDe="Chưa có widget"
+                moTa={
+                  laQuanTri
+                    ? 'Sinh mã nhúng để có khoá công khai và thẻ script dán vào website. Sau đó khai tên miền được phép.'
+                    : 'Quản trị viên doanh nghiệp cần sinh mã nhúng trước.'
+                }
+                thaoTac={
+                  laQuanTri
+                    ? {
+                        nhan: ketQuaSinh.isLoading ? 'Đang sinh…' : 'Sinh mã nhúng',
+                        onClick: async () => {
+                          try {
+                            await sinhMa().unwrap()
+                            toast.success('Đã sinh mã nhúng. Khai tên miền được phép rồi lưu.')
+                          } catch (loi) {
+                            toast.error(laLoiTruyVan(loi) ? loi.message : 'Không sinh được mã nhúng.')
+                          }
+                        },
+                      }
+                    : undefined
+                }
+              />
+            ),
+          },
+        ]}
+      />
+    )
+  }
+
   return (
     <SettingsPage
       tieuDe="Web Widget"
       moTa="Khung chat nhúng trên website của bạn. Đổi ở đây là đổi trên mọi trang đã nhúng."
+      chiDoc={laQuanTri ? undefined : { lyDo: 'Chỉ quản trị viên được thay đổi widget.' }}
       dangTai={truyVan.isLoading || !nhap}
       coThayDoi={coThayDoi}
       dangLuu={ketQua.isLoading}
       loi={ketQua.error}
-      onHuy={() => goc && datNhap(goc)}
+      onHuy={() => {
+        if (!goc) return
+        datNhap(goc)
+        datVanBanTenMien(goc.allowedDomains.join('\n'))
+      }}
       onLuu={async () => {
         if (!nhap) return
         await luu(nhap).unwrap()
-        toast.success('Đã lưu. Website nhận cấu hình mới trong vòng một phút.')
+        toast.success('Đã lưu. Website áp dụng cấu hình mới ở lần mở khung chat kế tiếp.')
       }}
       muc={[
+        {
+          tieuDe: 'Trạng thái',
+          noiDung: nhap && (
+            <Field orientation="horizontal">
+              <Checkbox
+                id="wg-bat"
+                checked={nhap.isActive}
+                onCheckedChange={(v) => dat('isActive', v === true)}
+              />
+              <FieldLabel htmlFor="wg-bat">Bật widget trên website</FieldLabel>
+              <FieldDescription>
+                Tắt thì mọi trang đã nhúng hiện "dịch vụ tạm ngừng" ngay, không cần gỡ mã.
+              </FieldDescription>
+            </Field>
+          ),
+        },
         {
           tieuDe: 'Giao diện',
           noiDung: nhap && (
@@ -131,17 +211,19 @@ export function WidgetConfigPage() {
                 id="wg-mien"
                 rows={4}
                 className="resize-none font-mono text-[13px]"
-                value={nhap.allowedDomains.join('\n')}
-                onChange={(e) =>
+                value={vanBanTenMien}
+                onChange={(e) => {
+                  datVanBanTenMien(e.target.value)
                   dat(
                     'allowedDomains',
                     e.target.value.split('\n').map((d) => d.trim()).filter(Boolean),
                   )
-                }
+                }}
               />
               <FieldDescription>
-                Không dùng ký tự đại diện. Cần cả <code>cattuong.vn</code> lẫn{' '}
-                <code>www.cattuong.vn</code> nếu site chạy cả hai.
+                Khai <code>cattuong.vn</code> là nhận luôn <code>www.cattuong.vn</code>. Muốn mọi tên
+                miền con thì khai <code>*.cattuong.vn</code>. Chạy thử trên máy thì khai{' '}
+                <code>localhost</code>. Danh sách trống thì widget không chạy ở đâu cả.
               </FieldDescription>
             </Field>
           ),
@@ -150,8 +232,9 @@ export function WidgetConfigPage() {
           tieuDe: 'Mã nhúng',
           moTa: 'Dán ngay trước thẻ đóng </body> của mọi trang muốn có khung chat.',
           noiDung: (
-            <div className="flex flex-col gap-2">
-              <pre className="bg-muted overflow-x-auto rounded-lg p-3 font-mono text-xs leading-relaxed">
+            <div className="flex min-w-0 flex-col gap-2">
+              {/* Mã nhúng là một dòng rất dài — cho xuống dòng thay vì đẩy cả trang tràn ngang */}
+              <pre className="bg-muted rounded-lg p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
                 {maNhung.data?.snippet ?? 'Đang tải…'}
               </pre>
               <div className="flex items-center gap-2">
@@ -170,12 +253,23 @@ export function WidgetConfigPage() {
                   {daChep ? 'Đã chép' : 'Chép mã'}
                 </Button>
                 <span className="text-muted-foreground text-xs">
-                  Mã nhúng đổi theo cấu hình ở trên — chép lại sau khi lưu.
+                  Chỉ cần dán một lần — đổi màu, lời chào, tên miền không phải chép lại.
                 </span>
               </div>
             </div>
           ),
         },
+        ...(laQuanTri
+          ? [
+              {
+                tieuDe: 'Thử chatbot',
+                moTa:
+                  'Hỏi thử như một khách trước khi dán mã lên website. Cuộc thử không vào Hộp thư, ' +
+                  'không tạo hồ sơ khách và không tính vào hạn mức hội thoại.',
+                noiDung: <WidgetTestChat />,
+              },
+            ]
+          : []),
       ]}
     />
   )

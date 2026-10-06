@@ -312,7 +312,7 @@ lập luận và đánh đổi ở ADR-0023. Hai chỉ số, cùng một cách k
   transaction với outbox `DocumentDeleted`. Vì vậy phản hồi gỡ của ai-service phải có
   `file_size_bytes` — ghi vào hợp đồng UC020.
 
-Mốc cần **migration V126** (Track A): `warned_at`, `blocked_at` trên `platform.usage_records` —
+Mốc cần **migration V128** (Track A): `warned_at`, `blocked_at` trên `platform.usage_records` —
 đặc tả UC018 ghi thẳng tên hai cột này, `dashboard-api.yaml` (`HanMucSuDung.warnedAt`/`blockedAt`)
 đã khai từ trước, nhưng V102 chưa có.
 

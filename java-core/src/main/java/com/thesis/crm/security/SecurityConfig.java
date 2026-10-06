@@ -51,12 +51,34 @@ public class SecurityConfig {
                         "/api/v1/auth/**",
                         "/.well-known/jwks.json",
                         "/actuator/**",
-                        "/ws/**"
+                        "/ws/**",
+                        // UC009/UC010 — widget của khách vãng lai, xác thực bằng token widget ký HMAC
+                        // trong WidgetService, không phải JWT nhân viên
+                        "/api/v1/widget/**"
                 )
                 .csrf(AbstractHttpConfigurer::disable)
+                .cors(cors -> cors.configurationSource(widgetCors()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
         return http.build();
+    }
+
+    /**
+     * Widget chạy trên website của DOANH NGHIỆP (tên miền bất kỳ) nên CORS phải mở cho mọi Origin ở
+     * {@code /api/v1/widget/**}. Không phải lỗ hổng: danh sách tên miền được phép kiểm ở máy chủ cho
+     * từng widget (WidgetOriginPolicy), và không dùng cookie ({@code allowCredentials=false}).
+     */
+    private static org.springframework.web.cors.CorsConfigurationSource widgetCors() {
+        org.springframework.web.cors.CorsConfiguration c = new org.springframework.web.cors.CorsConfiguration();
+        c.addAllowedOriginPattern("*");
+        c.setAllowedMethods(java.util.List.of("GET", "POST", "OPTIONS"));
+        c.setAllowedHeaders(java.util.List.of("Content-Type", "X-Widget-Token", "X-Trace-Id"));
+        c.setAllowCredentials(false);
+        c.setMaxAge(3600L);
+        org.springframework.web.cors.UrlBasedCorsConfigurationSource src =
+                new org.springframework.web.cors.UrlBasedCorsConfigurationSource();
+        src.registerCorsConfiguration("/api/v1/widget/**", c);
+        return src;
     }
 
     /**

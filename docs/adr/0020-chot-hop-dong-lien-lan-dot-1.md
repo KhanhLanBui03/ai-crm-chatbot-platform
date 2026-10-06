@@ -114,9 +114,9 @@ Hợp đồng chi tiết của UC018 (JSON, bảng mã lỗi, định dạng key
   `ai-service-to-java-core.yaml` đổi sang `/v1/ai/**` và JSON thay multipart; `dashboard-api.yaml`
   tách 413 khỏi 409, `title` 255, thêm `code` vào `ApiResponse` và `documentQuota` vào phản hồi
   202; `docs/events/` thêm `crm.kb.document.uploaded.json` với payload.
-- **Lược đồ:** V126 (Track A; viết với số V116, đổi số khi merge `develop` 06/10) thêm `warned_at`,
-  `blocked_at` vào `platform.usage_records` — đặc tả UC018 và UC006 đòi ghi thời điểm chạm 80% /
-  100%. Đề xuất 3 cột `sales.lead_scores` lùi sang V128.
+- **Lược đồ:** V128 (Track A; viết với số V116, hai lần đổi số khi merge `develop` 06/10 vì trùng
+  số với migration của Dev B) thêm `warned_at`, `blocked_at` vào `platform.usage_records` — đặc tả
+  UC018 và UC006 đòi ghi thời điểm chạm 80% / 100%. Đề xuất 3 cột `sales.lead_scores` lùi sang V130.
 - **Đặc tả:** `ai-service/planning.md:309` đã sửa thành 3–255. Dòng "Tiêu đề: 3–300 ký tự" của UC018
   trong `docs/Dac-ta-UseCase-Module-AI.docx` **chưa sửa** — sửa tay trong Word.
 - **Mã lỗi:** thêm `SUBSCRIPTION_NOT_ACTIVE` (409), `AI_SERVICE_UNAVAILABLE` (503) phía java-core

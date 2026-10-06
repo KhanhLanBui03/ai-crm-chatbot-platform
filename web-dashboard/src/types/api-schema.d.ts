@@ -1022,8 +1022,8 @@ export interface paths {
         };
         /**
          * SCR016 — danh sách kênh đã kết nối
-         * @description Chỉ Zalo OA và Facebook nằm ở `channel_integrations`. Web Widget **không** là một dòng của
-         *     bảng này — nó có bảng cấu hình riêng (`widget_configs`), xem `/api/v1/widget-config`.
+         * @description Web Widget là một dòng `engagement.channels` loại `WEB_WIDGET`, cấu hình nằm trong cột
+         *     `config` (CSDL không có bảng `widget_configs`) — quản lý riêng qua `/api/v1/widget-config`.
          *
          *     Không bao giờ trả `credentialsEncrypted` hay `webhookSecretEncrypted` — bí mật của kênh là
          *     bề mặt tấn công T1, chúng không có lý do gì để rời khỏi máy chủ.
@@ -1229,7 +1229,7 @@ export interface paths {
         /**
          * SCR018 — cấu hình Web Widget
          * @description Một cấu hình cho mỗi doanh nghiệp. Giao diện widget đọc động từ máy chủ, nên đổi màu hay
-         *     lời chào **không** cần sinh lại mã nhúng (UC009 luồng 4a).
+         *     lời chào **không** cần sinh lại mã nhúng (UC009 luồng 4a). Mọi nhân viên xem được.
          */
         get: {
             parameters: {
@@ -1251,12 +1251,22 @@ export interface paths {
                         };
                     };
                 };
+                /** @description Chưa sinh mã nhúng — giao diện hiện nút "Sinh mã nhúng" */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
             };
         };
         /**
          * Lưu cấu hình Web Widget
-         * @description `allowedDomains` là danh sách trắng tên miền được nhúng; widget đối chiếu tên miền gốc ở
-         *     mỗi lần khởi tạo và ghi nhận nỗ lực truy cập bị từ chối.
+         * @description `allowedDomains` là danh sách trắng tên miền được nhúng; máy chủ đối chiếu tên miền gốc ở
+         *     mỗi request của widget và ghi nhận nỗ lực truy cập bị từ chối (`WIDGET_ORIGIN_REJECTED`).
+         *     Khai `congtya.vn` là nhận cả `www.congtya.vn`; `*.congtya.vn` nhận mọi tên miền con;
+         *     `localhost` chỉ nhận khi khai rõ. Máy chủ chuẩn hoá (`https://Shop.vn/` → `shop.vn`) và
+         *     bỏ trùng. `isActive: false` tắt widget ngay trên mọi trang. Chỉ quản trị viên.
          */
         put: {
             parameters: {
@@ -1283,9 +1293,110 @@ export interface paths {
                     };
                 };
                 403: components["responses"]["KhongDuQuyen"];
+                404: components["responses"]["KhongThay"];
             };
         };
-        post?: never;
+        /**
+         * Sinh mã nhúng — UC009 bước 6–7
+         * @description Tạo kênh `WEB_WIDGET` kèm khoá công khai `wk_` + 32 ký tự hex, ghi `audit_logs`
+         *     (`WIDGET_CREATED`). Mỗi doanh nghiệp một widget. Chỉ quản trị viên.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Đã sinh */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"] & {
+                            data?: components["schemas"]["CauHinhWidget"];
+                        };
+                    };
+                };
+                403: components["responses"]["KhongDuQuyen"];
+                409: components["responses"]["Trung"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/widget-config/test-chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Thử chatbot trên trang cấu hình (UC009 bước 4)
+         * @description Gọi AI THẬT (`/v1/ai/chat` của ai-service) nhưng **không ghi gì** vào CSDL: không hội
+         *     thoại, không hồ sơ khách, không tính hạn mức. Lịch sử thử do trình duyệt giữ và gửi lại
+         *     (tối đa 10 lượt cuối được dùng). Chỉ quản trị viên. 503 khi dịch vụ AI không phản hồi.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        message: string;
+                        history?: {
+                            /** @enum {string} */
+                            role: "user" | "assistant";
+                            content: string;
+                        }[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Câu trả lời thử */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"] & {
+                            data?: {
+                                answer: string;
+                                citations: {
+                                    documentId?: string | null;
+                                    title?: string | null;
+                                    snippet?: string | null;
+                                }[];
+                                /** @description Trên site thật, lượt này sẽ chuyển cho nhân viên */
+                                handoff: boolean;
+                                refused: boolean;
+                            };
+                        };
+                    };
+                };
+                403: components["responses"]["KhongDuQuyen"];
+                /** @description Dịch vụ AI không phản hồi */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -5191,6 +5302,7 @@ export interface components {
             /** @enum {string} */
             position?: "BOTTOM_RIGHT" | "BOTTOM_LEFT";
             greetingMessage?: string | null;
+            /** @description Chỉ nhận https:// */
             avatarUrl?: string | null;
             allowedDomains?: string[];
             isActive?: boolean;

@@ -6,7 +6,7 @@ Lược đồ cơ sở dữ liệu **chính thức** của hệ thống: **30 b�
 > Tài liệu này **đã được hiện thực và kiểm chứng**: 23 file migration Flyway (V101–V115,
 > V201–V209) chạy sạch trên PostgreSQL 16 + pgvector, qua đủ 6 mục kiểm ở [mục 16](#16-kiểm-chứng).
 > Mọi cột, mọi ràng buộc `CHECK` dưới đây lấy từ cơ sở dữ liệu đang chạy, không phải bản phác.
-> **V126** (27/09/2026, `usage_records.warned_at` / `blocked_at`) thêm sau đợt kiểm đó: đã chạy
+> **V128** (27/09/2026, `usage_records.warned_at` / `blocked_at`) thêm sau đợt kiểm đó: đã chạy
 > sạch qua Flyway trong test tích hợp java-core, **chưa** chạy lại 6 mục kiểm ở mục 16.
 
 ---
@@ -301,8 +301,8 @@ do RLS trên chính `user_roles` lo.
 | `used_value` | bigint | — | — | — | Dòng chảy (`CONVERSATION`, `AI_TOKEN`): cộng dồn trong chu kỳ. Tồn kho (`DOCUMENT`, `STORAGE_MB`, `USER`): lượng **đang có**, chép sang chu kỳ sau — ADR-0023. `STORAGE_MB` tính bằng **byte** |
 | `quota_value` | bigint | — | — | — | **Sao chép** từ gói lúc mở chu kỳ. `STORAGE_MB` = `storage_mb × 1048576` byte |
 | `last_calculated_at` | timestamptz | ✓ | — | — | |
-| `warned_at` | timestamptz | ✓ | — | — | **V126.** Lần đầu `used_value` chạm 80% trong chu kỳ — UC006 4.1 |
-| `blocked_at` | timestamptz | ✓ | — | — | **V126.** Lần đầu chạm 100%. `CHECK`: có `blocked_at` thì phải có `warned_at` — UC006 4.2, UC018 409 |
+| `warned_at` | timestamptz | ✓ | — | — | **V128.** Lần đầu `used_value` chạm 80% trong chu kỳ — UC006 4.1 |
+| `blocked_at` | timestamptz | ✓ | — | — | **V128.** Lần đầu chạm 100%. `CHECK`: có `blocked_at` thì phải có `warned_at` — UC006 4.2, UC018 409 |
 | `created_at` · `updated_at` | timestamptz | — | — | — | |
 
 `quota_value` sao chép chứ không đọc qua `plan_id` — đây **không** phải vi phạm 3NF mà là
@@ -1060,7 +1060,7 @@ riêng chứ không gộp thành ký hiệu N–N: chúng mang cột riêng (`gr
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════════╗
-║  TRACK A — java-core · Flyway V101–V126 · platform / engagement / sales /        ║
+║  TRACK A — java-core · Flyway V101–V129 · platform / engagement / sales /        ║
 ║            analytics                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════════╝
 

@@ -5,7 +5,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Mức tiêu thụ một chỉ số trong một chu kỳ — {@code platform.usage_records} (V102, V126).
+ * Mức tiêu thụ một chỉ số trong một chu kỳ — {@code platform.usage_records} (V102, V128).
  *
  * <p>{@code quotaValue} là ẢNH CHỤP của gói lúc mở chu kỳ, không đọc qua {@code plan_id}: đổi gói
  * giữa chừng mà đọc qua khoá ngoại thì báo cáo chu kỳ cũ sai ngay (ERD mục 5.7).
@@ -39,11 +39,11 @@ public class UsageRecord {
     @Column(name = "last_calculated_at")
     private Instant lastCalculatedAt;
 
-    /** Lần đầu chạm 80% trong chu kỳ (V126). Ghi một lần, không ghi đè. */
+    /** Lần đầu chạm 80% trong chu kỳ (V128). Ghi một lần, không ghi đè. */
     @Column(name = "warned_at")
     private Instant warnedAt;
 
-    /** Lần đầu chạm 100% trong chu kỳ (V126). Có giá trị thì {@code warnedAt} cũng phải có. */
+    /** Lần đầu chạm 100% trong chu kỳ (V128). Có giá trị thì {@code warnedAt} cũng phải có. */
     @Column(name = "blocked_at")
     private Instant blockedAt;
 
