@@ -26,15 +26,17 @@ public class TenantRlsFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        String tenantId = request.getHeader("X-Tenant-Id");
-
+        // JWT đã xác thực LUÔN thắng header: header là thứ client tự gửi được, JWT thì không giả được.
+        // Trước đây header được đọc trước — X-Tenant-Id giả đi kèm JWT thật vẫn đổi được tenant của
+        // phiên (CLAUDE.md luật 1). Header chỉ còn dùng khi không có JWT (gọi nội bộ giữa service).
+        String tenantId = null;
         String role = null;
-        if (tenantId == null || tenantId.isBlank()) {
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getPrincipal() instanceof Jwt jwt) {
-                tenantId = jwt.getClaimAsString("tenant_id");
-                role = jwt.getClaimAsString("role");
-            }
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof Jwt jwt) {
+            tenantId = jwt.getClaimAsString("tenant_id");
+            role = jwt.getClaimAsString("role");
+        } else {
+            tenantId = request.getHeader("X-Tenant-Id");
         }
 
         boolean isPlatformAdmin = "PLATFORM_ADMIN".equalsIgnoreCase(role);
