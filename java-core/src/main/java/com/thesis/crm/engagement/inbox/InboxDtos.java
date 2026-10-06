@@ -33,7 +33,7 @@ public final class InboxDtos {
 
     /**
      * {@code HoiThoaiChiTiet} — tóm tắt + trang tin mới nhất. {@code firstResponseAt} là phản hồi
-     * đầu tiên của CON NGƯỜI (cột {@code first_agent_response_at}, V128), đúng mô tả của hợp đồng.
+     * đầu tiên của CON NGƯỜI (cột {@code first_agent_response_at}, V130), đúng mô tả của hợp đồng.
      */
     public record ConversationDetail(
             UUID id, UUID contactId, String contactName, String channelType, String status,
