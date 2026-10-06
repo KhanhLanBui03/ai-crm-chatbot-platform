@@ -1,5 +1,6 @@
 package com.thesis.crm.engagement.service.impl;
 
+import com.thesis.crm.common.audit.AuditLogWriter;
 import com.thesis.crm.common.exception.AppException;
 import com.thesis.crm.common.response.PageResponse;
 import com.thesis.crm.engagement.dto.request.CreateContactRequest;
@@ -15,7 +16,9 @@ import com.thesis.crm.engagement.service.ContactService;
 import com.thesis.crm.engagement.util.ContactNormalizer;
 import com.thesis.crm.security.TenantTransactionScope;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -38,14 +41,17 @@ public class ContactServiceImpl implements ContactService {
     private final ContactRepository contactRepository;
     private final ContactQueryRepository contactQueries;
     private final TenantTransactionScope tenantScope;
+    private final AuditLogWriter auditLog;
 
     public ContactServiceImpl(
             ContactRepository contactRepository,
             ContactQueryRepository contactQueries,
-            TenantTransactionScope tenantScope) {
+            TenantTransactionScope tenantScope,
+            AuditLogWriter auditLog) {
         this.contactRepository = contactRepository;
         this.contactQueries = contactQueries;
         this.tenantScope = tenantScope;
+        this.auditLog = auditLog;
     }
 
     @Override
@@ -66,7 +72,7 @@ public class ContactServiceImpl implements ContactService {
         int safeSize = size <= 0 ? DEFAULT_SIZE : Math.min(size, MAX_SIZE);
 
         ContactQueryRepository.PageResult result = contactQueries.search(tenantId, new SearchFilter(
-                ContactNormalizer.searchKeyword(q), normalizedStatus, tagId, hasConsent, sort, safePage, safeSize));
+                ContactNormalizer.searchTokens(q), normalizedStatus, tagId, hasConsent, sort, safePage, safeSize));
         return PageResponse.of(result.items(), safePage, safeSize, result.total());
     }
 
@@ -79,7 +85,7 @@ public class ContactServiceImpl implements ContactService {
 
     @Override
     @Transactional
-    public CreateContactResult create(UUID tenantId, CreateContactRequest req) {
+    public CreateContactResult create(UUID tenantId, UUID actorUserId, CreateContactRequest req) {
         tenantScope.apply(tenantId);
 
         String phone;
@@ -88,12 +94,12 @@ public class ContactServiceImpl implements ContactService {
         } catch (IllegalArgumentException e) {
             throw new AppException(
                     "Số điện thoại không hợp lệ. Dùng số Việt Nam, ví dụ 0912345678 hoặc +84912345678.",
-                    HttpStatus.BAD_REQUEST);
+                    HttpStatus.UNPROCESSABLE_ENTITY);
         }
         String email = ContactNormalizer.normalizeEmail(req.email());
         // Một hồ sơ không có cách nào liên hệ lại là hồ sơ vô dụng — cùng quy tắc với giao diện SCR027.
         if (phone == null && email == null) {
-            throw new AppException("Phải có ít nhất số điện thoại hoặc địa chỉ thư.", HttpStatus.BAD_REQUEST);
+            throw new AppException("Phải có ít nhất số điện thoại hoặc địa chỉ thư.", HttpStatus.UNPROCESSABLE_ENTITY);
         }
         String fullName = req.fullName() == null || req.fullName().isBlank() ? null : req.fullName().trim();
 
@@ -106,10 +112,18 @@ public class ContactServiceImpl implements ContactService {
         c.setPrimaryChannel(req.primaryChannel() == null ? "PHONE" : req.primaryChannel());
         boolean consent = Boolean.TRUE.equals(req.consentGranted());
         c.setConsent(consent, req.consentSource() == null ? "AGENT_MANUAL" : req.consentSource(), Instant.now());
-        c.setSearchText(ContactNormalizer.searchText(fullName, email, phone));
 
         // Flush ngay để các truy vấn SQL phía sau (cùng transaction) thấy bản ghi mới.
         Contact saved = contactRepository.saveAndFlush(c);
+
+        // Nhật ký kiểm toán — giao diện SCR027 cam kết "ô đồng ý được ghi vào nhật ký kiểm toán".
+        // KHÔNG chép tên/SĐT/email vào nhật ký (NĐ 13): nhật ký sống lâu hơn dữ liệu khách.
+        Map<String, Object> audit = new LinkedHashMap<>();
+        audit.put("primaryChannel", saved.getPrimaryChannel());
+        audit.put("consentGranted", saved.isConsentGranted());
+        audit.put("consentSource", saved.getConsentSource());
+        audit.put("consentAt", saved.getConsentAt() == null ? null : saved.getConsentAt().toString());
+        auditLog.recordUserAction(tenantId, actorUserId, "CONTACT_CREATED", "CONTACT", saved.getId(), audit);
 
         // Trùng KHÔNG chặn — trả danh sách nghi trùng để giao diện gợi ý hợp nhất (V124, hợp đồng).
         List<ContactDto> duplicates = contactQueries.findDuplicates(tenantId, saved.getId(), phone, email);

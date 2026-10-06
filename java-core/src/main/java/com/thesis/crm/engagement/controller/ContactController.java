@@ -56,7 +56,7 @@ public class ContactController {
     public ResponseEntity<ApiResponse<CreateContactResult>> create(
             @Valid @RequestBody CreateContactRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.ok(contactService.create(requireTenantId(), request)));
+                .body(ApiResponse.ok(contactService.create(requireTenantId(), requireUserId(), request)));
     }
 
     /** SCR024 — hồ sơ khách hàng. */
@@ -74,6 +74,15 @@ public class ContactController {
         requireTenantId();
         throw new AppException(
                 "Chức năng hợp nhất khách hàng chưa được hỗ trợ ở phiên bản này.", HttpStatus.NOT_IMPLEMENTED);
+    }
+
+    /** Người thao tác — cần cho nhật ký kiểm toán; JWT không mang mã người dùng hợp lệ thì từ chối. */
+    private UUID requireUserId() {
+        UUID userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) {
+            throw new AppException("Phiên làm việc không xác định được người dùng.", HttpStatus.UNAUTHORIZED);
+        }
+        return userId;
     }
 
     private UUID requireTenantId() {

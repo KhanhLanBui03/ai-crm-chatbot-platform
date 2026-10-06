@@ -65,6 +65,9 @@ class ContactApiIntegrationTest {
 
     static final UUID TENANT_A = UUID.randomUUID();
     static final UUID TENANT_B = UUID.randomUUID();
+    // Người dùng THẬT trong platform.users — audit_logs.actor_user_id có khoá ngoại tới đây
+    static final UUID USER_A = UUID.randomUUID();
+    static final UUID USER_B = UUID.randomUUID();
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
@@ -90,6 +93,16 @@ class ContactApiIntegrationTest {
                     ps.setString(2, "DN " + t);
                     ps.setString(3, "dn-" + t.toString().substring(0, 8));
                     ps.setString(4, "admin@" + t.toString().substring(0, 8) + ".vn");
+                    ps.executeUpdate();
+                }
+            }
+            for (UUID[] tu : new UUID[][] {{TENANT_A, USER_A}, {TENANT_B, USER_B}}) {
+                try (PreparedStatement ps = c.prepareStatement("""
+                        INSERT INTO platform.users (id, tenant_id, email, password_hash, full_name, status)
+                        VALUES (?, ?, ?, 'x', 'Nhân viên test', 'ACTIVE')""")) {
+                    ps.setObject(1, tu[1]);
+                    ps.setObject(2, tu[0]);
+                    ps.setString(3, "nv@" + tu[0].toString().substring(0, 8) + ".vn");
                     ps.executeUpdate();
                 }
             }
@@ -138,14 +151,14 @@ class ContactApiIntegrationTest {
     void thieuCaSoDienThoaiLanThuThiBaoLoi() throws Exception {
         create(TENANT_A, """
                 {"fullName":"Không có cách liên hệ"}""")
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.message").value("Phải có ít nhất số điện thoại hoặc địa chỉ thư."));
     }
 
     @Test
     void soDienThoaiSaiThiBaoLoi() throws Exception {
         create(TENANT_A, """
-                {"phone":"12345"}""").andExpect(status().isBadRequest());
+                {"phone":"12345"}""").andExpect(status().isUnprocessableEntity());
     }
 
     // ── Danh sách, tìm, lọc (SCR026) ────────────────────────────────────────────
@@ -253,6 +266,17 @@ class ContactApiIntegrationTest {
     }
 
     @Test
+    void headerTenantGiaKhongDoiDuocTenantCuaJwt() throws Exception {
+        String idOfB = createdId(TENANT_B, """
+                {"fullName":"Khách riêng của B","email":"rieng@b.vn"}""");
+        // JWT của A + header giả trỏ sang B: tenant phải lấy từ JWT, không từ header (luật 1)
+        String res = mvc.perform(get("/api/v1/contacts?q=rieng").with(as(TENANT_A))
+                        .header("X-Tenant-Id", TENANT_B.toString()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(data(res).get("items").findValuesAsText("id")).doesNotContain(idOfB);
+    }
+
+    @Test
     void rlsTrongCsdlChanTheoTenant_khongPhuThuocCauSql() throws Exception {
         String idOfA = createdId(TENANT_A, """
                 {"fullName":"Kiểm RLS","email":"rls@a.vn"}""");
@@ -273,6 +297,114 @@ class ContactApiIntegrationTest {
             }
             c.rollback();
         }
+    }
+
+    // ── Hồi quy rà soát 06/10 ───────────────────────────────────────────────────
+
+    @Test
+    void khachDoNoiKhacGhiVaoCsdlVanTimDuoc() throws Exception {
+        // UC011 (tiếp nhận tin, Dev A) hay script khác ghi thẳng bảng — không qua ContactService.
+        // Trước đây search_text để trống nên khách này KHÔNG BAO GIỜ tìm ra được.
+        UUID id = UUID.randomUUID();
+        try (Connection c = owner(); PreparedStatement ps = c.prepareStatement("""
+                INSERT INTO engagement.contacts (id, tenant_id, full_name, email, primary_channel)
+                VALUES (?, ?, 'Đặng Thuỳ Dương', 'duong.widget@khach.vn', 'WEB_WIDGET')""")) {
+            ps.setObject(1, id);
+            ps.setObject(2, TENANT_A);
+            ps.executeUpdate();
+        }
+        assertThat(list(TENANT_A, "q=thuy duong").get("items").findValuesAsText("id")).contains(id.toString());
+    }
+
+    @Test
+    void tenGoDangNfdVanTimKhongDauDuoc() throws Exception {
+        String nfd = java.text.Normalizer.normalize("Hoàng Yến Nhi", java.text.Normalizer.Form.NFD);
+        String id = createdId(TENANT_A, "{\"fullName\":\"" + nfd + "\",\"email\":\"yen.nhi@khach.vn\"}");
+        assertThat(list(TENANT_A, "q=yen nhi").get("items").findValuesAsText("id")).contains(id);
+    }
+
+    @Test
+    void timNhieuTuKhongCanLienNhau() throws Exception {
+        String id = createdId(TENANT_A, """
+                {"fullName":"Vũ Quốc Bảo","email":"bao.vu@khach.vn","phone":"0977 888 999"}""");
+        // tên và số điện thoại không đứng liền nhau trong chuỗi tìm kiếm
+        assertThat(list(TENANT_A, "q=bao 0977888").get("items").findValuesAsText("id")).contains(id);
+        assertThat(list(TENANT_A, "q=bao 0911000").get("items").findValuesAsText("id")).doesNotContain(id);
+    }
+
+    @Test
+    void soDienThoaiGoCaMaQuocGiaLanSo0VanDungVaPhatHienTrung() throws Exception {
+        String first = createdId(TENANT_A, """
+                {"fullName":"Gốc 0","phone":"0966 123 456"}""");
+        JsonNode data = data(create(TENANT_A, """
+                {"fullName":"Gõ +84 0","phone":"+84 0966 123 456"}""")
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        assertThat(data.get("contact").get("phone").asText()).isEqualTo("0966123456");
+        assertThat(data.get("duplicateCandidates").findValuesAsText("id")).contains(first);
+    }
+
+    @Test
+    void dongYDuocGhiNhatKyKiemToan() throws Exception {
+        String id = createdId(TENANT_A, """
+                {"fullName":"Kiểm toán đồng ý","email":"kiem.toan@khach.vn","consentGranted":true}""");
+        try (Connection c = owner(); PreparedStatement ps = c.prepareStatement("""
+                SELECT actor_type, actor_user_id, action, after_data ->> 'consentSource'
+                FROM platform.audit_logs WHERE entity_type = 'CONTACT' AND entity_id = ?""")) {
+            ps.setObject(1, UUID.fromString(id));
+            try (ResultSet rs = ps.executeQuery()) {
+                assertThat(rs.next()).as("phải có dòng nhật ký kiểm toán").isTrue();
+                assertThat(rs.getString(1)).isEqualTo("USER");
+                assertThat(rs.getObject(2, UUID.class)).isEqualTo(USER_A);
+                assertThat(rs.getString(3)).isEqualTo("CONTACT_CREATED");
+                assertThat(rs.getString(4)).isEqualTo("AGENT_MANUAL");
+            }
+        }
+    }
+
+    @Test
+    void thamSoSaiKieuThiTra400KhongPhai500() throws Exception {
+        mvc.perform(get("/api/v1/contacts?tagId=khong-phai-uuid").with(as(TENANT_A)))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/contacts/khong-phai-uuid").with(as(TENANT_A)))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/v1/contacts").with(as(TENANT_A))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"consentGranted\": \"co\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void loiDuLieuNhapCungMotMaTrangThai() throws Exception {
+        // Ba loại lỗi "dữ liệu khách nhập sai" phải cùng mã để giao diện xử lý một kiểu
+        create(TENANT_A, "{\"fullName\":\"x\"}").andExpect(status().isUnprocessableEntity());
+        create(TENANT_A, "{\"phone\":\"12345\"}").andExpect(status().isUnprocessableEntity());
+        create(TENANT_A, "{\"email\":\"khong-hop-le\"}").andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    void locTheoThe() throws Exception {
+        String tagged = createdId(TENANT_A, """
+                {"fullName":"Có thẻ VIP","email":"co.the@khach.vn"}""");
+        String plain = createdId(TENANT_A, """
+                {"fullName":"Không thẻ","email":"khong.the@khach.vn"}""");
+        UUID tag = UUID.randomUUID();
+        try (Connection c = owner()) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "INSERT INTO engagement.tags (id, tenant_id, name) VALUES (?, ?, 'VIP-loc')")) {
+                ps.setObject(1, tag);
+                ps.setObject(2, TENANT_A);
+                ps.executeUpdate();
+            }
+            try (PreparedStatement ps = c.prepareStatement(
+                    "INSERT INTO engagement.contact_tags (contact_id, tag_id, tenant_id) VALUES (?, ?, ?)")) {
+                ps.setObject(1, UUID.fromString(tagged));
+                ps.setObject(2, tag);
+                ps.setObject(3, TENANT_A);
+                ps.executeUpdate();
+            }
+        }
+        JsonNode items = list(TENANT_A, "tagId=" + tag).get("items");
+        assertThat(items.findValuesAsText("id")).contains(tagged).doesNotContain(plain);
+        assertThat(items.get(0).get("tags").get(0).get("name").asText()).isEqualTo("VIP-loc");
     }
 
     // ── Hợp nhất & xác thực ─────────────────────────────────────────────────────
@@ -299,7 +431,8 @@ class ContactApiIntegrationTest {
     // ── tiện ích ────────────────────────────────────────────────────────────────
 
     private static JwtRequestPostProcessor as(UUID tenantId) {
-        return jwt().jwt(j -> j.subject(UUID.randomUUID().toString())
+        UUID user = TENANT_A.equals(tenantId) ? USER_A : USER_B;
+        return jwt().jwt(j -> j.subject(user.toString())
                 .claim("tenant_id", tenantId.toString())
                 .claim("role", "TENANT_ADMIN"));
     }

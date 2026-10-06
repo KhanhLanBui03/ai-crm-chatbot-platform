@@ -16,5 +16,6 @@ public interface ContactService {
 
     ContactDetailDto getById(UUID tenantId, UUID contactId);
 
-    CreateContactResult create(UUID tenantId, CreateContactRequest request);
+    /** {@code actorUserId}: người tạo — ghi nhật ký kiểm toán. */
+    CreateContactResult create(UUID tenantId, UUID actorUserId, CreateContactRequest request);
 }

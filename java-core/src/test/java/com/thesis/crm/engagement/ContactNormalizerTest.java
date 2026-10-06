@@ -34,6 +34,44 @@ class ContactNormalizerTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    // ── Hồi quy rà soát 06/10 ───────────────────────────────────────────────────
+
+    @ParameterizedTest
+    @CsvSource({
+            // Người dùng gõ cả mã quốc gia lẫn số 0 đầu — trước đây lưu thành "00912345678"
+            "+84 0912 345 678, 0912345678",
+            "840912345678,     0912345678",
+            // Số di động gõ thiếu số 0 đầu — trước đây bị từ chối
+            "912345678,        0912345678",
+            "912 345 678,      0912345678",
+            // Gõ dư một số 0 đầu — cùng quy tắc với "+84 0…"
+            "00912345678,      0912345678",
+    })
+    void soDienThoaiNhapKieuThuongGap(String raw, String expected) {
+        assertThat(ContactNormalizer.normalizePhone(raw)).isEqualTo(expected);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0012345678", "000912345678", "123456789", "0123456789"})
+    void khongPhaiSoVietNamHopLeBiTuChoi(String raw) {
+        assertThatThrownBy(() -> ContactNormalizer.normalizePhone(raw))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void chuDungDangTachDauNfdVanBoDauDung() {
+        // Bàn phím macOS/iOS có thể gửi "ễ" thành e + dấu mũ + dấu ngã (NFD)
+        String nfd = java.text.Normalizer.normalize("Nguyễn Ánh", java.text.Normalizer.Form.NFD);
+        assertThat(ContactNormalizer.foldAccents(nfd)).isEqualTo("nguyen anh");
+    }
+
+    @Test
+    void tuKhoaNhieuTuTachThanhTung() {
+        assertThat(ContactNormalizer.searchTokens("  Nguyễn   0912.345 ")).containsExactly("nguyen", "0912345");
+        assertThat(ContactNormalizer.searchTokens("+84 912 345 678")).containsExactly("0912345678");
+        assertThat(ContactNormalizer.searchTokens(" ")).isEmpty();
+    }
+
     @Test
     void rongThanhNull() {
         assertThat(ContactNormalizer.normalizePhone("  ")).isNull();
@@ -49,17 +87,10 @@ class ContactNormalizerTest {
     }
 
     @Test
-    void chuoiTimKiemGomTenThuSoDienThoai() {
-        assertThat(ContactNormalizer.searchText("Lê Văn Bình", "binh@shop.vn", "0912345678"))
-                .isEqualTo("le van binh binh@shop.vn 0912345678");
-        assertThat(ContactNormalizer.searchText(null, "a@b.vn", null)).isEqualTo("a@b.vn");
-    }
-
-    @Test
     void tuKhoaGiongSoDienThoaiDuocQuyVe0() {
-        assertThat(ContactNormalizer.searchKeyword("+84 912 345")).isEqualTo("0912345");
-        assertThat(ContactNormalizer.searchKeyword("0912.345")).isEqualTo("0912345");
-        assertThat(ContactNormalizer.searchKeyword("Nguyễn")).isEqualTo("nguyen");
-        assertThat(ContactNormalizer.searchKeyword("  ")).isNull();
+        assertThat(ContactNormalizer.searchTokens("+84 912 345")).containsExactly("0912345");
+        assertThat(ContactNormalizer.searchTokens("0912.345")).containsExactly("0912345");
+        assertThat(ContactNormalizer.searchTokens("Nguyễn")).containsExactly("nguyen");
+        assertThat(ContactNormalizer.searchTokens("  ")).isEmpty();
     }
 }

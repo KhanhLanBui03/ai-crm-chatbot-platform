@@ -36,6 +36,27 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(errorMessage, traceId));
     }
 
+    /**
+     * Tham số sai kiểu ({@code ?tagId=abc}, {@code /contacts/abc}), thiếu tham số bắt buộc, hoặc thân
+     * JSON hỏng — lỗi của bên gọi, phải là 400 kèm câu dễ hiểu. Trước đây rơi xuống
+     * {@link #handleGeneralException} thành 500 "lỗi hệ thống" (phát hiện khi rà soát UC016).
+     */
+    @ExceptionHandler({
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class,
+            org.springframework.web.bind.MissingServletRequestParameterException.class,
+            org.springframework.http.converter.HttpMessageNotReadableException.class
+    })
+    public ResponseEntity<ApiResponse<Void>> handleBadRequest(Exception ex, HttpServletRequest request) {
+        String traceId = request.getHeader("X-Trace-Id");
+        String message = ex instanceof org.springframework.web.method.annotation.MethodArgumentTypeMismatchException m
+                ? "Tham số '" + m.getName() + "' không đúng định dạng."
+                : ex instanceof org.springframework.web.bind.MissingServletRequestParameterException m
+                        ? "Thiếu tham số bắt buộc '" + m.getParameterName() + "'."
+                        : "Dữ liệu gửi lên không đúng định dạng JSON hoặc sai kiểu trường.";
+        log.warn("Bad request: {}", ex.getMessage());
+        return ResponseEntity.badRequest().body(ApiResponse.error(message, traceId));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception ex, HttpServletRequest request) {
         String traceId = request.getHeader("X-Trace-Id");

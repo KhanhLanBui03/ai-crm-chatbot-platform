@@ -48,8 +48,9 @@ public class ContactQueryRepository {
         this.jdbc = jdbc;
     }
 
+    /** {@code tokens}: các từ đã bỏ dấu — khách khớp khi {@code search_text} chứa ĐỦ mọi từ. */
     public record SearchFilter(
-            String keyword, String status, UUID tagId, Boolean hasConsent, String sort, int page, int size) {}
+            List<String> tokens, String status, UUID tagId, Boolean hasConsent, String sort, int page, int size) {}
 
     public record PageResult(List<ContactDto> items, long total) {}
 
@@ -64,9 +65,10 @@ public class ContactQueryRepository {
         } else {
             where.append(" AND c.status <> 'MERGED'");
         }
-        if (f.keyword() != null) {
-            where.append(" AND c.search_text LIKE :kw ESCAPE '\\'");
-            p.addValue("kw", "%" + escapeLike(f.keyword()) + "%");
+        // Mỗi từ một điều kiện AND, tham số hoá — không bao giờ nối chuỗi người dùng gõ vào SQL
+        for (int i = 0; i < f.tokens().size(); i++) {
+            where.append(" AND c.search_text LIKE :kw").append(i).append(" ESCAPE '\\'");
+            p.addValue("kw" + i, "%" + escapeLike(f.tokens().get(i)) + "%");
         }
         if (f.tagId() != null) {
             where.append("""

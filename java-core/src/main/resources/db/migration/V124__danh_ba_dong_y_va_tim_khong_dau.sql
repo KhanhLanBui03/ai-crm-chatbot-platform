@@ -40,20 +40,42 @@ ALTER TABLE engagement.contacts
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. Tìm kiếm không phân biệt hoa thường và KHÔNG PHÂN BIỆT DẤU ('nguyen' ra 'Nguyễn').
 --
--- Java tính sẵn khi lưu (ContactSearchText): tên + thư + số điện thoại, bỏ dấu, viết thường.
--- Không dùng unaccent() trong migration: extension đó do scripts/init-db.sql cài, không do
--- Flyway quản — dựa vào nó là migration hỏng trên máy chưa chạy init-db.
--- Dữ liệu sẵn có được điền bằng translate() với CÙNG bảng ký tự mà Java dùng.
+-- Cột search_text = tên + thư + số điện thoại, bỏ dấu, viết thường — do TRIGGER tính, không do
+-- Java: khách hàng được ghi từ nhiều nơi (UC016 tạo tay, UC011 tiếp nhận tin nhắn, script nhập
+-- liệu…). Tính ở tầng ứng dụng thì mọi đường ghi khác để cột trống và khách đó KHÔNG BAO GIỜ tìm
+-- ra được (lỗi phát hiện khi rà soát 06/10). Trigger là nguồn sự thật duy nhất.
+--
+-- Bỏ dấu bằng normalize(NFD) + xoá dấu kết hợp U+0300–U+036F: đúng với cả chữ dựng sẵn lẫn chữ
+-- tách dấu (bàn phím macOS/iOS). Không dùng unaccent(): extension đó do scripts/init-db.sql cài,
+-- không do Flyway quản. Phải khớp ContactNormalizer.foldAccents (Java) — phía tìm kiếm.
 -- ─────────────────────────────────────────────────────────────────────────────
 ALTER TABLE engagement.contacts
     ADD COLUMN search_text text NOT NULL DEFAULT '';
 
+CREATE FUNCTION engagement.fold_vi(s text) RETURNS text
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+    SELECT lower(regexp_replace(
+               normalize(replace(replace(coalesce(s, ''), 'đ', 'd'), 'Đ', 'D'), NFD),
+               '[̀-ͯ]', '', 'g'))
+$$;
+
+CREATE FUNCTION engagement.contacts_fill_search_text() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    NEW.search_text := btrim(engagement.fold_vi(concat_ws(' ', NEW.full_name, NEW.email, NEW.phone)));
+    RETURN NEW;
+END $$;
+
+CREATE TRIGGER trg_contacts_search_text
+    BEFORE INSERT OR UPDATE OF full_name, email, phone ON engagement.contacts
+    FOR EACH ROW EXECUTE FUNCTION engagement.contacts_fill_search_text();
+
+-- Dữ liệu sẵn có
 UPDATE engagement.contacts
-   SET search_text = btrim(translate(
-           lower(concat_ws(' ', full_name, email, phone)),
-           'àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ',
-           'aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd'));
+   SET search_text = btrim(engagement.fold_vi(concat_ws(' ', full_name, email, phone)));
+
+GRANT EXECUTE ON FUNCTION engagement.fold_vi(text) TO crm_app;
 
 COMMENT ON COLUMN engagement.contacts.search_text IS
-    'Tên + thư + số điện thoại, bỏ dấu, viết thường — Java (ContactSearchText) tính khi lưu. '
-    'Tìm bằng LIKE; bảng nhỏ ở phạm vi đồ án nên chưa cần chỉ mục trigram.';
+    'Tên + thư + số điện thoại, bỏ dấu, viết thường — trigger trg_contacts_search_text tính, '
+    'ứng dụng KHÔNG ghi. Tìm bằng LIKE từng từ; bảng nhỏ ở phạm vi đồ án nên chưa cần chỉ mục trigram.';

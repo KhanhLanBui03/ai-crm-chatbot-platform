@@ -63,8 +63,9 @@ public class Contact {
     @Column(name = "consent_source", length = 20)
     private String consentSource;
 
-    @Column(name = "search_text", nullable = false)
-    private String searchText = "";
+    /** Do trigger {@code trg_contacts_search_text} (V124) tính — ứng dụng không ghi cột này. */
+    @Column(name = "search_text", nullable = false, insertable = false, updatable = false)
+    private String searchText;
 
     @Column(name = "anonymized_at")
     private Instant anonymizedAt;
@@ -103,7 +104,6 @@ public class Contact {
     public Instant getConsentAt() { return consentAt; }
     public String getConsentSource() { return consentSource; }
     public String getSearchText() { return searchText; }
-    public void setSearchText(String searchText) { this.searchText = searchText; }
     public Instant getAnonymizedAt() { return anonymizedAt; }
     public Instant getDeletedAt() { return deletedAt; }
     public Instant getCreatedAt() { return createdAt; }
