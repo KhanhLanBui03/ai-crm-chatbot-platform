@@ -1510,6 +1510,153 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/assignees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * UC015 b3 — người nhận được hội thoại (ô "Giao cho…")
+         * @description Người dùng ACTIVE có vai trò AGENT hoặc TENANT_ADMIN của doanh nghiệp, kèm trạng thái trực tuyến
+         *     (có hoạt động trên Hộp thư trong 2 phút qua — bảng `platform.user_presence`) và số hội thoại đang
+         *     xử lý. Giao cho người ngoại tuyến vẫn được nhưng giao diện phải cảnh báo (UC015 6.1).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Danh sách người nhận */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"] & {
+                            data?: components["schemas"]["NguoiNhanHoiThoai"][];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/queue-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tình trạng hàng chờ — thanh cảnh báo của quản trị viên (UC014 6.2, 7.2)
+         * @description Đếm hội thoại đang chờ chưa ai nhận, số chờ quá 5 phút, và số người đang trực. Chỉ quản trị viên.
+         *     Thay cho thông báo đẩy — hệ thống chưa có kênh thông báo riêng (giảm độ sâu).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Tình trạng hàng chờ */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"] & {
+                            data?: components["schemas"]["TinhTrangHangCho"];
+                        };
+                    };
+                };
+                403: components["responses"]["KhongDuQuyen"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversationId}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: components["parameters"]["ConversationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * UC015 1a — trả hội thoại về hàng chờ
+         * @description Người phụ trách hoặc quản trị viên. Bắt buộc lý do (5–200 ký tự). Gỡ người phụ trách, về
+         *     `PENDING_AGENT`, rồi tự giao lại theo `assignment_mode` — **không** giao lại cho chính người vừa trả.
+         *     Ghi `audit_logs` (`CONVERSATION_RELEASED`, chỉ độ dài lý do — không chép nội dung).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    conversationId: components["parameters"]["ConversationId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        reason: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Đã trả về hàng chờ (có thể đã được giao lại ngay) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"] & {
+                            data?: components["schemas"]["HoiThoaiTomTat"];
+                        };
+                    };
+                };
+                403: components["responses"]["KhongDuQuyen"];
+                /** @description Hội thoại đã đóng hoặc đang ở hàng chờ */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{conversationId}": {
         parameters: {
             query?: never;
@@ -5426,8 +5573,15 @@ export interface components {
             /** Format: date-time */
             generatedAt: string;
         };
+        /**
+         * @description Một dòng của `engagement.handoff_events` (V129). `BOT_TO_AGENT` do nhân viên bấm thì máy chủ tự
+         *     giao theo `assignment_mode`; giao được ngay thì `toUserId`/`acceptedAt` đã có giá trị.
+         */
         SuKienChuyenGiao: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description ID thật của sự kiện, tra lại được
+             */
             id: string;
             /** @enum {string} */
             direction: "BOT_TO_AGENT" | "AGENT_TO_BOT";
@@ -5447,6 +5601,24 @@ export interface components {
             acceptedAt?: string | null;
             /** Format: date-time */
             occurredAt: string;
+        };
+        NguoiNhanHoiThoai: {
+            /** Format: uuid */
+            userId: string;
+            fullName: string;
+            role: components["schemas"]["MaVaiTro"];
+            /** @description Có hoạt động trên Hộp thư trong 2 phút qua */
+            online: boolean;
+            /** @description Số hội thoại AGENT_HANDLING đang giữ */
+            openCount: number;
+        };
+        TinhTrangHangCho: {
+            /** @description Đang chờ, chưa ai nhận */
+            waitingTotal: number;
+            /** @description Trong số đó, chờ quá 5 phút */
+            waitingOverdue: number;
+            /** @description Người đang trực (AGENT và quản trị viên) */
+            onlineAgents: number;
         };
         KhachHang: {
             /** Format: uuid */

@@ -6,8 +6,10 @@ import type {
   HoiThoaiTomTat,
   LyDoChuyenGiao,
   NguCanhHoiThoai,
+  NguoiNhanHoiThoai,
   SuKienChuyenGiao,
   TinNhan,
+  TinhTrangHangCho,
   TrangThaiHoiThoai,
 } from '@/types/schema'
 
@@ -206,6 +208,28 @@ export const conversationsApi = apiSlice.injectEndpoints({
       invalidatesTags: (_kq, _loi, { id }) => [{ type: 'HoiThoai', id }, CA_DANH_SACH],
     }),
 
+    // ── UC015 1a — trả về hàng chờ (máy chủ tự giao lại, trừ người vừa trả) ──
+    traVeHangCho: build.mutation<HoiThoaiTomTat, { id: string; reason: string }>({
+      query: ({ id, reason }) => ({
+        url: `/api/v1/conversations/${id}/release`,
+        method: 'POST',
+        body: { reason },
+      }),
+      invalidatesTags: (_kq, _loi, { id }) => [{ type: 'HoiThoai', id }, CA_DANH_SACH],
+    }),
+
+    // ── UC015 b3 — ô "Giao cho…": ai đang trực, đang giữ bao nhiêu việc ──
+    nguoiNhanHoiThoai: build.query<NguoiNhanHoiThoai[], void>({
+      query: () => ({ url: '/api/v1/conversations/assignees' }),
+      providesTags: [CA_DANH_SACH],
+    }),
+
+    // ── UC014 6.2 / 7.2 — thanh cảnh báo của quản trị viên ──
+    tinhTrangHangCho: build.query<TinhTrangHangCho, void>({
+      query: () => ({ url: '/api/v1/conversations/queue-status' }),
+      providesTags: [CA_DANH_SACH],
+    }),
+
     // ── UC012 bước 10 — mở hội thoại thì số chưa đọc về 0 ──
     danhDauDaDoc: build.mutation<null, string>({
       query: (id) => ({ url: `/api/v1/conversations/${id}/read`, method: 'POST' }),
@@ -224,4 +248,7 @@ export const {
   useDoiTrangThaiHoiThoaiMutation,
   useGuiTinNhanMutation,
   useDanhDauDaDocMutation,
+  useTraVeHangChoMutation,
+  useNguoiNhanHoiThoaiQuery,
+  useTinhTrangHangChoQuery,
 } = conversationsApi

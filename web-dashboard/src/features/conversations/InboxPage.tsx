@@ -1,5 +1,5 @@
 import { skipToken } from '@reduxjs/toolkit/query'
-import { Inbox } from 'lucide-react'
+import { AlertTriangle, Inbox } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { toast } from 'sonner'
@@ -13,8 +13,11 @@ import {
   useGuiTinNhanMutation,
   useNguCanhHoiThoaiQuery,
   usePhanCongHoiThoaiMutation,
+  useTinhTrangHangChoQuery,
   type BoLocHoiThoai,
 } from '@/api/conversations'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { GiaoChoNguoi, TraVeHangCho } from '@/features/conversations/AssignControls'
 import { useAppSelector } from '@/app/store/hooks'
 import { ContextPanel } from '@/features/conversations/ContextPanel'
 import { ConversationList } from '@/features/conversations/ConversationList'
@@ -43,6 +46,9 @@ export function InboxPage() {
   const [guiTin, ketQuaGui] = useGuiTinNhanMutation()
   const [danhDauDaDoc] = useDanhDauDaDocMutation()
   const toi = useAppSelector((s) => s.auth.nguoiDung)
+  const laQuanTri = toi?.roleCode === 'TENANT_ADMIN'
+  // UC014 6.2 / 7.2 — cảnh báo cho quản trị viên thay cho thông báo đẩy (chưa có kênh thông báo)
+  const hangCho = useTinhTrangHangChoQuery(undefined, { skip: !laQuanTri, pollingInterval: 30_000 })
   const [huongChuyenGiao, datHuongChuyenGiao] = useState<
     'BOT_TO_AGENT' | 'AGENT_TO_BOT' | null
   >(null)
@@ -76,7 +82,23 @@ export function InboxPage() {
     }
   }, [muc, idDangChon])
 
+  const canhBao = hangCho.data
+    ? [
+        hangCho.data.waitingOverdue > 0 ? `${hangCho.data.waitingOverdue} hội thoại chờ quá 5 phút chưa ai nhận` : null,
+        hangCho.data.waitingTotal > 0 && hangCho.data.onlineAgents === 0 ? 'không nhân viên nào đang trực' : null,
+      ].filter(Boolean)
+    : []
+
   return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {canhBao.length > 0 && (
+        <Alert className="rounded-none border-x-0 border-t-0" role="status">
+          <AlertTriangle />
+          <AlertDescription>
+            {canhBao.join(' · ')}. Mở tab "Chờ tôi" để nhận, hoặc giao cho người đang trực.
+          </AlertDescription>
+        </Alert>
+      )}
     <div className="flex min-h-0 flex-1">
       <ConversationList
         danhSach={muc}
@@ -139,6 +161,14 @@ export function InboxPage() {
                 ? (dangChon.assignedUserName ?? 'một nhân viên khác')
                 : null
             }
+            thaoTacPhanCong={
+              <>
+                {laQuanTri && <GiaoChoNguoi idHoiThoai={idDangChon} nguoiDangGiu={dangChon.assignedUserId} />}
+                {dangChon.assignedUserId && (laQuanTri || dangChon.assignedUserId === toi?.id) && (
+                  <TraVeHangCho idHoiThoai={idDangChon} onXong={() => datBoLoc({ ...boLoc, phamVi: 'all', trang: 0 })} />
+                )}
+              </>
+            }
             onChuyenGiao={datHuongChuyenGiao}
             onQuayLai={() => datIdDangChon(null)}
           />
@@ -158,6 +188,7 @@ export function InboxPage() {
           huong={huongChuyenGiao}
         />
       )}
+    </div>
     </div>
   )
 }

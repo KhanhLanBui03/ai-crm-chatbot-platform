@@ -24,6 +24,7 @@ export function MessageThread({
   onGui,
   dangGui = false,
   nguoiKhacGiu = null,
+  thaoTacPhanCong,
 }: {
   chiTiet: HoiThoaiChiTiet | undefined
   tenKhachHang: string
@@ -41,6 +42,8 @@ export function MessageThread({
   dangGui?: boolean
   /** Tên người đang giữ hội thoại khi đó KHÔNG phải mình (và mình không phải quản trị viên). */
   nguoiKhacGiu?: string | null
+  /** UC015 — "Giao cho…" (quản trị) và "Trả về hàng chờ" (người giữ / quản trị), do trang ghép vào. */
+  thaoTacPhanCong?: React.ReactNode
 }) {
   const khungCuon = useRef<HTMLDivElement>(null)
   const [nhap, datNhap] = useState('')
@@ -121,6 +124,8 @@ export function MessageThread({
             Trả lại cho AI
           </Button>
         )}
+
+        {!daDong && thaoTacPhanCong}
 
         {!chiTiet.assignedUserName && !daDong && (
           <Button variant="outline" size="sm" disabled={dangThaoTac} onClick={onNhanXuLy}>
