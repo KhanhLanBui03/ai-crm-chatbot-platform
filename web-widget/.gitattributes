@@ -1,0 +1,3 @@
+# Script chạy TRONG container Linux: CRLF của Windows làm /bin/sh báo "not found"
+*.sh   text eol=lf
+*.conf text eol=lf
