@@ -75,6 +75,7 @@ class WidgetApp {
     }
     // Chỉ cho bấm "Gặp nhân viên" khi đã có hội thoại và AI đang giữ
     this.ui.datCoTheGapNhanVien(this.trangThai === 'BOT_HANDLING')
+    this.ui.datNguoiTraLoi(this.trangThai)
     this.batDauHoi()
   }
 

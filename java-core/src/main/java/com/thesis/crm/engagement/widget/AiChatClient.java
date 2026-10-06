@@ -30,7 +30,7 @@ public class AiChatClient {
 
     private static final Logger log = LoggerFactory.getLogger(AiChatClient.class);
 
-    public record Citation(String documentId, String title, String snippet) {}
+    public record Citation(String chunkId, String documentId, String title, String snippet) {}
 
     public record AiReply(String answer, String route, boolean refused, boolean handoff,
                           List<Citation> citations) {}
@@ -72,6 +72,7 @@ public class AiChatClient {
             List<Citation> citations = new ArrayList<>();
             for (JsonNode c : body.path("citations")) {
                 citations.add(new Citation(
+                        c.path("chunk_id").asText(null),
                         c.path("document_id").asText(null),
                         c.path("title").asText(null),
                         c.path("snippet").asText(null)));

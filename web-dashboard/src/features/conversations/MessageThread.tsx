@@ -1,5 +1,5 @@
-import { ArrowLeft, Bot, Check, Paperclip, Sparkles, UserPlus } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { ArrowLeft, Bot, Check, Lock, Send, UserPlus } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
 
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,9 @@ export function MessageThread({
   onChuyenGiao,
   onQuayLai,
   dangThaoTac = false,
+  onGui,
+  dangGui = false,
+  nguoiKhacGiu = null,
 }: {
   chiTiet: HoiThoaiChiTiet | undefined
   tenKhachHang: string
@@ -33,8 +36,14 @@ export function MessageThread({
   onChuyenGiao?: (huong: 'BOT_TO_AGENT' | 'AGENT_TO_BOT') => void
   onQuayLai?: () => void
   dangThaoTac?: boolean
+  /** UC013 — gửi tin. Trả `true` khi máy chủ nhận để xoá ô soạn; lỗi thì giữ nguyên chữ đã gõ. */
+  onGui?: (noiDung: string) => Promise<boolean>
+  dangGui?: boolean
+  /** Tên người đang giữ hội thoại khi đó KHÔNG phải mình (và mình không phải quản trị viên). */
+  nguoiKhacGiu?: string | null
 }) {
   const khungCuon = useRef<HTMLDivElement>(null)
+  const [nhap, datNhap] = useState('')
   const soTin = chiTiet?.messages.length ?? 0
 
   useEffect(() => {
@@ -54,6 +63,14 @@ export function MessageThread({
         <Skeleton className="h-10 w-1/2 self-start rounded-xl" />
       </div>
     )
+  }
+
+  const daDong = chiTiet.status === 'RESOLVED' || chiTiet.status === 'CLOSED'
+
+  async function gui() {
+    const noiDung = nhap.trim()
+    if (!noiDung || dangGui || !onGui) return
+    if (await onGui(noiDung)) datNhap('')
   }
 
   return (
@@ -83,7 +100,7 @@ export function MessageThread({
         {/* Nút hiện theo trạng thái thật, không phải lúc nào cũng đủ ba nút: hội thoại tác tử
             đang giữ thì "Đánh dấu xong" là vô nghĩa, còn hội thoại đã có người thì "Nhận xử lý"
             chỉ tổ giành việc của đồng nghiệp. */}
-        {chiTiet.autoReplyEnabled ? (
+        {daDong || nguoiKhacGiu ? null : chiTiet.autoReplyEnabled ? (
           <Button
             variant="outline"
             size="sm"
@@ -105,14 +122,14 @@ export function MessageThread({
           </Button>
         )}
 
-        {!chiTiet.assignedUserName && (
+        {!chiTiet.assignedUserName && !daDong && (
           <Button variant="outline" size="sm" disabled={dangThaoTac} onClick={onNhanXuLy}>
             <UserPlus />
             Nhận xử lý
           </Button>
         )}
 
-        {chiTiet.status !== 'RESOLVED' && chiTiet.status !== 'CLOSED' && (
+        {!daDong && !nguoiKhacGiu && (
           <Button variant="outline" size="sm" disabled={dangThaoTac} onClick={onDanhDauXong}>
             <Check />
             Đánh dấu xong
@@ -127,32 +144,49 @@ export function MessageThread({
         {dangGo && <DangGo ten={tenKhachHang} />}
       </div>
 
-      <div className="flex shrink-0 flex-col gap-2 border-t p-3">
-        <div className="flex gap-1.5">
-          <Button variant="outline" size="sm" className="border-dashed">
-            <Sparkles />
-            Dùng gợi ý của AI
-          </Button>
-          <Button variant="outline" size="sm" className="border-dashed">
-            / Mẫu câu trả lời
-          </Button>
+      {/* Gợi ý từ kho tri thức (cần RAG), mẫu câu và đính kèm chưa có — ẩn hẳn thay vì để nút bấm
+          không làm gì (đã chốt giảm độ sâu UC013 3.1, b4). */}
+      {daDong || nguoiKhacGiu ? (
+        <div className="text-muted-foreground flex shrink-0 items-center gap-2 border-t p-3 text-[13px]">
+          <Lock className="size-4" />
+          {daDong
+            ? 'Hội thoại đã đóng. Khách nhắn lại sẽ mở một hội thoại mới.'
+            : `${nguoiKhacGiu} đang phụ trách hội thoại này — bạn chỉ xem được. Quản trị viên có thể giao lại.`}
         </div>
-        <Textarea
-          rows={3}
-          placeholder="Soạn câu trả lời…"
-          className="resize-none"
-          aria-label="Soạn câu trả lời"
-        />
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="text-muted-foreground">
-            <Paperclip />
-            Đính kèm
-          </Button>
-          <span className="flex-1" />
-          <span className="text-muted-foreground text-xs">⌘↵ để gửi</span>
-          <Button size="sm">Gửi</Button>
+      ) : (
+        <div className="flex shrink-0 flex-col gap-2 border-t p-3">
+          <Textarea
+            rows={3}
+            placeholder={
+              chiTiet.assignedUserName
+                ? 'Soạn câu trả lời…'
+                : 'Soạn câu trả lời… (gửi tin là bạn nhận hội thoại này, tác tử AI ngừng trả lời)'
+            }
+            className="resize-none"
+            aria-label="Soạn câu trả lời"
+            maxLength={4000}
+            value={nhap}
+            onChange={(e) => datNhap(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                void gui()
+              }
+            }}
+          />
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {nhap.length.toLocaleString('vi-VN')}/4.000
+            </span>
+            <span className="flex-1" />
+            <span className="text-muted-foreground text-xs">Ctrl/⌘ + Enter để gửi</span>
+            <Button size="sm" disabled={!nhap.trim() || dangGui} onClick={() => void gui()}>
+              <Send />
+              {dangGui ? 'Đang gửi…' : 'Gửi'}
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -208,6 +242,11 @@ function BongTinNhan({ tinNhan }: { tinNhan: TinNhan }) {
         >
           {tinNhan.content}
         </div>
+        {cuaBot && (tinNhan.citations?.length ?? 0) > 0 && (
+          <span className="text-muted-foreground text-xs">
+            Nguồn: {[...new Set(tinNhan.citations?.map((c) => c.documentTitle))].join(', ')}
+          </span>
+        )}
         <span className="text-muted-foreground text-xs tabular-nums">
           {format(new Date(tinNhan.createdAt), 'HH:mm')}
         </span>
