@@ -105,8 +105,12 @@ public class AssignmentRepository {
                          (SELECT max(e.accepted_at) FROM engagement.handoff_events e
                            WHERE e.tenant_id = u.tenant_id AND e.to_user_id = u.id)) AS last_assigned
                 FROM platform.users u
-                JOIN platform.user_roles ur ON ur.user_id = u.id AND ur.tenant_id = u.tenant_id
-                JOIN platform.roles r ON r.id = ur.role_id AND r.code IN ('AGENT', 'TENANT_ADMIN')
+                -- user_roles cho phép nhiều vai trò: lấy ĐÚNG MỘT, nhân viên trước (không nhân đôi dòng)
+                JOIN LATERAL (SELECT r.code FROM platform.user_roles ur
+                              JOIN platform.roles r ON r.id = ur.role_id
+                              WHERE ur.user_id = u.id AND ur.tenant_id = u.tenant_id
+                                AND r.code IN ('AGENT', 'TENANT_ADMIN')
+                              ORDER BY (r.code = 'AGENT') DESC LIMIT 1) r ON true
                 LEFT JOIN platform.user_presence p ON p.user_id = u.id AND p.tenant_id = u.tenant_id
                 WHERE u.tenant_id = :t AND u.status = 'ACTIVE' AND u.deleted_at IS NULL
             ) cand
@@ -164,7 +168,8 @@ public class AssignmentRepository {
     public void unassign(UUID tenantId, UUID conversationId) {
         jdbc.update("""
                 UPDATE engagement.conversations
-                SET status = 'PENDING_AGENT', assigned_user_id = NULL, assigned_at = NULL, updated_at = now()
+                SET status = 'PENDING_AGENT', assigned_user_id = NULL, assigned_at = NULL, queued_at = now(),
+                    updated_at = now()
                 WHERE tenant_id = :t AND id = :c
                 """, new MapSqlParameterSource("t", tenantId).addValue("c", conversationId));
     }
@@ -176,7 +181,7 @@ public class AssignmentRepository {
                     WHERE tenant_id = :t AND status = 'PENDING_AGENT' AND assigned_user_id IS NULL) AS waiting,
                   (SELECT count(*) FROM engagement.conversations
                     WHERE tenant_id = :t AND status = 'PENDING_AGENT' AND assigned_user_id IS NULL
-                      AND coalesce(handover_at, created_at) < now() - make_interval(mins => :m)) AS overdue,
+                      AND coalesce(queued_at, handover_at, created_at) < now() - make_interval(mins => :m)) AS overdue,
                   (SELECT count(*) FROM platform.user_presence p
                      JOIN platform.users u ON u.id = p.user_id AND u.tenant_id = p.tenant_id
                     WHERE p.tenant_id = :t AND u.status = 'ACTIVE'
@@ -194,10 +199,10 @@ public class AssignmentRepository {
     /** Chờ chưa ai nhận quá hạn — KHOÁ dòng, bỏ qua dòng người khác đang khoá (không chặn Hộp thư). */
     public List<Overdue> overdueWaiting(UUID tenantId, int minutes) {
         return jdbc.query("""
-                SELECT id, priority, coalesce(handover_at, created_at) AS since, assigned_user_id
+                SELECT id, priority, coalesce(queued_at, handover_at, created_at) AS since, assigned_user_id
                 FROM engagement.conversations
                 WHERE tenant_id = :t AND status = 'PENDING_AGENT' AND assigned_user_id IS NULL
-                  AND coalesce(handover_at, created_at) < now() - make_interval(mins => :m)
+                  AND coalesce(queued_at, handover_at, created_at) < now() - make_interval(mins => :m)
                 FOR UPDATE SKIP LOCKED
                 """, new MapSqlParameterSource("t", tenantId).addValue("m", minutes),
                 (rs, i) -> new Overdue(rs.getObject("id", UUID.class), rs.getString("priority"),

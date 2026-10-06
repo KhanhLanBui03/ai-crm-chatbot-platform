@@ -21,6 +21,22 @@ CREATE TABLE platform.user_presence (
 CREATE INDEX ix_presence_tenant ON platform.user_presence (tenant_id, last_active_at DESC);
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 1b. Đồng hồ chờ của hàng chờ (UC014 7.1)
+--
+-- handover_at là lúc AI chuyển giao LẦN ĐẦU — không đổi khi hội thoại bị trả về hàng chờ (UC015 1a,
+-- 6.2). Dùng nó để đo "chờ bao lâu" thì hội thoại vừa bị trả về đã "quá hạn" ngay, nhảy thẳng lên
+-- Khẩn. queued_at đặt lại MỖI LẦN vào hàng chờ, xoá khi có người nhận hoặc trả lại AI.
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE engagement.conversations ADD COLUMN queued_at timestamptz;
+
+COMMENT ON COLUMN engagement.conversations.queued_at IS
+    'Lần gần nhất vào hàng chờ chưa ai nhận. NULL khi đang có người giữ hoặc AI đang giữ.';
+
+UPDATE engagement.conversations
+   SET queued_at = coalesce(handover_at, updated_at)
+ WHERE status = 'PENDING_AGENT' AND assigned_user_id IS NULL;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 2. Sự kiện chuyển giao (UC014 hậu điều kiện, b3, 1a–2a)
 --
 -- conversations chỉ giữ lý do chuyển giao CUỐI. Thống kê "tỉ lệ AI xử lý trọn vẹn" và "khách chờ bao
@@ -93,7 +109,7 @@ AS $$
     SELECT DISTINCT c.tenant_id
       FROM engagement.conversations c
      WHERE (c.status = 'PENDING_AGENT' AND c.assigned_user_id IS NULL
-            AND coalesce(c.handover_at, c.created_at) < now() - make_interval(mins => p_minutes))
+            AND coalesce(c.queued_at, c.handover_at, c.created_at) < now() - make_interval(mins => p_minutes))
         OR (c.status = 'AGENT_HANDLING' AND c.assigned_user_id IS NOT NULL
             AND c.assigned_at < now() - make_interval(mins => p_minutes));
 $$;

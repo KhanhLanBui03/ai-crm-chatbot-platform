@@ -267,6 +267,64 @@ class AssignmentIntegrationTest extends EngagementIntegrationTestBase {
                 .andExpect(jsonPath("$.data.waitingOverdue").value(1));
     }
 
+    // ── Rà soát: lỗ hổng tìm ra sau khi chạy thật ──────────────────────────────
+
+    @Test
+    void daCoNguoiNhan_uuTienVeThuong() throws Exception {
+        // R1: chip "Khẩn" là để kéo người tới nhận. Đã có người nhận mà vẫn "Khẩn" mãi là báo động giả.
+        Cuoc c = khachXinGapNguoi();
+        setHandover(c.conversationId(), 16);
+        watchdog.runOnce(Instant.now());
+        assertThat(priority(c.conversationId())).isEqualTo("URGENT");
+        mvc.perform(post("/api/v1/conversations/" + c.conversationId() + "/assign").with(nv(AG1))
+                .contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isOk());
+        assertThat(priority(c.conversationId())).isEqualTo("NORMAL");
+    }
+
+    @Test
+    void traVeHangCho_dongHoChoTinhLaiTuLucTraVe() throws Exception {
+        // R2: hội thoại chuyển giao từ 3 giờ trước, vừa bị trả về hàng chờ → không được "quá hạn" ngay.
+        online(AG1, true);
+        Cuoc c = khachXinGapNguoi();
+        setHandover(c.conversationId(), 180);
+        online(AG1, false);
+        setMode("MANUAL");
+        release(nv(AG1), c, "Hết ca làm việc").andExpect(status().isOk());
+        watchdog.runOnce(Instant.now());
+        assertThat(priority(c.conversationId())).isEqualTo("NORMAL");
+        mvc.perform(get("/api/v1/conversations/queue-status").with(admin()))
+                .andExpect(jsonPath("$.data.waitingOverdue").value(0));
+    }
+
+    @Test
+    void nguoiCoHaiVaiTro_chiHienMotLanTrongOChon() throws Exception {
+        // R3: user_roles cho phép một người nhiều vai trò → JOIN nhân đôi dòng.
+        try (Connection c = owner()) {
+            exec(c, """
+                    INSERT INTO platform.user_roles (user_id, role_id, tenant_id)
+                    SELECT ?, id, ? FROM platform.roles WHERE code = 'TENANT_ADMIN' AND tenant_id IS NULL
+                    ON CONFLICT DO NOTHING""", AG2, TENANT_G);
+        }
+        try {
+            JsonNode list = data(mvc.perform(get("/api/v1/conversations/assignees").with(admin()))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+            int n = 0;
+            for (JsonNode a : list) {
+                if (a.get("userId").asText().equals(AG2.toString())) {
+                    n++;
+                    assertThat(a.get("role").asText()).isEqualTo("AGENT");   // vai trò nhân viên được ưu tiên
+                }
+            }
+            assertThat(n).isEqualTo(1);
+        } finally {
+            try (Connection c = owner()) {
+                exec(c, """
+                        DELETE FROM platform.user_roles WHERE user_id = ?
+                          AND role_id = (SELECT id FROM platform.roles WHERE code = 'TENANT_ADMIN' AND tenant_id IS NULL)""", AG2);
+            }
+        }
+    }
+
     // ── tiện ích ────────────────────────────────────────────────────────────────
 
     record Cuoc(String token, String conversationId, String lastSystemText) {}
@@ -335,8 +393,9 @@ class AssignmentIntegrationTest extends EngagementIntegrationTestBase {
 
     private static void setHandover(String conversationId, int minutesAgo) throws Exception {
         try (Connection c = owner()) {
-            exec(c, "UPDATE engagement.conversations SET handover_at = now() - make_interval(mins => ?) WHERE id = ?",
-                    minutesAgo, UUID.fromString(conversationId));
+            exec(c, "UPDATE engagement.conversations SET handover_at = now() - make_interval(mins => ?), "
+                    + "queued_at = CASE WHEN assigned_user_id IS NULL THEN now() - make_interval(mins => ?) END WHERE id = ?",
+                    minutesAgo, minutesAgo, UUID.fromString(conversationId));
         }
     }
 
