@@ -44,7 +44,7 @@
 # báo cáo để đảm bảo tính tái lập.
 
 # --- Web ---
-fastapi>=0.115
+fastapi>=0.121   # Depends(scope="function") cho SessionDep — commit TRƯỚC khi trả phản hồi
 uvicorn[standard]>=0.32
 pydantic>=2.9
 pydantic-settings>=2.6
@@ -59,13 +59,22 @@ langchain>=0.3
 # --- Dữ liệu: pgvector trong cùng cụm PostgreSQL (ADR-0007) ---
 psycopg[binary,pool]>=3.2
 pgvector>=0.3.6
-sqlalchemy>=2.0
+# Extra [asyncio] keo theo greenlet — BAT BUOC cho AsyncSession/AsyncEngine.
+# Thieu no thi import van chay, chi den luc await cau lenh dau tien moi no
+# "the greenlet library is required" — tuc la gay o runtime chu khong gay o build.
+sqlalchemy[asyncio]>=2.0
 
 # --- Redis: semantic cache. KHOÁ BẮT BUỘC CÓ tenant_id (§4.9) ---
 redis>=5.2
 
 # --- Kafka (§2.6) ---
 aiokafka>=0.12
+
+# --- Kho tệp S3: RustFS ở dev, AWS S3 trên cloud (ADR-0022) ---
+# Client của MinIO chứ không phải boto3: ~8,5 MB so với ~27 MB (riêng botocore 25 MB), mà
+# image đang nợ dung lượng. Nói S3 chuẩn nên chạy được với mọi máy chủ S3, và hỗ trợ IRSA
+# (IamAwsProvider). Máy chủ MinIO đã bị lưu trữ, nhưng SDK Python vẫn được bảo trì.
+minio>=7.2
 
 # --- Service discovery: FastAPI không tự đăng ký Eureka ---
 py-eureka-client>=0.11
@@ -78,7 +87,9 @@ trafilatura>=1.12
 # --- Tách từ tiếng Việt cho BM25 và guardrails. THUẦN PYTHON ---
 # Đọc khối "VỀ scikit-learn" ở đầu tệp trước khi định gỡ pyvi.
 pyvi>=0.1.1
-unidecode>=1.3          # bỏ dấu trong build_tsquery (§4.6)
+# KHÔNG dùng unidecode để bỏ dấu ở build_tsquery (§4.6 từng gợi ý): phía tài liệu bỏ dấu bằng
+# knowledge.f_unaccent trong SQL (V210), nên phía câu hỏi PHẢI dùng đúng hàm đó. Hai hàm bỏ dấu
+# khác nhau cho hai đầu là recall tụt mà không có lỗi nào báo ra. Gỡ 27/09 — không nơi nào import.
 
 # --- Quan sát hệ thống ---
 prometheus-client>=0.21

@@ -8,10 +8,14 @@ from pathlib import Path
 
 import pytest
 
+# Đường dẫn neo vào gốc repo, không vào thư mục đang đứng: CI và lệnh `pytest tests` chạy từ
+# ai-service/, nên Path("artifacts/…") tương đối sẽ trỏ nhầm sang ai-service/artifacts/.
+_REPO = Path(__file__).resolve().parents[3]
+
 
 def test_intent_train_raw_distribution():
     """Kiểm tra tập train thô có đúng 3.000 mẫu và chuẩn phân bổ 6 văn phong."""
-    raw_path = Path("data/intent_train_raw.jsonl")
+    raw_path = _REPO / "data/intent_train_raw.jsonl"
     assert raw_path.exists(), "Không tìm thấy data/intent_train_raw.jsonl"
 
     records = []
@@ -35,7 +39,7 @@ def test_intent_train_raw_distribution():
 
 def test_intent_train_dedup_integrity():
     """Kiểm tra tập train sau khử trùng lặp và mã băm đóng băng SHA-256."""
-    dedup_path = Path("data/intent_train_dedup.jsonl")
+    dedup_path = _REPO / "data/intent_train_dedup.jsonl"
     assert dedup_path.exists(), "Không tìm thấy data/intent_train_dedup.jsonl"
 
     records = []
@@ -55,7 +59,7 @@ def test_intent_train_dedup_integrity():
 
     # Xác thực mã hash trong artifacts/DATA_HASHES.txt
     file_hash = hashlib.sha256(dedup_path.read_bytes()).hexdigest()
-    hashes_path = Path("artifacts/DATA_HASHES.txt")
+    hashes_path = _REPO / "artifacts/DATA_HASHES.txt"
     assert hashes_path.exists()
     assert f"data/intent_train_dedup.jsonl:{file_hash}" in hashes_path.read_text(encoding="utf-8")
 
@@ -66,7 +70,9 @@ def test_intent_train_dedup_integrity():
 # và bản cũ đạt được hai điều đó chỉ vì nhãn Dev A bị dựng từ nhãn vàng.
 # ══════════════════════════════════════════════════════════════════════════════
 
-_spec = importlib.util.spec_from_file_location("kappa", "scripts/compute_annotation_kappa.py")
+_spec = importlib.util.spec_from_file_location(
+    "kappa", _REPO / "scripts/compute_annotation_kappa.py"
+)
 kappa = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(kappa)
 

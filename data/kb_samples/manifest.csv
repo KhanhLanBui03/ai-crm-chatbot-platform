@@ -1,0 +1,26 @@
+file,dinh_dang,title,language,ma_http,ma_loi,ghi_chu
+bang-gia-2026.pdf,PDF,Bảng giá sản phẩm 2026,vi,202,,
+chinh-sach-bao-hanh.pdf,PDF,Chính sách bảo hành,vi,202,,
+huong-dan-su-dung-may-loc-nuoc.pdf,PDF,Hướng dẫn sử dụng máy lọc nước RO,vi,202,,
+chinh-sach-tra-gop.pdf,PDF,Chính sách trả góp 0%,vi,202,,
+quy-dinh-van-chuyen-lap-dat.pdf,PDF,Quy định vận chuyển và lắp đặt,vi,202,,
+chinh-sach-doi-tra.docx,DOCX,Chính sách đổi trả,vi,202,,bản 1 (hiệu lực 01/03/2026) — phải tải TRƯỚC chinh-sach-doi-tra-v2.md
+chuong-trinh-khach-hang-than-thiet.docx,DOCX,Chương trình khách hàng thân thiết,vi,202,,
+bang-phi-dich-vu-sua-chua.docx,DOCX,Bảng phí sửa chữa ngoài bảo hành,vi,202,,
+quy-trinh-xu-ly-khieu-nai.docx,DOCX,Quy trình xử lý khiếu nại,vi,202,,
+faq-thanh-toan.txt,TXT,Câu hỏi thường gặp về thanh toán,vi,202,,
+cau-hoi-giao-hang-khong-dau.txt,TXT,Câu hỏi thường gặp về giao hàng,vi,202,,bẩn có chủ đích: nội dung viết không dấu
+huong-dan-bao-quan-noi-chien.txt,TXT,Hướng dẫn bảo quản nồi chiên không dầu,vi,202,,bẩn có chủ đích: NFD + 8 ký tự U+200B + trộn hoà/hòa thuỷ/thủy
+gio-mo-cua-chi-nhanh.txt,TXT,Giờ mở cửa các chi nhánh,vi,202,,
+chinh-sach-doi-tra-v2.md,MD,Chính sách đổi trả,vi,202,,bản 2 (hiệu lực 01/10/2026) — trùng tiêu đề bản 1 nên version phải = 2
+huong-dan-dat-hang-online.md,MD,Hướng dẫn đặt hàng online,vi,202,,
+chinh-sach-bao-ve-du-lieu.md,MD,Chính sách bảo vệ dữ liệu cá nhân,vi,202,,
+so-sanh-may-lanh-inverter.md,MD,So sánh các dòng máy lạnh inverter,vi,202,,
+khuyen-mai-thang-10.html,HTML,Chương trình khuyến mãi tháng 10/2026,vi,202,,bẩn có chủ đích: trang web đầy đủ có nav/footer/script/aside; nội dung chính trong <main>
+faq-bao-hanh.html,HTML,Hỏi đáp về bảo hành,vi,202,,diễn đạt lại nội dung chinh-sach-bao-hanh.pdf
+warranty-policy-en.html,HTML,Warranty Policy,en,202,,bản tiếng Anh rút gọn của chinh-sach-bao-hanh.pdf
+tep-qua-lon.pdf,PDF,Tệp quá lớn,vi,413,FILE_TOO_LARGE,KHÔNG có trong thư mục — fixture test tự sinh tệp > 20 MiB
+anh-doi-duoi.pdf,PDF,Ảnh đổi đuôi,vi,415,UNSUPPORTED_FORMAT,ảnh PNG thật mang đuôi .pdf
+nen-doi-duoi.docx,DOCX,Nén đổi đuôi,vi,415,UNSUPPORTED_FORMAT,ZIP thường không có word/document.xml
+bang-tinh.xlsx,XLSX,Bảng tính,vi,415,UNSUPPORTED_FORMAT,đuôi không nằm trong danh sách nhận
+ban-scan-bao-hanh.pdf,PDF,Bản scan chính sách bảo hành,vi,202,,PDF chỉ có ảnh — nhận 202 rồi chuyển FAILED với PARSE_NO_TEXT_EXTRACTED khi parser chạy (Ngày 4)

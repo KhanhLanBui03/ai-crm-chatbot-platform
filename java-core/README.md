@@ -10,17 +10,18 @@ com.thesis.crm
 ├── JavaCoreApplication.java
 │
 │   ── cắt ngang cả 4 context ──
-├── config/          Jackson · OpenAPI · Async · Kafka · WebClient
-├── security/        JWT RS256 · TenantContextFilter · biến phiên RLS
-├── client/          gọi ai-service — bề mặt DUY NHẤT (ADR-0002)
+├── config/          Jackson · OpenAPI · Async · Kafka · RestClient · S3 · transaction manager
+├── security/        JWT RS256 (phát hành + xác minh) · CurrentActor · TenantTransactionScope (RLS)
+├── client/          gọi ra ngoài: ai-service — bề mặt DUY NHẤT (ADR-0002) · kho S3 (ADR-0022)
 ├── common/
 │   ├── enums/       enum dùng chung nhiều context
 │   ├── exception/   ngoại lệ + @RestControllerAdvice
 │   ├── response/    ApiResponse, PageResponse
+│   ├── validation/  ràng buộc Bean Validation tự viết (@CodePointLength)
 │   └── util/
 │
 │   ── 4 bounded context ──
-├── platform/        tenant · user · auth · plan · subscription · usage · audit · outbox
+├── platform/        tenant · user · auth · plan · subscription · usage · audit · outbox · kho tri thức (UC018)
 │   ├── controller/  dto/{request,response}/  entity/  repository/  service/impl/
 │   ├── messaging/   OutboxPublisher
 │   └── scheduler/   @Scheduled 500ms, lô 100 (ADR-0003)
@@ -98,7 +99,8 @@ chưa cài đặt. Nhưng chúng **compile được**: `mvn -f java-core/pom.xml
 
 - **Schema:** `platform`, `engagement`, `sales`, `analytics`
 - **Flyway:** dải **V1xx** — `src/main/resources/db/migration/` (xem README ở đó)
-- **Kafka:** sản xuất `crm.conversation.v1`, `crm.lead.v1`, `crm.usage.v1`, `crm.document.v1`
+- **Kafka:** sản xuất `crm.kb.document.uploaded` (UC018, ADR-0020), `crm.conversation.v1`, `crm.lead.v1`,
+  `crm.usage.v1` — ba topic sau chờ chốt bộ tên (Master Plan §2.6 hay `crm.*.v1`)
 
 ## Hai tài khoản CSDL — không được nhầm
 
@@ -110,8 +112,19 @@ chưa cài đặt. Nhưng chúng **compile được**: `mvn -f java-core/pom.xml
 ## TODO
 
 - [ ] Migration V101–V112 (xem `db/migration/README.md`)
-- [ ] `security/` — filter đặt `SET LOCAL app.tenant_id` từ JWT cho mỗi transaction
-- [ ] `platform/messaging/OutboxPublisher` + `platform/scheduler/` @Scheduled 500ms, lô 100
+- [x] `security/` — đặt `app.tenant_id` cho mỗi transaction: service gọi
+      `TenantTransactionScope.apply(CurrentActor.requireTenantId())` ngay đầu `@Transactional`.
+      `SET LOCAL` chỉ sống trong transaction, filter chạy trước khi có transaction nên không đặt
+      được ở filter.
+- [x] Phát hành JWT (UC002 đăng nhập) + `/.well-known/jwks.json` — `JwtTokenProvider`, claim
+      `tenant_id` · `role` · `scope`. Khoá RSA sinh trong RAM lúc khởi động (`RsaKeyProperties`):
+      token cũ hết hiệu lực sau mỗi lần khởi động lại.
+- [x] Ghi outbox trong transaction nghiệp vụ — `platform/service/OutboxService`
+- [x] `platform/messaging/OutboxPublisher` + `platform/scheduler/` @Scheduled 500ms, lô 100 — khoá
+      bản tin `tenant_id`, một job phát duy nhất (khoá advisory), sự kiện hỏng chỉ chặn tenant của nó.
+      Chưa có hàng đợi chết (DLQ)
 - [ ] `analytics/messaging/` — consumer + chống trùng qua `analytics.processed_events`
-- [ ] `common/exception/` — `@RestControllerAdvice` trả `ApiResponse.error(...)` kèm traceId
-- [ ] Log JSON có Trace ID qua MDC — **làm từ Sprint 0**, kế hoạch mục 4.5
+- [x] `common/exception/` — `@RestControllerAdvice` trả `ApiResponse.error(...)` kèm traceId và `code`
+- [ ] Log JSON có Trace ID qua MDC — **làm từ Sprint 0**, kế hoạch mục 4.5. Đã có
+      `security/TraceIdFilter` đưa `X-Trace-Id` vào MDC khoá `trace_id` (không phải `traceId` —
+      Brave ghi đè khoá đó); chưa có encoder JSON

@@ -87,8 +87,8 @@ cáo mất ý nghĩa. *Chỗ đặt bộ vàng: đã chốt tại `ai-service/te
 đóng băng rồi là cấm sửa.
 
 **Ngoại lệ có chủ đích về `java-core/`:** nhóm 2 người không có ai đóng vai Track A riêng, nên
-việc CRM mà module AI cần (migration **V116**, 5 endpoint `/internal/*`, consumer `analytics-cg`)
-do chính hai người làm. Nhưng **agent vẫn bị chặn cứng** ở đó — phần java-core làm ở phiên
+việc CRM mà module AI cần (migration **V130** — 3 cột `sales.lead_scores`, 5 endpoint
+`/internal/*`, consumer `analytics-cg`) do chính hai người làm. Nhưng **agent vẫn bị chặn cứng** ở đó — phần java-core làm ở phiên
 chính, không giao cho agent AI.
 
 ## Bảy chỉ số nghiệm thu §1.6
@@ -144,7 +144,7 @@ Không ghi `Co-Authored-By: Claude` hay `Generated with Claude Code` vào commit
 | Cần biết | Đọc |
 |---|---|
 | Cây thư mục, "đặt file mới ở đâu" | `ai-service/README.md` · `ai-service/CLAUDE.md` |
-| Vì sao chọn như vậy | `docs/adr/` — 16 ADR (0001–0016), ADR kế tiếp là **0017** |
+| Vì sao chọn như vậy | `docs/adr/` — 24 ADR (0001–0024), ADR kế tiếp là **0025** |
 | Việc từng ngày, ngưỡng từng chỉ số | `docs/Ke-hoach-21-ngay-Module-AI-CRM.xlsx` — đọc sheet *Trạng thái xuất phát* trước |
 | Đặc tả 20 UC AI (17 trong phạm vi) | `docs/Dac-ta-UseCase-Module-AI.docx` |
 | Kiến trúc hai tầng, ngân sách độ trễ | `docs/MASTER_PLAN_AI_CRM_v8.md.docx` §3.2, §5.3 |

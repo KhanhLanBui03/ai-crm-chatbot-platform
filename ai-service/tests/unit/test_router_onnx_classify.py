@@ -29,9 +29,13 @@ if str(_inference_dir) not in sys.path:
 
 import joblib  # noqa: E402
 import numpy as np  # noqa: E402
-import onnxruntime as ort  # noqa: E402
+import pytest  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+
+# venv ai-service cố ý KHÔNG có onnxruntime (luật 5, cổng chặn CI) — test này chỉ chạy ở venv
+# có tầng suy luận; ở ai-service thì bỏ qua cả module thay vì làm hỏng lượt thu thập test.
+ort = pytest.importorskip("onnxruntime")
 
 INTENT_TAXONOMY = [
     "GREETING",

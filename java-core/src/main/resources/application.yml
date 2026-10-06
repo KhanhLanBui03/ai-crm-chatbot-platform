@@ -1,5 +1,10 @@
 server:
   port: 8081
+  tomcat:
+    # Tệp vượt giới hạn multipart mà thân request lớn hơn mức Tomcat chịu "nuốt" (mặc định
+    # 2 MB) thì Tomcat cắt kết nối trước khi kịp gửi 413 — client thấy lỗi mạng thay vì
+    # FILE_TOO_LARGE. 32 MB đủ phủ tệp hơi quá 20 MiB mà vẫn có trần.
+    max-swallow-size: 32MB
 
 spring:
   application:
@@ -20,6 +25,25 @@ spring:
           connectiontimeout: 5000
           timeout: 5000
           writetimeout: 5000
+
+  servlet:
+    multipart:
+      # UC018: tệp tối đa 20 MiB — cùng một con số với ai-service (kb_max_file_bytes =
+      # 20 × 1024 × 1024). Spring hiểu "20MB" là 20 × 1024 × 1024, không phải 20 000 000.
+      max-file-size: ${crm.kb.max-file-size}
+      # Tệp + các trường form. Để bằng max-file-size thì tệp đúng 20 MiB bị chặn oan.
+      max-request-size: 21MB
+
+  cloud:
+    discovery:
+      client:
+        simple:
+          instances:
+            # Dự phòng khi Eureka chưa có ai-service: ai-service CHƯA tự đăng ký
+            # (src/api/eureka.py còn là khung). LoadBalancer hỏi Eureka trước, rỗng thì
+            # dùng danh sách này — nên đổi sang Eureka không phải sửa code.
+            ai-service:
+              - uri: ${AI_SERVICE_URL:http://ai-service:8000}
 
   datasource:
     url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${DB_NAME:thesis_crm}
@@ -58,6 +82,15 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       acks: all
+      properties:
+        # Không gắn header __TypeId__ = tên lớp Java: consumer là ai-service (Python), hợp đồng
+        # là docs/events/*.json chứ không phải lớp java.util.LinkedHashMap.
+        "[spring.json.add.type.headers]": false
+        # Broker chết thì lỗi nổi lên sau vài giây thay vì 60–120 s mặc định — job phát giữ khoá
+        # advisory suốt lúc chờ. delivery.timeout.ms phải ≥ request.timeout.ms + linger.ms.
+        "[max.block.ms]": 5000
+        "[request.timeout.ms]": 5000
+        "[delivery.timeout.ms]": 10000
     consumer:
       group-id: analytics-cg
       auto-offset-reset: earliest
@@ -96,9 +129,32 @@ crm:
     # ADR-0003: @Scheduled mỗi 500ms, lấy lô 100 bản ghi chưa phát
     poll-interval-ms: 500
     batch-size: 100
+    publisher:
+      # platform/scheduler/OutboxPublishScheduler. Tắt ở test không có Kafka.
+      enabled: ${OUTBOX_PUBLISHER_ENABLED:true}
   tenant:
     # Biến phiên dùng cho RLS policy: SET LOCAL app.tenant_id = ...
     session-variable: app.tenant_id
+  kb:
+    # UC018 — nguồn duy nhất của giới hạn dung lượng; spring.servlet.multipart đọc lại từ đây.
+    max-file-size: 20MB
+  storage:
+    s3:
+      # Cùng bộ biến S3_* với ai-service (docker-compose.yml). ADR-0022.
+      # endpoint để trống = AWS S3 mặc định theo region (cloud); dev trỏ vào RustFS.
+      endpoint: ${S3_ENDPOINT:rustfs:9000}
+      secure: ${S3_SECURE:false}
+      region: ${S3_REGION:us-east-1}
+      bucket: ${S3_BUCKET:kb-tai-lieu}
+      # Để trống cả hai trên cloud: SDK tự lấy quyền qua IAM role (IRSA), không giữ khoá.
+      access-key: ${S3_ACCESS_KEY:}
+      secret-key: ${S3_SECRET_KEY:}
+  ai-service:
+    # Tên dịch vụ, không phải host:port — RestClient có @LoadBalanced phân giải nó.
+    base-url: http://ai-service
+    connect-timeout: 2s
+    # ai-service tải cả tệp 20 MiB từ S3 về để kiểm DOCX (danh mục ZIP nằm ở cuối tệp).
+    read-timeout: 30s
 
 management:
   endpoints:

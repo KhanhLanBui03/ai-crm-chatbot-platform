@@ -4,9 +4,9 @@ Sơ đồ thực thể — quan hệ **đầy đủ cột, kiểu và khoá** c�
 + 2 hạ tầng) trên **7 schema** PostgreSQL 16 + pgvector.
 
 > **Nguồn duy nhất của tài liệu này là mã DDL đang chạy**, không phải bản phác:
-> `java-core/src/main/resources/db/migration/` (V101–V115) và `ai-service/migration/`
-> (V201–V209). Mọi cột, kiểu, giá trị `CHECK` dưới đây đọc thẳng từ 24 file đó — kể cả các cột
-> thêm bằng `ALTER TABLE ... ADD COLUMN` ở V113/V114/V115/V208/V209.
+> `java-core/src/main/resources/db/migration/` (V101–V129) và `ai-service/migration/`
+> (V201–V209). Mọi cột, kiểu, giá trị `CHECK` dưới đây đọc thẳng từ 25 file đó — kể cả các cột
+> thêm bằng `ALTER TABLE ... ADD COLUMN` ở V113/V114/V115/V128/V208/V209.
 >
 > Tài liệu diễn giải thiết kế (lập luận, bảng đã cân nhắc rồi bỏ, RLS, chỉ mục) nằm ở
 > [`erd-ai-crm.md`](erd-ai-crm.md). File này chỉ là **hình vẽ**.
@@ -20,7 +20,7 @@ Sơ đồ thực thể — quan hệ **đầy đủ cột, kiểu và khoá** c�
 | [0](#0-tổng-quan--32-bảng) | *Tổng quan* | — | — | — | cả 32 |
 | [1](#1-identity--access) | Identity & Access | `platform` | A | V103 | 3 |
 | [2](#2-tenant-management) | Tenant Management | `platform` | A | V102 · V113 | 1 |
-| [3](#3-subscription) | Subscription | `platform` | A | V102 · V115 | 3 |
+| [3](#3-subscription) | Subscription | `platform` | A | V102 · V115 · V128 | 3 |
 | [4](#4-messaging) | Messaging | `engagement` | A | V106 · V107 · V114 | 4 |
 | [5](#5-contact-management) | Contact Management | `engagement` | A | V105 | 4 |
 | [6](#6-knowledge-base) | Knowledge Base | `knowledge` | **B** | V202 · V203 · V209 | 2 |
@@ -216,7 +216,7 @@ erDiagram
 
 ## 3. Subscription
 
-`platform` · V102 + V115 · **3 bảng**. `subscription_plans` là **ngoại lệ không có `tenant_id`**:
+`platform` · V102 + V115 + V128 · **3 bảng**. `subscription_plans` là **ngoại lệ không có `tenant_id`**:
 danh mục gói do quản trị nền tảng định nghĩa, mọi tenant đọc chung, không bật RLS.
 
 `usage_records` dùng FK kép `(subscription_id, tenant_id)` → `tenant_subscriptions (id, tenant_id)`
@@ -264,9 +264,11 @@ erDiagram
         uuid        tenant_id          FK
         uuid        subscription_id    FK,UK "FK kép với tenant_id"
         varchar(30) metric             UK    "CONVERSATION/AI_TOKEN/DOCUMENT/STORAGE_MB/USER"
-        bigint      used_value
+        bigint      used_value               "tồn kho hoặc dòng chảy theo metric · STORAGE_MB = byte (ADR-0023)"
         bigint      quota_value              "chụp lại hạn mức tại thời điểm tính"
         timestamptz last_calculated_at
+        timestamptz warned_at                "V128 · lần đầu chạm 80% trong chu kỳ"
+        timestamptz blocked_at               "V128 · lần đầu chạm 100% trong chu kỳ"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -471,7 +473,7 @@ erDiagram
 
 ## 6. Knowledge Base
 
-`knowledge` · V202 + V203 + V209 · **2 bảng**, làn **Track B**.
+`knowledge` · V202 + V203 + V209 + V210 + V211 · **2 bảng**, làn **Track B**.
 
 Không bảng nào ở đây có khoá ngoại sang Track A — `uploaded_by` là `uuid` trần, đối chiếu qua API
 nội bộ. `tenant_id` vẫn `NOT NULL` và **phải lọc ngay trong truy vấn vector**: chỉ mục HNSW là
@@ -493,7 +495,10 @@ erDiagram
         text         source_url         "bắt buộc khi source_type=URL"
         varchar(10)  language           "mặc định vi"
         varchar(30)  status             "PENDING/PROCESSING/READY/FAILED/ARCHIVED"
-        int          chunk_count
+        int          chunk_count        "lúc nạp: số đoạn DỰ KIẾN · READY: số đoạn thật"
+        smallint     attempt_count      "V211 · số lần nhận xử lý, trần 3 · thẻ sở hữu"
+        varchar(20)  ingest_step        "V211 · EXTRACTING/CHUNKING/EMBEDDING/INDEXING · chỉ khi PROCESSING/FAILED"
+        timestamptz  ingest_started_at  "V211 · lượt nạp hiện tại bắt đầu"
         text         error_message      "bắt buộc khi status=FAILED"
         int          version         UK "phiên bản tài liệu cùng tên"
         uuid         uploaded_by        "không FK · liên làn"
@@ -507,7 +512,7 @@ erDiagram
         uuid          document_id       FK "ON DELETE CASCADE"
         int           chunk_index       UK "UNIQUE (document_id, chunk_index)"
         text          content
-        tsvector      content_segmented    "đã tách từ tiếng Việt · chỉ mục GIN"
+        tsvector      content_segmented    "GENERATED · theo âm tiết, bỏ dấu (V210) · chỉ mục GIN"
         int           token_count
         vector(1024)  embedding            "pgvector · chỉ mục HNSW"
         varchar(100)  embedding_model
@@ -526,7 +531,11 @@ erDiagram
 
 ## 7. AI Processing
 
-`ai` + `integration` · V204 + V205 + V208 + V209 · **4 bảng**, làn **Track B**.
+`ai` + `integration` · V204 + V205 + V208 + V209 + V211 · **5 bảng**, làn **Track B**.
+
+`ai.processed_events` (V211) không vẽ trong sơ đồ dưới — nó không nối với bảng nào. Khoá kép
+`(consumer_group, event_id)`, cột `tenant_id` + `aggregate_id` + `processed_at`, có RLS. Bản sao có
+chủ ý của `analytics.processed_events`: `ai_app` không được chạm schema của Track A (ADR-0024).
 
 `ai_tool_calls` là **sổ kiểm toán mọi lần tác tử chạm vào công cụ ngoài** — kể cả lần bị chặn:
 `decision=BLOCKED` buộc phải có `block_reason`, `decision=NEEDS_APPROVAL` buộc phải có
@@ -899,7 +908,7 @@ erDiagram
 | 1 | `tenants` | `platform` | A | V102, V113 | 19 | `uuid` |
 | 2 | `subscription_plans` | `platform` | A | V102, V115 | 15 | `uuid` |
 | 3 | `tenant_subscriptions` | `platform` | A | V102 | 13 | `uuid` |
-| 4 | `usage_records` | `platform` | A | V102 | 9 | `uuid` |
+| 4 | `usage_records` | `platform` | A | V102, V128 | 11 | `uuid` |
 | 5 | `users` | `platform` | A | V103 | 16 | `uuid` |
 | 6 | `roles` | `platform` | A | V103 | 9 | `uuid` |
 | 7 | `user_roles` | `platform` | A | V103 | 7 | kép `(user_id, role_id)` |
@@ -922,21 +931,23 @@ erDiagram
 | 24 | `processed_events` | `analytics` | A | V110 | 6 | kép `(consumer_group, event_id)` |
 | 25 | `lead_scores` | `sales` | A | V113 | 12 | `uuid` |
 | 26 | `metrics_daily` | `analytics` | A | V113 | 24 | `uuid` |
-| 27 | `knowledge_documents` | `knowledge` | **B** | V202, V209 | 19 | `uuid` |
+| 27 | `knowledge_documents` | `knowledge` | **B** | V202, V209, V211 | 22 | `uuid` |
 | 28 | `knowledge_chunks` | `knowledge` | **B** | V203 | 15 | `uuid` |
 | 29 | `ai_interactions` | `ai` | **B** | V204, V208, V209 | 27 | `uuid` |
 | 30 | `ai_feedback` | `ai` | **B** | V204 | 11 | `uuid` |
 | 31 | `mcp_servers` | `integration` | **B** | V205, V208 | 19 | `uuid` |
 | 32 | `ai_tool_calls` | `ai` | **B** | V205, V209 | 19 | `bigint` identity |
+| 33 | `processed_events` | `ai` | **B** | V211 | 5 | kép `(consumer_group, event_id)` |
 
-**Tổng: 32 bảng · 471 cột · 23 bảng Track A + 9 bảng Track B.**
+**Tổng: 33 bảng · 481 cột · 23 bảng Track A + 10 bảng Track B.**
 
 ### Ba ngoại lệ của quy tắc "mọi bảng nghiệp vụ có `tenant_id`"
 
 1. `tenants` — chính nó *là* tenant, policy RLS so trên `id`.
 2. `subscription_plans` — danh mục dùng chung, không bật RLS, `crm_app` chỉ có `SELECT`.
-3. `processed_events` — có cột `tenant_id` nhưng **không bật RLS**: là hạ tầng chống xử lý trùng,
-   consumer đọc xuyên tenant.
+3. `analytics.processed_events` — có cột `tenant_id` nhưng **không bật RLS**: là hạ tầng chống xử
+   lý trùng, consumer đọc xuyên tenant. Bản của Track B, `ai.processed_events` (V211), thì **có**
+   RLS: consumer của ai-service đọc tenant từ vỏ sự kiện trước khi ghi (ADR-0024).
 
 ### Ba chỗ bắc qua ranh giới hai làn — không có khoá ngoại
 

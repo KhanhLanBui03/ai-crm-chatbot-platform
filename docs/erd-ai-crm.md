@@ -6,6 +6,8 @@ Lược đồ cơ sở dữ liệu **chính thức** của hệ thống: **30 b�
 > Tài liệu này **đã được hiện thực và kiểm chứng**: 23 file migration Flyway (V101–V115,
 > V201–V209) chạy sạch trên PostgreSQL 16 + pgvector, qua đủ 6 mục kiểm ở [mục 16](#16-kiểm-chứng).
 > Mọi cột, mọi ràng buộc `CHECK` dưới đây lấy từ cơ sở dữ liệu đang chạy, không phải bản phác.
+> **V128** (27/09/2026, `usage_records.warned_at` / `blocked_at`) thêm sau đợt kiểm đó: đã chạy
+> sạch qua Flyway trong test tích hợp java-core, **chưa** chạy lại 6 mục kiểm ở mục 16.
 
 ---
 
@@ -296,9 +298,11 @@ do RLS trên chính `user_roles` lo.
 | `tenant_id` | uuid | — | — | `tenants` | |
 | `subscription_id` | uuid | — | ✓ | `tenant_subscriptions` | Khoá ngoại phức hợp |
 | `metric` | varchar(30) | — | ✓ | — | `CONVERSATION` · `AI_TOKEN` · `DOCUMENT` · `STORAGE_MB` · `USER` |
-| `used_value` | bigint | — | — | — | Cộng dồn trong chu kỳ |
-| `quota_value` | bigint | — | — | — | **Sao chép** từ gói lúc mở chu kỳ |
+| `used_value` | bigint | — | — | — | Dòng chảy (`CONVERSATION`, `AI_TOKEN`): cộng dồn trong chu kỳ. Tồn kho (`DOCUMENT`, `STORAGE_MB`, `USER`): lượng **đang có**, chép sang chu kỳ sau — ADR-0023. `STORAGE_MB` tính bằng **byte** |
+| `quota_value` | bigint | — | — | — | **Sao chép** từ gói lúc mở chu kỳ. `STORAGE_MB` = `storage_mb × 1048576` byte |
 | `last_calculated_at` | timestamptz | ✓ | — | — | |
+| `warned_at` | timestamptz | ✓ | — | — | **V128.** Lần đầu `used_value` chạm 80% trong chu kỳ — UC006 4.1 |
+| `blocked_at` | timestamptz | ✓ | — | — | **V128.** Lần đầu chạm 100%. `CHECK`: có `blocked_at` thì phải có `warned_at` — UC006 4.2, UC018 409 |
 | `created_at` · `updated_at` | timestamptz | — | — | — | |
 
 `quota_value` sao chép chứ không đọc qua `plan_id` — đây **không** phải vi phạm 3NF mà là
@@ -709,7 +713,10 @@ vị chính xác thì phải quay về dữ liệu thô ở `ai.ai_interactions`
 | `source_url` | text | ✓ | — | — | `CHECK`: `URL` thì phải có, còn lại phải có `file_path` |
 | `language` | varchar(10) | — | — | — | `vi` · `en` |
 | `status` | varchar(30) | — | — | — | `PENDING` · `PROCESSING` · `READY` · `FAILED` · `ARCHIVED` |
-| `chunk_count` | int | — | — | — | |
+| `chunk_count` | int | — | — | — | Lúc đang nạp: số đoạn **dự kiến** (mẫu số thanh tiến độ SCR033). Từ `READY`: số đoạn thật đã kiểm đếm |
+| `attempt_count` | smallint | — | — | — | **V211.** Số lần nhận xử lý, trần 3. Cũng là **thẻ sở hữu**: mọi ghi sau bước nhận việc kèm `attempt_count = lượt của mình` (ADR-0024) |
+| `ingest_step` | varchar(20) | ✓ | — | — | **V211.** `EXTRACTING` · `CHUNKING` · `EMBEDDING` · `INDEXING` — chặng đang chạy (`PROCESSING`) hoặc đã hỏng (`FAILED`); `NULL` ở trạng thái khác (`CHECK`) |
+| `ingest_started_at` | timestamptz | ✓ | — | — | **V211.** Lượt nạp hiện tại bắt đầu; `indexed_at − ingest_started_at` = thời gian nạp |
 | `error_message` | text | ✓ | — | — | `CHECK`: bắt buộc khi `FAILED` — hiển thị nguyên văn để người dùng sửa file |
 | `version` | int | — | ✓ | — | Tải lại cùng tên thì tăng version, **không đè bản cũ** |
 | `uploaded_by` | uuid | ✓ | — | *(logic)* | |
@@ -718,6 +725,18 @@ vị chính xác thì phải quay về dữ liệu thô ở `ai.ai_interactions`
 
 Vòng đời nạp gộp vào cột `status` thay cho bảng `ingestion_jobs` riêng: một tài liệu có đúng một
 tiến trình nạp đang chạy. Giữ `version` để câu trả lời đã sinh vẫn trích dẫn được đúng bản đã dùng.
+
+**V211 (ADR-0024)** — nạp commit theo chặng thay vì một transaction, để SCR033 thấy 6 bước
+`QUEUED → EXTRACTING → CHUNKING → EMBEDDING → INDEXING → DONE` (hai bước đầu-cuối suy từ `status`).
+Kèm theo: chỉ mục bộ phận `ix_doc_dang_nap (updated_at) WHERE status IN ('PENDING','PROCESSING')`
+cho bộ quét job kẹt; `updated_at` là nhịp tim. Hàm `knowledge.tim_job_ket(interval, int)` là
+`SECURITY DEFINER` — lỗ có chủ đích trong RLS, chỉ trả `(tenant_id, document_id, status,
+attempt_count)`, `search_path` ghim, chỉ `ai_app` được gọi.
+
+Bảng hạ tầng đi kèm — `ai.processed_events (consumer_group, event_id)` PK, `tenant_id`,
+`aggregate_id`, `processed_at`: chống xử lý trùng cho consumer `ingestion-cg`, **có RLS**, `ai_app`
+chỉ `SELECT, INSERT`. Bản sao có chủ ý của `analytics.processed_events` vì `ai_app` không có USAGE
+trên schema `analytics` (ADR-0002).
 
 #### 5.24. `knowledge.knowledge_chunks` — đoạn và vector
 
@@ -730,7 +749,7 @@ tiến trình nạp đang chạy. Giữ `version` để câu trả lời đã si
 | `document_id` | uuid | — | ✓ | `knowledge_documents` | `ON DELETE CASCADE` |
 | `chunk_index` | int | — | ✓ | — | `UNIQUE (document_id, chunk_index)` |
 | `content` | text | — | — | — | ~500 token |
-| `content_segmented` | tsvector | ✓ | — | — | Đã tách từ tiếng Việt. Index **GIN** |
+| `content_segmented` | tsvector | ✓ | — | — | **GENERATED** từ `content`: theo âm tiết, hạ chữ thường, bỏ dấu (`to_tsvector('simple', knowledge.f_unaccent(content))`, V210). Index **GIN**. Ghép từ ghép làm ở phía câu hỏi bằng `<->` |
 | `token_count` | int | — | — | — | |
 | `embedding` | vector(1024) | ✓ | — | — | Index **HNSW** — tạo **ngoài** Flyway |
 | `embedding_model` · `embedding_version` | varchar | — | — | — | Lưu **trên từng dòng** |
@@ -1041,7 +1060,7 @@ riêng chứ không gộp thành ký hiệu N–N: chúng mang cột riêng (`gr
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════════╗
-║  TRACK A — java-core · Flyway V101–V115 · platform / engagement / sales /        ║
+║  TRACK A — java-core · Flyway V101–V129 · platform / engagement / sales /        ║
 ║            analytics                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════════╝
 
@@ -1165,7 +1184,7 @@ case nào cho người dùng tự quản lý phiên.
 | V112 | **RLS** + 3 hàm `SECURITY DEFINER` | — |
 | V113 | Lịch sử điểm, mô hình đọc, quy tắc phân công | `lead_scores` `metrics_daily` (+2 cột `tenants`) |
 
-### 9.2. Track B — V201 đến V208
+### 9.2. Track B — V201 đến V211
 
 | Số | Nội dung | Bảng |
 |---|---|---|
@@ -1177,6 +1196,9 @@ case nào cho người dùng tự quản lý phiên.
 | V206 | `GRANT` cho `ai_app` | — |
 | V207 | **RLS** | — |
 | V208 | `safety_flag` + cấu trúc `tool_schema_cache` | — (chỉ `ALTER`) |
+| V209 | Điểm bám nguồn, cờ dùng đệm, độ trễ kiểm duyệt, mô tả tài liệu | — (4 cột) |
+| V210 | `unaccent` · `knowledge.f_unaccent` IMMUTABLE · `content_segmented` GENERATED | — (thay 1 cột + GIN) |
+| V211 | Tiến độ nạp (3 cột) · chống trùng · hàm quét job kẹt `SECURITY DEFINER` — ADR-0024 | `ai.processed_events` |
 
 Track A chạy tự động khi khởi động java-core. Track B chạy bằng `bash scripts/migrate-ai.sh`.
 
@@ -1529,7 +1551,7 @@ Sáu mục kiểm dưới đây **đã chạy và đạt** trên PostgreSQL 16.1
 
 | # | Mục kiểm | Kết quả |
 |---|---|---|
-| 1 | Đếm bảng theo schema | `platform` 10 · `engagement` 8 · `sales` 6 · `analytics` 2 · `knowledge` 2 · `ai` 3 · `integration` 1 = **32** (30 nghiệp vụ + `outbox_events` + `processed_events`) |
+| 1 | Đếm bảng theo schema | `platform` 10 · `engagement` 8 · `sales` 6 · `analytics` 2 · `knowledge` 2 · `ai` 4 · `integration` 1 = **33** (30 nghiệp vụ + `outbox_events` + 2 × `processed_events` — bản `ai.` từ V211) |
 | 2 | Bảng thiếu `ENABLE`+`FORCE` | Đúng **3** dòng: `subscription_plans`, `outbox_events`, `processed_events` |
 | 3 | Cô lập tenant qua `crm_app` | Tenant A thấy 1 khách của A; đổi sang B thấy 1 khách của B; tài khoản `scope='PLATFORM'` **không** lọt vào phạm vi tenant; vai trò hệ thống vẫn đọc được |
 | 4 | Nhật ký chỉ ghi thêm | `INSERT` được, `UPDATE` → `permission denied for table audit_logs` |
