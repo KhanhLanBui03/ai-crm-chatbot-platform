@@ -363,6 +363,7 @@ public class WidgetService {
         m.put("refused", r.refused());
         m.put("citations", r.citations().stream().map(c -> {
             Map<String, Object> x = new LinkedHashMap<>();
+            x.put("chunkId", c.chunkId());
             x.put("documentId", c.documentId());
             x.put("title", c.title());
             x.put("snippet", c.snippet());
