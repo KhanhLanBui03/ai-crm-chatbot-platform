@@ -63,7 +63,9 @@ public final class ContactDtos {
             int openLeadCount,
             int openDealCount,
             BigDecimal totalDealValue,
-            Instant anonymizedAt) {}
+            Instant anonymizedAt,
+            /** Khách khác trùng SĐT/email — vd. khách web tự để lại số đã có trong danh bạ; gợi ý Hợp nhất. */
+            List<ContactDto> duplicateCandidates) {}
 
     /** {@code TaoKhachHangResult} — trùng thì vẫn tạo, kèm danh sách nghi trùng để gợi ý hợp nhất. */
     public record CreateContactResult(ContactDetailDto contact, List<ContactDto> duplicateCandidates) {}

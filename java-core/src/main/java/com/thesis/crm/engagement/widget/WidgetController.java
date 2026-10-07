@@ -64,6 +64,15 @@ public class WidgetController {
         return ResponseEntity.ok(ApiResponse.ok(service.poll(token, origin, after)));
     }
 
+    /** Khách để lại tên / SĐT / email kèm đồng ý lưu dữ liệu (bổ sung UC010). */
+    @PostMapping("/contact-info")
+    public ResponseEntity<ApiResponse<WidgetDtos.ContactInfoResponse>> contactInfo(
+            @RequestBody(required = false) WidgetDtos.ContactInfoRequest body,
+            @RequestHeader(value = "X-Widget-Token", required = false) String token,
+            @RequestHeader(value = "Origin", required = false) String origin) {
+        return ResponseEntity.ok(ApiResponse.ok(service.shareContactInfo(token, origin, body)));
+    }
+
     @PostMapping("/handoff")
     public ResponseEntity<ApiResponse<TurnResponse>> handoff(
             @RequestHeader(value = "X-Widget-Token", required = false) String token,

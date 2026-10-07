@@ -140,6 +140,8 @@ public class ContactServiceImpl implements ContactService {
                 x.mergedIntoContactId(),
                 contactQueries.channelIdentities(tenantId, contactId),
                 x.conversationCount(), x.openLeadCount(), x.openDealCount(), x.totalDealValue(),
-                x.anonymizedAt());
+                x.anonymizedAt(),
+                "ACTIVE".equals(c.status()) ? contactQueries.findDuplicates(tenantId, contactId, c.phone(), c.email())
+                        : List.of());
     }
 }

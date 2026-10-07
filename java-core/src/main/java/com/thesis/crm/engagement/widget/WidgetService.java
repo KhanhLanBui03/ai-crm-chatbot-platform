@@ -8,6 +8,9 @@ import com.thesis.crm.common.exception.AppException;
 import com.thesis.crm.engagement.assignment.AssignmentService;
 import com.thesis.crm.engagement.widget.AiChatClient.AiReply;
 import com.thesis.crm.engagement.widget.AiChatClient.Turn;
+import com.thesis.crm.engagement.util.ContactNormalizer;
+import com.thesis.crm.engagement.widget.WidgetDtos.ContactInfoRequest;
+import com.thesis.crm.engagement.widget.WidgetDtos.ContactInfoResponse;
 import com.thesis.crm.engagement.widget.WidgetDtos.Appearance;
 import com.thesis.crm.engagement.widget.WidgetDtos.CitationDto;
 import com.thesis.crm.engagement.widget.WidgetDtos.MessageDto;
@@ -102,7 +105,7 @@ public class WidgetService {
                 return null;
             }
             if (!serviceLive(ch)) {
-                return new SessionResponse("SUSPENDED", null, null, null, List.of());
+                return new SessionResponse("SUSPENDED", null, null, null, List.of(), false);
             }
             UUID visitorId = tokens.parse(oldToken)
                     .filter(s -> s.tenantId().equals(ch.tenantId()) && s.channelId().equals(ch.channelId()))
@@ -117,7 +120,8 @@ public class WidgetService {
                             .map(this::toDto).toList())
                     .orElse(List.of());
             return new SessionResponse("ACTIVE", tokens.issue(session), appearance(config),
-                    conv.map(ConversationRow::status).orElse(null), history);
+                    conv.map(ConversationRow::status).orElse(null), history,
+                    repo.visitorShared(ch.tenantId(), ch.channelId(), visitorId.toString()));
         });
         if (res == null) {
             throw new AppException("Tên miền này chưa được phép nhúng widget.", HttpStatus.FORBIDDEN);
@@ -253,6 +257,60 @@ public class WidgetService {
                         hours.isOpenNow() ? "" : outsideHoursNote(hours), out);
             }
             return new TurnResponse(currentStatus(s, conv.id()), out);
+        });
+    }
+
+    // ── Khách để lại thông tin (bổ sung UC010) ──────────────────────────────────
+
+    /**
+     * Khách tự điền tên / SĐT / email kèm đồng ý lưu dữ liệu. Cập nhật hồ sơ "Khách web #…" của chính
+     * khách này (tạo nếu chưa nhắn tin nào), chèn một tin hệ thống vào hội thoại đang mở để nhân viên thấy
+     * ngay trong Hộp thư. Trùng SĐT/email với khách khác: KHÔNG tự gộp — ai cũng gõ được số người khác;
+     * trang hồ sơ khách hiện cảnh báo để nhân viên bấm Hợp nhất (UC016).
+     */
+    public ContactInfoResponse shareContactInfo(String token, String origin, ContactInfoRequest req) {
+        WidgetSession s = tokens.require(token);
+        limiter.checkMessage(s.visitorId().toString());
+        if (req == null || !Boolean.TRUE.equals(req.consent())) {
+            throw new AppException("Bạn cần đồng ý cho cửa hàng lưu thông tin để gửi.", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        String name = req.fullName() == null || req.fullName().isBlank() ? null : req.fullName().strip();
+        if (name != null && name.codePointCount(0, name.length()) > 200) {
+            throw new AppException("Tên tối đa 200 ký tự.", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        String phone;
+        try {
+            phone = ContactNormalizer.normalizePhone(req.phone());
+        } catch (IllegalArgumentException e) {
+            throw new AppException("Số điện thoại chưa đúng — ví dụ 0912345678.", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        String email = ContactNormalizer.normalizeEmail(req.email());
+        if (email != null && (email.length() > 255 || !email.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"))) {
+            throw new AppException("Email chưa đúng định dạng.", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        if (phone == null && email == null) {
+            throw new AppException("Để lại số điện thoại hoặc email để nhân viên liên hệ lại nhé.",
+                    HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        return tx.execute(st -> {
+            scope.apply(s.tenantId());
+            requireAccess(s, origin);
+            IdentityRow id = identityOf(s);
+            List<String> fields = repo.applyVisitorInfo(s.tenantId(), id.contactId(), name, phone, email);
+            // Nhật ký: chỉ ghi SỰ KIỆN đồng ý và TÊN trường đã điền — không chép tên/SĐT (NĐ 13)
+            audit.recordSystemAction(s.tenantId(), "CONTACT_CONSENT_GRANTED", "CONTACT", id.contactId(), "INFO",
+                    Map.of("source", "WIDGET", "fields", fields));
+            List<MessageDto> out = new ArrayList<>();
+            Optional<ConversationRow> conv =
+                    repo.latestConversationOfVisitor(s.tenantId(), s.channelId(), s.visitorId().toString())
+                            .filter(c -> !CLOSED.contains(c.status()));
+            conv.ifPresent(c -> {
+                String lienHe = String.join(" · ", java.util.stream.Stream.of(name, phone, email)
+                        .filter(java.util.Objects::nonNull).toList());
+                out.add(toDto(repo.insertMessage(s.tenantId(), c.id(), "SYSTEM", "INBOUND",
+                        "Đã ghi nhận thông tin liên hệ: " + lienHe, "{}")));
+            });
+            return new ContactInfoResponse(true, conv.map(ConversationRow::status).orElse(null), out);
         });
     }
 
