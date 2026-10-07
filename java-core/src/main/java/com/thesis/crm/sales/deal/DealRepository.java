@@ -39,7 +39,8 @@ public class DealRepository {
             boolean overdue, String status, String source, UUID ownerUserId, String ownerName,
             Instant stageChangedAt, Instant createdAt, String closeReason, Instant closedAt) {}
 
-    public record Filter(UUID pipelineId, UUID stageId, String status, UUID ownerUserId, int page, int size) {}
+    public record Filter(UUID pipelineId, UUID stageId, String status, UUID ownerUserId, UUID contactId, int page,
+                         int size) {}
 
     public record NewDeal(UUID contactId, UUID leadId, UUID pipelineId, UUID stageId, String title,
                           BigDecimal amount, LocalDate expectedCloseDate, String source, UUID ownerUserId) {}
@@ -148,6 +149,10 @@ public class DealRepository {
         if (f.ownerUserId() != null) {
             w.append(" AND d.owner_user_id = :owner");
             p.addValue("owner", f.ownerUserId());
+        }
+        if (f.contactId() != null) {
+            w.append(" AND d.contact_id = :contact");
+            p.addValue("contact", f.contactId());
         }
         return w.toString();
     }

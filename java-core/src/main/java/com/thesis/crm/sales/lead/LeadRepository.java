@@ -28,7 +28,7 @@ public class LeadRepository {
             Instant createdAt, Instant updatedAt) {}
 
     public record Filter(List<String> tokens, String status, String source, UUID ownerUserId, Integer minScore,
-                         int page, int size) {}
+                         UUID contactId, int page, int size) {}
 
     /** Khách được chọn khi tạo lead — kèm trạng thái để từ chối khách đã gộp/ẩn danh/xoá. */
     public record ContactRef(UUID id, String status, boolean deleted) {}
@@ -87,6 +87,10 @@ public class LeadRepository {
         if (f.ownerUserId() != null) {
             w.append(" AND l.owner_user_id = :owner");
             p.addValue("owner", f.ownerUserId());
+        }
+        if (f.contactId() != null) {
+            w.append(" AND l.contact_id = :contact");
+            p.addValue("contact", f.contactId());
         }
         if (f.minScore() != null) {
             w.append(" AND l.current_score >= :minScore");
