@@ -1,29 +1,33 @@
 import { Clock, Code2, ShieldCheck, TrendingUp } from 'lucide-react'
 
+/**
+ * Bốn điểm nổi bật đều KIỂM CHỨNG ĐƯỢC trên hệ thống đang chạy — không dùng số đo chưa đo (trước đây là
+ * "0.4s", "10x", "100%"; mục tiêu thật của dự án là p95 < 4 giây).
+ */
 const stats = [
   {
+    icon: Code2,
+    value: '1 thẻ script',
+    label: 'Nhúng khung chat',
+    description: 'Chỉ chạy trên tên miền doanh nghiệp đã khai báo',
+  },
+  {
     icon: Clock,
-    value: '0.4s',
-    label: 'Tốc độ phản hồi AI',
-    description: 'Tư vấn tức thì 24/7 không độ trễ',
+    value: 'AI → Người',
+    label: 'Chuyển giao khi cần',
+    description: 'Không đủ căn cứ thì không trả lời bừa',
   },
   {
     icon: TrendingUp,
-    value: '10x',
-    label: 'Tăng trưởng Lead',
-    description: 'Tự động thu thập & phân loại cơ hội',
-  },
-  {
-    icon: Code2,
-    value: '1 Dòng mã',
-    label: 'Nhúng Widget Dễ Dàng',
-    description: 'Tương thích mọi nền tảng Web & CMS',
+    value: 'Lead → Deal',
+    label: 'Từ hội thoại tới doanh thu',
+    description: 'Phễu Kanban kéo thả, nhắc việc chăm sóc',
   },
   {
     icon: ShieldCheck,
-    value: '100%',
-    label: 'Bảo mật Multi-Tenant',
-    description: 'PostgreSQL RLS & NĐ 13/2023/NĐ-CP',
+    value: 'RLS',
+    label: 'Tách dữ liệu từng doanh nghiệp',
+    description: 'Ngay ở tầng CSDL PostgreSQL',
   },
 ]
 
@@ -42,7 +46,7 @@ export function StatsBar() {
                 <div className="size-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-3">
                   <Icon className="size-5" />
                 </div>
-                <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground font-mono">
+                <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
                   {item.value}
                 </div>
                 <div className="text-sm font-semibold text-foreground mt-1">{item.label}</div>

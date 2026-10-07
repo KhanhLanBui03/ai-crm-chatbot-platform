@@ -1,5 +1,6 @@
 package com.thesis.crm.gateway.security;
 
+import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -34,7 +35,11 @@ public class SecurityConfig {
     public SecurityWebFilterChain authenticatedFilterChain(ServerHttpSecurity http) {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
-                .authorizeExchange(exchanges -> exchanges.anyExchange().authenticated())
+                .authorizeExchange(exchanges -> exchanges
+                        // Bảng giá trên trang chủ công khai (chỉ đọc). Có token thì vẫn kiểm và chuyển tiếp để
+                        // java-core đánh dấu gói hiện tại của doanh nghiệp đăng nhập.
+                        .pathMatchers(HttpMethod.GET, "/api/v1/plans").permitAll()
+                        .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}))
                 .build();
     }

@@ -6,51 +6,51 @@ const ragSteps = [
     icon: FileText,
     title: 'Nạp & Phân Tách Dữ Liệu',
     description:
-      'Hệ thống tự động đọc các tệp PDF, DOCX, TXT hoặc liên kết website của doanh nghiệp, làm sạch và chia nhỏ thành các đoạn tri thức (chunks) tối ưu.',
+      'Doanh nghiệp tải lên tệp PDF, DOCX, TXT, Markdown hoặc HTML. Hệ thống làm sạch và chia nhỏ thành các đoạn tri thức (chunks).',
   },
   {
     step: '02',
     icon: Database,
     title: 'Vector Embeddings & pgvector',
     description:
-      'Chuyển đổi từng đoạn văn bản thành vector ngữ nghĩa đa chiều và lưu trữ trực tiếp vào PostgreSQL pgvector với cơ chế bảo mật cô lập tenant.',
+      'Mỗi đoạn được chuyển thành vector ngữ nghĩa, lưu trong PostgreSQL pgvector — mọi truy vấn đều lọc theo đúng doanh nghiệp.',
   },
   {
     step: '03',
     icon: Network,
-    title: 'Truy Xuất Ngữ Nghĩa Chính Xác',
+    title: 'Tìm Kết Hợp Ngữ Nghĩa & Từ Khoá',
     description:
-      'Khi khách hàng đặt câu hỏi, thuật toán Cosine Similarity tìm kiếm tức thì các đoạn tài liệu có độ liên quan cao nhất trong chưa đầy 0.1s.',
+      'Câu hỏi của khách được tìm đồng thời theo nghĩa (vector) và theo từ khoá, gộp hai kết quả để lấy các đoạn liên quan nhất.',
   },
   {
     step: '04',
     icon: Bot,
     title: 'Sinh Phản Hồi & Trích Dẫn Nguồn',
     description:
-      'Mô hình ngôn ngữ lớn (LLM) tổng hợp câu trả lời tự nhiên, chính xác 100% theo tài liệu của công ty kèm trích dẫn số trang, không bịa đặt.',
+      'Mô hình ngôn ngữ lớn (LLM) viết câu trả lời từ các đoạn tìm được, kèm trích dẫn nguồn. Không đủ căn cứ thì từ chối và mời gặp nhân viên.',
   },
 ]
 
 const aiCapabilities = [
   {
     icon: Sparkles,
-    title: 'Zero Hallucination (Không bịa đặt)',
-    description: 'AI chỉ trả lời dựa trên kho tri thức đã nạp, luôn kèm dẫn chứng số trang hoặc link tài liệu.',
+    title: 'Không đủ căn cứ thì không trả lời bừa',
+    description: 'AI trả lời dựa trên kho tri thức đã nạp và ghi rõ nguồn; câu hỏi ngoài tài liệu thì nói chưa có thông tin thay vì đoán.',
   },
   {
     icon: Layers,
-    title: 'Tác tử Tự động (MCP Tool Calling)',
-    description: 'Tự động kiểm tra trạng thái đơn hàng, tra cứu tồn kho và tạo lịch hẹn qua API chuẩn hóa.',
+    title: 'Hiểu ý định trước khi gọi LLM',
+    description: 'Một mô hình phân loại nhỏ chạy trên CPU đoán ý định khách trước; câu chào hỏi trả lời bằng mẫu, không tốn chi phí LLM.',
   },
   {
     icon: Zap,
-    title: 'Phân tích Cảm xúc Khách hàng',
-    description: 'Đo lường sắc thái hài lòng, tức giận hoặc khẩn cấp để gắn cờ ưu tiên chăm sóc.',
+    title: 'Hạn mức hội thoại rõ ràng',
+    description: 'Mỗi gói có hạn mức hội thoại AI; hết hạn mức thì hội thoại tự chuyển cho nhân viên, khách không bị bỏ lơ.',
   },
   {
     icon: ShieldCheck,
     title: 'Chuyển giao Nhân viên (Human Handoff)',
-    description: 'Chuyển mượt mà sang nhân viên tư vấn trực tiếp khi khách hàng yêu cầu hoặc vấn đề phức tạp.',
+    description: 'Khách bấm "Gặp nhân viên" hoặc AI không chắc câu trả lời — hội thoại vào Hộp thư, tự giao cho người đang trực.',
   },
 ]
 
@@ -68,11 +68,11 @@ export function AiSolutionSection() {
             <span>Công Nghệ AI Tiên Tiến</span>
           </div>
           <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
-            Giải Pháp AI Đa Tác Tử & <br className="hidden sm:inline" />
-            <span className="text-primary">Kiến Trúc RAG Độc Quyền</span>
+            Trợ Lý AI Ba Tầng <br className="hidden sm:inline" />
+            <span className="text-primary">Luật → Mô Hình Nhỏ → LLM</span>
           </h2>
           <p className="mt-4 text-base text-muted-foreground leading-relaxed">
-            Biến toàn bộ tài liệu nội bộ, chính sách và cẩm nang sản phẩm của công ty bạn thành một chuyên viên tư vấn AI thông minh, làm việc miệt mài 24/7.
+            Việc gì làm được bằng luật thì không gọi mô hình; việc gì mô hình nhỏ làm được thì không gọi LLM. Chỉ câu hỏi cần tra tài liệu mới tới LLM — nhanh hơn và rẻ hơn mà vẫn trả lời theo tài liệu của bạn.
           </p>
         </div>
 
