@@ -4,12 +4,15 @@ import { vi } from 'date-fns/locale'
 import { Download, ShieldCheck, ShieldOff, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 
 import { useDanhSachKhachHangQuery, type BoLocKhachHang } from '@/api/contacts'
 import { ListPage } from '@/components/layout/ListPage'
 import type { CotBang } from '@/components/ui/data-table'
 import { StatusChip } from '@/components/ui/status-chip'
 import { CreateContactDialog } from '@/features/contacts/CreateContactDialog'
+import { GanTheHangLoatDialog } from '@/features/contacts/GanTheHangLoatDialog'
+import { layKhachTheoId, layTatCaKhach, taiCsv } from '@/features/contacts/xuatCsv'
 import { NHAN_KENH } from '@/features/conversations/nhan'
 import type { KenhChinh, KhachHang } from '@/types/schema'
 import { chuCaiDau } from '@/utils/ten'
@@ -29,15 +32,46 @@ const NHAN_KENH_CHINH: Record<KenhChinh, string> = {
 export function ContactsPage() {
   const dieuHuong = useNavigate()
   const [moTao, datMoTao] = useState(false)
+  /** Khách đang chọn để gắn thẻ hàng loạt — null là hộp thoại đóng. */
+  const [ganTheCho, datGanTheCho] = useState<string[] | null>(null)
+  const [dangXuat, datDangXuat] = useState(false)
   const [boLoc, datBoLoc] = useState<BoLocKhachHang>({ trang: 0 })
   const [sapXep, datSapXep] = useState<SortingState>([
     { id: 'lastInteractionAt', desc: true },
   ])
 
-  const truyVan = useDanhSachKhachHangQuery({
+  const boLocDangDung = {
     ...boLoc,
     sapXep: sapXep[0] ? `${sapXep[0].desc ? '-' : ''}${sapXep[0].id}` : undefined,
-  })
+  }
+  const truyVan = useDanhSachKhachHangQuery(boLocDangDung)
+
+  const ngay = () => new Date().toISOString().slice(0, 10)
+
+  /** "Xuất CSV": mọi khách khớp bộ lọc đang chọn, không chỉ trang đang xem. */
+  async function xuatTatCa() {
+    if (dangXuat) return
+    datDangXuat(true)
+    try {
+      const { ds, biCat } = await layTatCaKhach(boLocDangDung)
+      taiCsv(ds, `khach-hang-${ngay()}.csv`)
+      toast.success(`Đã xuất ${ds.length} khách.${biCat ? ' Danh sách quá dài — chỉ lấy 5.000 khách đầu.' : ''}`)
+    } catch {
+      toast.error('Không xuất được danh sách, thử lại sau.')
+    } finally {
+      datDangXuat(false)
+    }
+  }
+
+  async function xuatDangChon(ids: string[]) {
+    try {
+      const ds = await layKhachTheoId(ids, truyVan.data?.items ?? [])
+      taiCsv(ds, `khach-hang-da-chon-${ngay()}.csv`)
+      toast.success(`Đã xuất ${ds.length} khách đang chọn.`)
+    } catch {
+      toast.error('Không xuất được danh sách, thử lại sau.')
+    }
+  }
 
   const cot = useMemo<CotBang<KhachHang>[]>(
     () => [
@@ -186,10 +220,12 @@ export function ContactsPage() {
       sapXep={{ trangThai: sapXep, onDoiSapXep: datSapXep }}
       onDoiTrang={(t) => datBoLoc((cu) => ({ ...cu, trang: t }))}
       thaoTacChinh={{ nhan: 'Thêm khách hàng', onClick: () => datMoTao(true) }}
-      thaoTacPhu={[{ nhan: 'Xuất CSV', BieuTuong: Download, onClick: () => {} }]}
+      thaoTacPhu={[
+        { nhan: dangXuat ? 'Đang xuất…' : 'Xuất CSV', BieuTuong: Download, onClick: () => void xuatTatCa() },
+      ]}
       thaoTacHangLoat={[
-        { nhan: 'Gắn thẻ', onClick: () => {} },
-        { nhan: 'Xuất danh sách', onClick: () => {} },
+        { nhan: 'Gắn thẻ', onClick: (ids) => datGanTheCho(ids) },
+        { nhan: 'Xuất danh sách', onClick: (ids) => void xuatDangChon(ids) },
       ]}
       khiChuaCoDuLieu={{
         BieuTuong: Users,
@@ -198,6 +234,7 @@ export function ContactsPage() {
       }}
     />
     <CreateContactDialog mo={moTao} onDoiMo={datMoTao} />
+    <GanTheHangLoatDialog ids={ganTheCho} onDoiMo={(m) => !m && datGanTheCho(null)} />
     </>
   )
 }
