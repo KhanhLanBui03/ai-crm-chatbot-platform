@@ -100,6 +100,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // UC018 tiền điều kiện: "có vai trò quản trị của doanh nghiệp".
                         .requestMatchers(HttpMethod.POST, "/api/v1/documents").hasRole("TENANT_ADMIN")
+                        // Bảng giá trên trang chủ công khai: chỉ tên gói, giá, hạn mức — thông tin vốn để quảng
+                        // cáo. Để ở CHUỖI NÀY (không phải chuỗi công khai) để người đã đăng nhập vẫn được đọc
+                        // token và đánh dấu "gói hiện tại" (SCR013).
+                        .requestMatchers(HttpMethod.GET, "/api/v1/plans").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.decoder(jwtDecoder()).jwtAuthenticationConverter(jwtAuthenticationConverter()))
