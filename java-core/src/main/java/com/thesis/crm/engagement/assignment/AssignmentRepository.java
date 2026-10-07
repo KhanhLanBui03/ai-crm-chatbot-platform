@@ -138,15 +138,20 @@ public class AssignmentRepository {
                         ts(rs.getTimestamp("occurred_at"))));
     }
 
-    /** Có người nhận → đóng sự kiện BOT_TO_AGENT còn mở gần nhất (đo thời gian chờ nhân viên). */
-    public void acceptOpenEvent(UUID tenantId, UUID conversationId, UUID userId) {
-        jdbc.update("""
+    /**
+     * Có người nhận → đóng sự kiện BOT_TO_AGENT còn mở gần nhất (đo thời gian chờ nhân viên). Trả lý do
+     * chuyển giao của sự kiện vừa đóng; rỗng nếu không có sự kiện nào đang chờ.
+     */
+    public Optional<String> acceptOpenEvent(UUID tenantId, UUID conversationId, UUID userId) {
+        return jdbc.queryForList("""
                 UPDATE engagement.handoff_events SET to_user_id = :u, accepted_at = now()
                 WHERE id = (SELECT id FROM engagement.handoff_events
                             WHERE tenant_id = :t AND conversation_id = :c AND direction = 'BOT_TO_AGENT'
                               AND accepted_at IS NULL
                             ORDER BY occurred_at DESC LIMIT 1)
-                """, new MapSqlParameterSource("t", tenantId).addValue("c", conversationId).addValue("u", userId));
+                RETURNING reason
+                """, new MapSqlParameterSource("t", tenantId).addValue("c", conversationId).addValue("u", userId),
+                String.class).stream().findFirst();
     }
 
     public Optional<HandoffEventRow> event(UUID tenantId, UUID eventId) {

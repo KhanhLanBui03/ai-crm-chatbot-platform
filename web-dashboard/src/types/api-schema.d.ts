@@ -3734,6 +3734,8 @@ export interface paths {
                     source?: components["schemas"]["NguonLead"];
                     ownerUserId?: string;
                     minScore?: number;
+                    /** @description Lead của một khách (hộp thoại ghi hoạt động UC035 chọn lead của khách) */
+                    contactId?: string;
                 };
                 header?: never;
                 path?: never;
@@ -4100,6 +4102,8 @@ export interface paths {
                     stageId?: string;
                     status?: components["schemas"]["TrangThaiDeal"];
                     ownerUserId?: string;
+                    /** @description Deal của một khách (hộp thoại ghi hoạt động UC035 chọn deal của khách) */
+                    contactId?: string;
                 };
                 header?: never;
                 path?: never;
@@ -4329,8 +4333,13 @@ export interface paths {
         };
         /**
          * SCR047 — hoạt động chăm sóc và nhắc việc
-         * @description UC035. Mỗi hoạt động gắn với **đúng một** trong hai: cơ hội tiềm năng hoặc cơ hội bán hàng
-         *     — ràng buộc ở tầng cơ sở dữ liệu, không phải quy ước.
+         * @description UC035. Mỗi hoạt động gắn với một khách hàng và **tối đa một** trong hai: lead hoặc deal của
+         *     chính khách đó (`num_nonnulls(lead_id, deal_id) <= 1`, V134). Không gắn cái nào = hoạt động
+         *     chỉ thuộc hồ sơ khách (vd. khách vãng lai được chuyển từ AI sang nhân viên).
+         *
+         *     `mine=true` là "Việc của tôi": lời nhắc giao cho người đang đăng nhập, còn PENDING/SENT, sắp
+         *     theo giờ nhắc. `bucket` (chỉ dùng kèm `mine`) chia OVERDUE / TODAY / UPCOMING theo ngày ở Việt
+         *     Nam. Mặc định sắp theo thời điểm thực hiện mới nhất.
          *
          *     `source` phân biệt hoạt động nhân viên chủ động tạo với hoạt động hệ thống sinh tự động khi
          *     chuyển giao hội thoại; gộp chung sẽ làm sai chỉ số năng suất nhân viên.
@@ -4347,6 +4356,8 @@ export interface paths {
                     dealId?: string;
                     type?: components["schemas"]["LoaiHoatDong"];
                     remindStatus?: components["schemas"]["TrangThaiNhacViec"];
+                    mine?: boolean;
+                    bucket?: "OVERDUE" | "TODAY" | "UPCOMING";
                 };
                 header?: never;
                 path?: never;
@@ -4372,7 +4383,11 @@ export interface paths {
         put?: never;
         /**
          * Ghi nhận một hoạt động
-         * @description `remindAt` trong quá khứ bị từ chối 422 — nhắc việc đã qua là vô nghĩa.
+         * @description `remindAt` trong quá khứ bị từ chối 422 — nhắc việc đã qua là vô nghĩa. `outcome =
+         *     RESCHEDULED` bắt buộc có `remindAt`. `performedAt` bỏ trống = bây giờ, không được ở tương lai
+         *     (dùng nhắc việc để hẹn). `remindUserId` bỏ trống = người ghi; chỉ quản trị viên giao nhắc cho
+         *     người khác. Mọi người ghi được lên mọi khách/lead/deal (kể cả đã đóng). `source` luôn MANUAL —
+         *     AUTO chỉ do hệ thống ghi khi nhân viên nhận hội thoại từ AI.
          */
         post: {
             parameters: {
@@ -4398,9 +4413,56 @@ export interface paths {
                         };
                     };
                 };
+                403: components["responses"]["KhongDuQuyen"];
+                404: components["responses"]["KhongThay"];
                 422: components["responses"]["DuLieuKhongHopLe"];
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/activities/todo-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Số việc của tôi — số đỏ trên menu "Hoạt động"
+         * @description Lời nhắc giao cho người đang đăng nhập, còn PENDING/SENT: `overdue` (đã quá giờ) và `today`
+         *     (từ giờ tới hết hôm nay, giờ Việt Nam). Giao diện hỏi lại mỗi phút — chưa có thông báo đẩy.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Số việc */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"] & {
+                            data?: {
+                                overdue: number;
+                                today: number;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4420,7 +4482,12 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Cập nhật kết quả hoạt động */
+        /**
+         * Cập nhật kết quả hoạt động
+         * @description Không có DELETE — hoạt động là lịch sử. Người ghi hoặc quản trị viên sửa `outcome`, `content`,
+         *     `remindAt` (hẹn lại → PENDING), `remindStatus`; người được nhắc chỉ đổi `remindStatus` (DONE /
+         *     CANCELED / PENDING). Hoạt động AUTO không ai sửa (403).
+         */
         patch: {
             parameters: {
                 query?: never;
@@ -4435,7 +4502,13 @@ export interface paths {
                     "application/json": {
                         outcome?: components["schemas"]["KetQuaHoatDong"];
                         content?: string | null;
-                        remindStatus?: components["schemas"]["TrangThaiNhacViec"];
+                        /**
+                         * Format: date-time
+                         * @description Hẹn lại — phải ở tương lai
+                         */
+                        remindAt?: string;
+                        /** @enum {string} */
+                        remindStatus?: "PENDING" | "DONE" | "CANCELED";
                     };
                 };
             };
@@ -6334,8 +6407,16 @@ export interface components {
             contactName?: string;
             /** Format: uuid */
             leadId?: string | null;
+            /** @description Sản phẩm quan tâm của lead đang gắn (hiển thị) */
+            leadLabel?: string | null;
             /** Format: uuid */
             dealId?: string | null;
+            dealTitle?: string | null;
+            /**
+             * Format: uuid
+             * @description Hội thoại gốc — có ở hoạt động AUTO "Tiếp nhận hội thoại từ AI"
+             */
+            conversationId?: string | null;
             type: components["schemas"]["LoaiHoatDong"];
             subject?: string | null;
             content?: string | null;
@@ -6350,6 +6431,7 @@ export interface components {
             remindAt?: string | null;
             /** Format: uuid */
             remindUserId?: string | null;
+            remindUserName?: string | null;
             remindStatus?: components["schemas"]["TrangThaiNhacViec"];
             /** Format: date-time */
             createdAt: string;
@@ -6361,8 +6443,9 @@ export interface components {
          */
         NguonHoatDong: "MANUAL" | "AUTO";
         /**
-         * @description Gắn với **đúng một** trong hai: `leadId` hoặc `dealId`. Ràng buộc này ở tầng cơ sở dữ liệu
-         *     (`num_nonnulls(lead_id, deal_id) = 1`), gửi cả hai hoặc không gửi cái nào đều bị từ chối.
+         * @description Gắn với **tối đa một** trong hai: `leadId` hoặc `dealId` — của chính khách `contactId` (khác
+         *     khách → 422). Gửi cả hai → 422; không gửi cái nào = hoạt động của hồ sơ khách. Ràng buộc ở CSDL:
+         *     `num_nonnulls(lead_id, deal_id) <= 1` (V134). Phải có `subject` hoặc `content`.
          */
         LuuHoatDongRequest: {
             /** Format: uuid */

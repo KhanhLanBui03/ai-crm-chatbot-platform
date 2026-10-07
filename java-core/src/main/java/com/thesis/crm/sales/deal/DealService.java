@@ -14,6 +14,7 @@ import com.thesis.crm.sales.deal.DealRepository.DealRow;
 import com.thesis.crm.sales.deal.DealRepository.Filter;
 import com.thesis.crm.sales.deal.DealRepository.NewDeal;
 import com.thesis.crm.sales.deal.DealRepository.StageRow;
+import com.thesis.crm.sales.activity.ActivityService;
 import com.thesis.crm.sales.lead.LeadRepository;
 import com.thesis.crm.sales.lead.LeadRepository.ContactRef;
 import com.thesis.crm.sales.lead.LeadService.Actor;
@@ -66,12 +67,15 @@ public class DealService {
     private final LeadRepository leads;
     private final TenantTransactionScope scope;
     private final AuditLogWriter audit;
+    private final ActivityService activities;
 
-    public DealService(DealRepository repo, LeadRepository leads, TenantTransactionScope scope, AuditLogWriter audit) {
+    public DealService(DealRepository repo, LeadRepository leads, TenantTransactionScope scope, AuditLogWriter audit,
+                       ActivityService activities) {
         this.repo = repo;
         this.leads = leads;
         this.scope = scope;
         this.audit = audit;
+        this.activities = activities;
     }
 
     // ── đọc ─────────────────────────────────────────────────────────────────────
@@ -91,14 +95,14 @@ public class DealService {
 
     @Transactional(readOnly = true)
     public PageResponse<DealDto> list(UUID tenantId, UUID pipelineId, UUID stageId, String status, UUID ownerUserId,
-                                      int page, int size) {
+                                      UUID contactId, int page, int size) {
         scope.apply(tenantId);
         if (status != null && !STATUSES.contains(status)) {
             throw invalid("INVALID_STATUS", "Trạng thái deal chỉ nhận OPEN, WON hoặc LOST.");
         }
         int p = Math.max(0, page);
         int s = Math.min(Math.max(1, size), MAX_PAGE);
-        Filter f = new Filter(pipelineId, stageId, status, ownerUserId, p, s);
+        Filter f = new Filter(pipelineId, stageId, status, ownerUserId, contactId, p, s);
         return PageResponse.of(repo.search(tenantId, f).stream().map(DealService::toDto).toList(), p, s,
                 repo.count(tenantId, f));
     }
@@ -402,11 +406,10 @@ public class DealService {
     }
 
     private DealDetail detailOf(UUID tenantId, DealRow r) {
-        // Hoạt động (UC035) chưa có API → danh sách rỗng thật, giao diện ẩn mục này
         return new DealDetail(r.id(), r.contactId(), r.contactName(), r.leadId(), r.pipelineId(), r.stageId(),
                 r.stageName(), r.title(), r.amount(), r.currency(), r.expectedCloseDate(), r.overdue(), r.status(),
                 r.source(), r.ownerUserId(), r.ownerName(), r.stageChangedAt(), r.createdAt(), r.closeReason(),
-                r.closedAt(), repo.history(tenantId, r.id()), List.of());
+                r.closedAt(), repo.history(tenantId, r.id()), List.copyOf(activities.ofDeal(tenantId, r.id(), 50)));
     }
 
     static DealDto toDto(DealRow r) {

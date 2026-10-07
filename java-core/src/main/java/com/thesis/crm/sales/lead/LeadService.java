@@ -99,7 +99,7 @@ public class LeadService {
 
     @Transactional(readOnly = true)
     public PageResponse<LeadDto> list(UUID tenantId, String q, String status, String source, UUID ownerUserId,
-                                      Integer minScore, int page, int size) {
+                                      Integer minScore, UUID contactId, int page, int size) {
         scope.apply(tenantId);
         if (status != null && !STATUSES.contains(status)) {
             throw invalid("INVALID_STATUS", "Trạng thái lead không hợp lệ.");
@@ -112,7 +112,7 @@ public class LeadService {
         }
         int p = Math.max(0, page);
         int s = Math.min(Math.max(1, size), 100);
-        Filter f = new Filter(ContactNormalizer.searchTokens(q), status, source, ownerUserId, minScore, p, s);
+        Filter f = new Filter(ContactNormalizer.searchTokens(q), status, source, ownerUserId, minScore, contactId, p, s);
         return PageResponse.of(repo.search(tenantId, f).stream().map(LeadService::toDto).toList(), p, s,
                 repo.count(tenantId, f));
     }

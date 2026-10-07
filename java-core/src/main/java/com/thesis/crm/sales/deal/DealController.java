@@ -52,10 +52,11 @@ public class DealController {
             @RequestParam(required = false) UUID stageId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) UUID ownerUserId,
+            @RequestParam(required = false) UUID contactId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "200") int size) {
         return ResponseEntity.ok(ApiResponse.ok(
-                service.list(requireTenantId(), pipelineId, stageId, status, ownerUserId, page, size)));
+                service.list(requireTenantId(), pipelineId, stageId, status, ownerUserId, contactId, page, size)));
     }
 
     @PostMapping("/deals")

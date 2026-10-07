@@ -48,10 +48,11 @@ public class LeadController {
             @RequestParam(required = false) String source,
             @RequestParam(required = false) UUID ownerUserId,
             @RequestParam(required = false) Integer minScore,
+            @RequestParam(required = false) UUID contactId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.ok(
-                service.list(requireTenantId(), q, status, source, ownerUserId, minScore, page, size)));
+                service.list(requireTenantId(), q, status, source, ownerUserId, minScore, contactId, page, size)));
     }
 
     @PostMapping

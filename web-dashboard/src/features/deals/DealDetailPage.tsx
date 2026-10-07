@@ -19,6 +19,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusChip } from '@/components/ui/status-chip'
+import { ActivityTimeline } from '@/features/activities/ActivityTimeline'
 import { DoiPhuTrachDealDialog, LyDoThuaDialog, SuaDealDialog } from '@/features/deals/DealDialogs'
 import { NHAN_LY_DO_THUA, NHAN_TRANG_THAI_DEAL, tien } from '@/features/leads/nhan'
 import type { LyDoThuaDeal } from '@/types/schema'
@@ -31,8 +32,8 @@ import { cn } from '@/utils/cn'
  * deal nằm 21 ngày ở "Đã báo giá" là tín hiệu rõ hơn mọi con số dự báo — và chỉ thấy được khi hiển
  * thị **thời lượng từng chặng** (máy chủ tính sẵn `durationSeconds`).
  *
- * Quyền giống bảng phễu: deal của mình / chưa ai nhận / quản trị viên. Hoạt động (UC035) chưa có API
- * nên tab đó ẩn đi.
+ * Quyền giống bảng phễu: deal của mình / chưa ai nhận / quản trị viên. Tab Hoạt động (UC035): ai cũng
+ * ghi được, kể cả deal đã đóng.
  */
 export function DealDetailPage() {
   const { id = '' } = useParams()
@@ -218,6 +219,14 @@ export function DealDetailPage() {
                   </ol>
                 )}
               </div>
+            ),
+          },
+          {
+            khoa: 'hoat-dong',
+            nhan: 'Hoạt động',
+            soLuong: d?.activities?.length,
+            noiDung: d && (
+              <ActivityTimeline dich={{ contactId: d.contactId, contactName: d.contactName, dealId: d.id }} />
             ),
           },
         ]}

@@ -5,6 +5,7 @@ import com.thesis.crm.engagement.assignment.AssignmentRepository.Assignee;
 import com.thesis.crm.engagement.assignment.AssignmentRepository.HandoffEventRow;
 import com.thesis.crm.engagement.assignment.AssignmentRepository.QueueStatus;
 import com.thesis.crm.engagement.inbox.InboxRepository;
+import com.thesis.crm.sales.activity.ActivityService;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,11 +33,14 @@ public class AssignmentService {
     private final AssignmentRepository repo;
     private final InboxRepository inbox;
     private final AuditLogWriter audit;
+    private final ActivityService activities;
 
-    public AssignmentService(AssignmentRepository repo, InboxRepository inbox, AuditLogWriter audit) {
+    public AssignmentService(AssignmentRepository repo, InboxRepository inbox, AuditLogWriter audit,
+                             ActivityService activities) {
         this.repo = repo;
         this.inbox = inbox;
         this.audit = audit;
+        this.activities = activities;
     }
 
     public void touchPresence(UUID tenantId, UUID userId) {
@@ -62,7 +66,16 @@ public class AssignmentService {
     /** Có người nhận hội thoại (tự nhận, được giao, tự động) → đóng sự kiện chờ đang mở. */
     public void accepted(UUID tenantId, UUID conversationId, UUID userId) {
         requireTx();
-        repo.acceptOpenEvent(tenantId, conversationId, userId);
+        acceptAndLog(tenantId, conversationId, userId);
+    }
+
+    /**
+     * Đóng sự kiện chuyển giao đang chờ; nếu THẬT SỰ có sự kiện vừa được nhận (AI → nhân viên) thì ghi
+     * đúng một hoạt động AUTO cho khách (UC035). Nhận lại hội thoại không qua AI thì không ghi gì.
+     */
+    private void acceptAndLog(UUID tenantId, UUID conversationId, UUID userId) {
+        repo.acceptOpenEvent(tenantId, conversationId, userId)
+                .ifPresent(reason -> activities.recordHandoffAccepted(tenantId, conversationId, userId, reason));
     }
 
     /**
@@ -79,7 +92,7 @@ public class AssignmentService {
         Optional<UUID> picked = repo.pickCandidate(tenantId, mode, excludeUserId);
         picked.ifPresent(userId -> {
             inbox.assign(tenantId, conversationId, userId);
-            repo.acceptOpenEvent(tenantId, conversationId, userId);
+            acceptAndLog(tenantId, conversationId, userId);
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("assigneeUserId", userId.toString());
             data.put("via", "AUTO");
