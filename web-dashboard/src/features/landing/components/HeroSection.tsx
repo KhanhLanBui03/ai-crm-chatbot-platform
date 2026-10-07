@@ -1,4 +1,4 @@
-import { ArrowRight, Bot, CheckCircle2, ChevronRight, MessageSquare, Sparkles, TrendingUp, Users, Zap } from 'lucide-react'
+import { ArrowRight, CheckCircle2, ChevronRight, MessageSquare, Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,7 @@ export function HeroSection() {
           {/* Top Announcement Badge */}
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-border bg-muted/50 text-foreground text-xs font-semibold backdrop-blur-md shadow-xs mb-6 hover:bg-muted transition-colors cursor-default">
             <Sparkles className="size-3.5 text-primary" />
-            <span>Ra mắt Hệ sinh thái AI Multi-Agent & RAG Hub cho Doanh nghiệp</span>
+            <span>CRM + Trợ lý AI trả lời theo tài liệu của chính doanh nghiệp</span>
             <ChevronRight className="size-3.5 text-muted-foreground" />
           </div>
 
@@ -30,7 +30,9 @@ export function HeroSection() {
 
           {/* Subtitle */}
           <p className="mt-6 text-base sm:text-lg lg:text-xl text-muted-foreground leading-relaxed max-w-3xl">
-            Tích hợp trợ lý AI học sâu tài liệu nội bộ qua <strong>RAG</strong>, tự động tư vấn khách hàng trong <strong>0.4s</strong>, nhúng Livechat chỉ với 1 dòng script và quản lý cơ hội kinh doanh (Deals) trên phễu Kanban thời gian thực.
+            Trợ lý AI đọc tài liệu của doanh nghiệp (<strong>RAG</strong>) để tư vấn khách 24/7, không trả lời được thì
+            chuyển ngay cho nhân viên. Nhúng khung chat bằng <strong>1 thẻ script</strong>, biến hội thoại thành lead và
+            theo dõi cơ hội bán hàng trên phễu Kanban.
           </p>
 
           {/* Action CTAs */}
@@ -67,7 +69,7 @@ export function HeroSection() {
             </span>
             <span className="flex items-center gap-1.5">
               <CheckCircle2 className="size-3.5 text-success" />
-              Triển khai trong 5 phút
+              Nhúng bằng 1 thẻ script
             </span>
             <span className="flex items-center gap-1.5">
               <CheckCircle2 className="size-3.5 text-success" />
@@ -76,155 +78,26 @@ export function HeroSection() {
           </div>
         </div>
 
-        {/* Hero Interactive UI Preview Mockup */}
-        <div className="mt-14 relative mx-auto max-w-5xl rounded-2xl border border-border/80 bg-card/60 p-2 sm:p-3 shadow-2xl backdrop-blur-xl">
-          {/* Glass header bar */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-border/60 bg-muted/40 rounded-xl mb-3">
-            <div className="flex items-center gap-2">
-              <div className="size-3 rounded-full bg-red-500/80" />
-              <div className="size-3 rounded-full bg-amber-500/80" />
-              <div className="size-3 rounded-full bg-emerald-500/80" />
-              <span className="text-xs font-mono text-muted-foreground ml-2 hidden sm:inline-block">
-                crm-platform.app / dashboard / live-ai
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                <span className="size-1.5 rounded-full bg-emerald-500 animate-ping" />
-                AI Agent Active
-              </span>
-            </div>
+        {/* Ảnh CHỤP THẬT từ lần chạy hệ thống (docs/report/scr020-*) — không phải bản vẽ mô phỏng: thầy cô
+            thấy đúng màn hình sẽ được demo, và không có con số nào chưa đo. */}
+        <figure className="mt-14 relative mx-auto max-w-5xl rounded-2xl border border-border/80 bg-card/60 p-2 sm:p-3 shadow-2xl">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border/60 bg-muted/40 rounded-t-xl">
+            <div className="size-3 rounded-full bg-red-500/80" />
+            <div className="size-3 rounded-full bg-amber-500/80" />
+            <div className="size-3 rounded-full bg-emerald-500/80" />
+            <span className="text-xs font-mono text-muted-foreground ml-2 hidden sm:inline-block">Hộp thư</span>
           </div>
-
-          {/* Split Mockup Content: Left Kanban Deals + Right Live AI Chat */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 p-1 sm:p-2">
-            {/* Left CRM Mini Board (7 cols) */}
-            <div className="lg:col-span-7 bg-background/90 border border-border rounded-xl p-4 flex flex-col gap-3 shadow-sm">
-              <div className="flex items-center justify-between pb-2 border-b border-border/60">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="size-4 text-primary" />
-                  <span className="text-sm font-bold text-foreground">Phễu Bán Hàng & Cơ Hội (Kanban)</span>
-                </div>
-                <span className="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
-                  Tổng 1.250.000.000 đ
-                </span>
-              </div>
-
-              {/* Kanban columns preview */}
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                {/* Col 1 */}
-                <div className="bg-muted/40 rounded-lg p-2.5 flex flex-col gap-2">
-                  <div className="flex items-center justify-between font-semibold text-[11px] text-muted-foreground">
-                    <span>Mới tiếp cận</span>
-                    <span className="bg-muted px-1.5 py-0.2 rounded font-mono">3</span>
-                  </div>
-                  <div className="bg-card p-2 rounded-md border border-border/70 shadow-xs">
-                    <p className="font-semibold text-foreground text-xs truncate">Công ty Tech Corp</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">25.000.000 đ</p>
-                    <div className="flex items-center gap-1 mt-1 text-[10px] text-primary">
-                      <Bot className="size-3" />
-                      <span>AI vừa phân loại Lead</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Col 2 */}
-                <div className="bg-muted/40 rounded-lg p-2.5 flex flex-col gap-2">
-                  <div className="flex items-center justify-between font-semibold text-[11px] text-muted-foreground">
-                    <span>Đang tư vấn</span>
-                    <span className="bg-muted px-1.5 py-0.2 rounded font-mono">2</span>
-                  </div>
-                  <div className="bg-card p-2 rounded-md border border-primary/30 shadow-xs bg-primary/5">
-                    <p className="font-semibold text-foreground text-xs truncate">Bất động sản An Gia</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">180.000.000 đ</p>
-                    <div className="flex items-center gap-1 mt-1 text-[10px] text-emerald-600 dark:text-emerald-400">
-                      <Zap className="size-3" />
-                      <span>Sẵn sàng chốt hợp đồng</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Col 3 */}
-                <div className="bg-muted/40 rounded-lg p-2.5 flex flex-col gap-2">
-                  <div className="flex items-center justify-between font-semibold text-[11px] text-muted-foreground">
-                    <span>Thành công</span>
-                    <span className="bg-emerald-500/10 text-emerald-600 px-1.5 py-0.2 rounded font-mono font-bold">
-                      12
-                    </span>
-                  </div>
-                  <div className="bg-card p-2 rounded-md border border-emerald-500/30 shadow-xs">
-                    <p className="font-semibold text-foreground text-xs truncate">Tập đoàn Alpha</p>
-                    <p className="text-[11px] text-success font-semibold mt-0.5">450.000.000 đ</p>
-                    <p className="text-[10px] text-muted-foreground mt-1">Hoàn tất thanh toán</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quick stats footer inside left mockup */}
-              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/50 text-[11px]">
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
-                  <Users className="size-4 text-primary" />
-                  <div>
-                    <p className="font-bold text-foreground">1.420 Khách hàng</p>
-                    <p className="text-muted-foreground text-[10px]">+18% tháng này</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
-                  <Zap className="size-4 text-amber-500" />
-                  <div>
-                    <p className="font-bold text-foreground">94.8% CSAT Score</p>
-                    <p className="text-muted-foreground text-[10px]">Đánh giá 5 sao</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Live AI Chat Widget Mockup (5 cols) */}
-            <div className="lg:col-span-5 bg-card border border-border rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
-              <div className="flex items-center justify-between pb-2.5 border-b border-border">
-                <div className="flex items-center gap-2">
-                  <div className="size-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold">
-                    <Bot className="size-4.5" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-foreground">Trợ lý AI Doanh nghiệp</p>
-                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">● Sẵn sàng tư vấn (RAG 99.2%)</p>
-                  </div>
-                </div>
-                <span className="text-[10px] font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
-                  0.38s
-                </span>
-              </div>
-
-              {/* Chat conversation stream */}
-              <div className="flex flex-col gap-2.5 py-3 text-xs">
-                {/* User msg */}
-                <div className="self-end bg-primary text-primary-foreground p-2.5 rounded-2xl rounded-tr-xs max-w-[85%]">
-                  Chào bot, công ty có hỗ trợ tích hợp livechat vào web WordPress và Next.js không?
-                </div>
-
-                {/* AI msg with RAG citations */}
-                <div className="self-start bg-muted/60 text-foreground p-2.5 rounded-2xl rounded-tl-xs max-w-[95%] border border-border/60">
-                  <p className="leading-relaxed">
-                    Dạ hoàn toàn có ạ! Bạn chỉ cần sao chép <strong>1 dòng mã script</strong> từ mục Cài đặt Widget để nhúng vào WordPress, Next.js hay bất kỳ nền tảng web nào.
-                  </p>
-                  <div className="mt-2 pt-2 border-t border-border/50 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                    <Sparkles className="size-3 text-primary" />
-                    <span>Nguồn trích dẫn: <strong>Tài liệu Hướng dẫn Tích hợp Widget.pdf (Trang 3)</strong></span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Simulated input bar */}
-              <div className="flex items-center gap-1.5 p-1.5 bg-muted/40 border border-border rounded-lg text-xs text-muted-foreground">
-                <span className="flex-1 px-2 text-muted-foreground/70">Nhập tin nhắn để hỏi AI...</span>
-                <div className="size-6 rounded-md bg-primary text-primary-foreground flex items-center justify-center">
-                  <ArrowRight className="size-3" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+          <img
+            src="/landing/hop-thu-ai-va-nhan-vien.png"
+            alt="Hộp thư: trợ lý AI trả lời khách, khách xin gặp người, nhân viên tiếp nhận và trả lời ngay trong cùng hội thoại"
+            width={1280}
+            height={720}
+            className="w-full rounded-b-xl"
+          />
+          <figcaption className="mt-2 text-center text-xs text-muted-foreground">
+            Ảnh chụp từ hệ thống đang chạy: AI tiếp khách, khách xin gặp người, nhân viên nhận và trả lời trong cùng hội thoại.
+          </figcaption>
+        </figure>
       </div>
     </section>
   )

@@ -1,74 +1,41 @@
-import { useState } from 'react'
-import { ArrowRight, Check, Sparkles } from 'lucide-react'
+import { ArrowRight, Check, RefreshCw, Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
+import { useDanhSachGoiQuery } from '@/api/platform'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import type { GoiDichVu } from '@/types/schema'
 
-const plans = [
-  {
-    name: 'Starter',
-    badge: 'Miễn phí Trọn đời',
-    priceMonth: '0 đ',
-    priceYear: '0 đ',
-    period: '/tháng',
-    description: 'Dành cho các doanh nghiệp mới bắt đầu muốn thử nghiệm sức mạnh của AI Chatbot.',
-    highlight: false,
-    ctaText: 'Bắt đầu Miễn phí',
-    ctaVariant: 'outline' as const,
-    features: [
-      '100 cuộc hội thoại AI mỗi tháng',
-      '1 Trợ lý AI & 5 tài liệu RAG Knowledge',
-      'Livechat Widget nhúng website tiêu chuẩn',
-      '1 Tài khoản quản trị CRM',
-      'Bảo mật Multi-tenant RLS',
-      'Hỗ trợ qua cộng đồng & tài liệu',
-    ],
-  },
-  {
-    name: 'Professional',
-    badge: 'Được Khuyên Dùng',
-    priceMonth: '499.000 đ',
-    priceYear: '399.000 đ',
-    period: '/tháng',
-    description: 'Giải pháp hoàn chỉnh cho doanh nghiệp tăng trưởng bứt phá doanh số và tự động hóa CSKH.',
-    highlight: true,
-    ctaText: 'Dùng thử 14 ngày Miễn phí',
-    ctaVariant: 'default' as const,
-    features: [
-      '2.500 cuộc hội thoại AI mỗi tháng',
-      'Không giới hạn tải tài liệu RAG (PDF, DOCX)',
-      'Livechat Widget tùy biến màu sắc & Logo riêng',
-      '5 Tài khoản nhân viên CRM & Phễu Deals Kanban',
-      'Hỗ trợ Tác tử AI gọi công cụ (MCP Tool Calling)',
-      'Báo cáo phân tích chi phí Token & Chỉ số CSAT',
-      'Nhật ký kiểm toán Audit Log tuân thủ NĐ 13',
-      'Hỗ trợ ưu tiên qua Email & Ticket 24/7',
-    ],
-  },
-  {
-    name: 'Enterprise',
-    badge: 'Quy mô Lớn',
-    priceMonth: '1.990.000 đ',
-    priceYear: '1.590.000 đ',
-    period: '/tháng',
-    description: 'Dành cho tập đoàn và chuỗi kinh doanh yêu cầu hiệu năng cao, tùy chỉnh sâu và SLA cam kết.',
-    highlight: false,
-    ctaText: 'Liên hệ Tư vấn',
-    ctaVariant: 'outline' as const,
-    features: [
-      'Không giới hạn cuộc hội thoại AI & Tài liệu',
-      'Tùy biến LLM Fine-tuning theo ngành riêng',
-      'Không giới hạn tài khoản nhân viên & Chi nhánh',
-      'Toàn quyền tích hợp API & Webhook cao cấp',
-      'Cam kết chất lượng dịch vụ SLA 99.9%',
-      'Cơ chế sao lưu & Phục hồi dữ liệu chuyên biệt',
-      'Quản lý chuyên trách (Dedicated Account Manager)',
-    ],
-  },
+/**
+ * Bảng giá ĐỌC TỪ HỆ THỐNG (`GET /api/v1/plans`, công khai) — trước đây ghi tay và lệch hẳn gói thật
+ * (Starter 0đ "trọn đời", Professional 499.000đ…). Quản trị nền tảng đổi giá là trang chủ đổi theo.
+ *
+ * Không có thanh toán theo năm: CSDL chỉ có giá tháng, nên bỏ nút "-20%" từng có ở đây.
+ */
+const GOI_GOI_Y = 'GROWTH'
+
+/** Tính năng có ở MỌI gói — đều đã chạy thật. */
+const CHUNG = [
+  'Khung chat nhúng website',
+  'Hộp thư hợp nhất, chuyển giao AI → nhân viên',
+  'Lead, phễu Deal kéo thả, nhắc việc',
+  'Nhật ký kiểm toán',
 ]
 
+const so = (n: number) => new Intl.NumberFormat('vi-VN').format(n)
+
+function moTa(g: GoiDichVu): string[] {
+  const kenh = (g as GoiDichVu & { maxChannels?: number }).maxChannels
+  return [
+    `${so(g.conversationQuota)} cuộc hội thoại AI mỗi chu kỳ`,
+    g.maxUsers ? `${so(g.maxUsers)} tài khoản nhân viên` : null,
+    g.maxDocuments ? `${so(g.maxDocuments)} tài liệu trong kho tri thức` : null,
+    kenh ? `${so(kenh)} kênh chat` : null,
+  ].filter((x): x is string => x !== null)
+}
+
 export function PricingSection() {
-  const [isYearly, setIsYearly] = useState(false)
+  const goi = useDanhSachGoiQuery()
 
   return (
     <section id="bang-gia" className="py-24 bg-muted/20 border-y border-border/60 relative">
@@ -79,110 +46,87 @@ export function PricingSection() {
             <span>Chi Phí Minh Bạch</span>
           </div>
           <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
-            Bảng Giá Linh Hoạt <br className="hidden sm:inline" />
-            <span className="bg-gradient-to-r from-primary to-indigo-600 bg-clip-text text-transparent">
-              Phù Hợp Mọi Quy Mô Doanh Nghiệp
-            </span>
+            Bảng Giá Theo <span className="text-primary">Số Cuộc Hội Thoại</span>
           </h2>
           <p className="mt-3 text-base text-muted-foreground">
-            Bắt đầu miễn phí hôm nay. Nâng cấp hoặc hủy gói bất cứ lúc nào không ràng buộc.
+            Dùng thử 14 ngày miễn phí, sau đó chọn gói theo lượng khách bạn cần AI tiếp. Hết hạn mức thì hội thoại
+            tự chuyển cho nhân viên — khách không bị bỏ lơ.
           </p>
-
-          {/* Monthly / Yearly Toggle */}
-          <div className="mt-8 flex items-center gap-3 p-1.5 rounded-xl bg-card border border-border shadow-xs">
-            <button
-              type="button"
-              onClick={() => setIsYearly(false)}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                !isYearly ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Thanh toán Hàng tháng
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsYearly(true)}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                isYearly ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <span>Thanh toán Hàng năm</span>
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold px-1.5 py-0.2 rounded-full">
-                -20%
-              </span>
-            </button>
-          </div>
         </div>
 
-        {/* Pricing Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto items-stretch">
-          {plans.map((p, idx) => (
-            <div
-              key={idx}
-              className={`relative rounded-2xl p-7 sm:p-8 flex flex-col justify-between transition-all duration-300 ${
-                p.highlight
-                  ? 'bg-card border-2 border-primary shadow-xl shadow-primary/10 scale-100 md:-translate-y-2'
-                  : 'bg-card border border-border shadow-sm hover:shadow-lg'
-              }`}
-            >
-              {p.highlight && (
-                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-bold px-3.5 py-1 rounded-full shadow-md uppercase tracking-wider">
-                  Phổ Biến Nhất
-                </div>
-              )}
+        <div className={goi.data ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch' : ''}>
+          {goi.isLoading && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-96 rounded-2xl" />
+              ))}
+            </div>
+          )}
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-bold text-foreground">{p.name}</h3>
-                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-muted text-muted-foreground">
-                    {p.badge}
-                  </span>
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground min-h-[36px]">{p.description}</p>
+          {goi.isError && (
+            <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-2xl border bg-card p-8 text-center">
+              <p className="text-sm text-muted-foreground">Chưa tải được bảng giá. Bạn thử lại sau ít phút nhé.</p>
+              <Button variant="outline" size="sm" onClick={() => void goi.refetch()}>
+                <RefreshCw />
+                Thử lại
+              </Button>
+            </div>
+          )}
 
-                {/* Price Display */}
-                <div className="mt-6 flex items-baseline gap-1">
-                  <span className="text-3xl sm:text-4xl font-extrabold text-foreground font-mono">
-                    {isYearly ? p.priceYear : p.priceMonth}
-                  </span>
-                  <span className="text-xs text-muted-foreground font-medium">{p.period}</span>
-                </div>
-
-                {/* Features List */}
-                <div className="mt-6 pt-6 border-t border-border/60">
-                  <p className="text-xs font-semibold text-foreground uppercase tracking-wider mb-3">
-                    Bao gồm các tính năng:
-                  </p>
-                  <ul className="space-y-2.5 text-xs text-muted-foreground">
-                    {p.features.map((feat, fIdx) => (
-                      <li key={fIdx} className="flex items-start gap-2">
+          {goi.data?.map((g) => {
+            const goiY = g.code === GOI_GOI_Y
+            const dungThu = g.code === 'TRIAL'
+            return (
+              <div
+                key={g.code}
+                className={`relative rounded-2xl p-7 flex flex-col justify-between ${
+                  goiY ? 'bg-card border-2 border-primary shadow-xl shadow-primary/10' : 'bg-card border border-border shadow-sm'
+                }`}
+              >
+                {goiY && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-bold px-3.5 py-1 rounded-full shadow-md whitespace-nowrap">
+                    Gợi ý cho đa số SME
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-xl font-bold text-foreground">{g.name}</h3>
+                  <div className="mt-5 flex flex-wrap items-baseline gap-x-1">
+                    <span className="text-2xl xl:text-3xl font-extrabold text-foreground whitespace-nowrap">
+                      {so(g.monthlyPriceVnd)} đ
+                    </span>
+                    <span className="text-xs text-muted-foreground font-medium">
+                      {dungThu ? '/ 14 ngày' : '/ tháng'}
+                    </span>
+                  </div>
+                  <ul className="mt-6 pt-6 border-t border-border/60 space-y-2.5 text-xs">
+                    {[...moTa(g), ...CHUNG].map((t) => (
+                      <li key={t} className="flex items-start gap-2">
                         <Check className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                        <span className="text-foreground/90">{feat}</span>
+                        <span className="text-foreground/90">{t}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
-              </div>
-
-              {/* Action Button */}
-              <div className="mt-8 pt-4">
                 <Button
                   asChild
-                  variant={p.ctaVariant}
+                  variant={goiY ? 'default' : 'outline'}
                   size="lg"
-                  className={`w-full rounded-xl font-semibold ${
-                    p.highlight ? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/20' : ''
-                  }`}
+                  className="mt-8 w-full rounded-xl font-semibold"
                 >
                   <Link to="/dang-ky" className="flex items-center justify-center gap-1.5">
-                    {p.ctaText}
+                    {dungThu ? 'Dùng thử miễn phí' : 'Bắt đầu dùng thử'}
                     <ArrowRight className="size-4" />
                   </Link>
                 </Button>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
+        {goi.data && (
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            Mọi doanh nghiệp bắt đầu bằng 14 ngày dùng thử, sau đó đổi sang gói phù hợp trong phần Cài đặt.
+          </p>
+        )}
       </div>
     </section>
   )

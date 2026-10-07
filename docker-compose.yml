@@ -284,6 +284,11 @@ services:
       VITE_GATEWAY_URL: http://gateway:8080
       VITE_WS_URL: ws://gateway:8080/ws
       VITE_USE_MOCK: "false"
+      # Trang chủ nhúng widget THẬT ở mục "Trải nghiệm Chat" — dùng chung khoá với trang Cửa hàng Demo.
+      # Trống thì trang chủ ẩn khung chat. Hai địa chỉ do TRÌNH DUYỆT truy cập, không phải tên service.
+      VITE_DEMO_WIDGET_KEY: ${DEMO_WIDGET_KEY:-}
+      VITE_WIDGET_SCRIPT_URL: ${WIDGET_SCRIPT_URL:-http://localhost:5174/widget.js}
+      VITE_WIDGET_API_URL: ${WIDGET_PUBLIC_API_URL:-http://localhost:8080}
     volumes:
       - ./web-dashboard:/app
       - /app/node_modules

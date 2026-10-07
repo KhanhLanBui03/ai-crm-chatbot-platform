@@ -44,7 +44,7 @@ export function LandingNavbar() {
               <span className="font-extrabold text-base tracking-tight text-foreground flex items-center gap-1.5">
                 CRM AI Platform
                 <span className="text-[10px] font-semibold tracking-wide uppercase px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                  v2.0 RAG
+                  RAG
                 </span>
               </span>
               <span className="text-[11px] text-muted-foreground font-medium hidden sm:inline-block">
@@ -60,6 +60,12 @@ export function LandingNavbar() {
               className="px-3.5 py-1.5 rounded-lg hover:text-foreground hover:bg-muted/50 transition-colors"
             >
               Tính năng
+            </a>
+            <a
+              href="#cach-hoat-dong"
+              className="px-3.5 py-1.5 rounded-lg hover:text-foreground hover:bg-muted/50 transition-colors"
+            >
+              Cách hoạt động
             </a>
             <a
               href="#ai-rag"
@@ -139,6 +145,13 @@ export function LandingNavbar() {
               className="px-3 py-2 rounded-lg hover:bg-muted text-foreground"
             >
               Tính năng nổi bật
+            </a>
+            <a
+              href="#cach-hoat-dong"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-3 py-2 rounded-lg hover:bg-muted text-foreground"
+            >
+              Cách hoạt động
             </a>
             <a
               href="#ai-rag"

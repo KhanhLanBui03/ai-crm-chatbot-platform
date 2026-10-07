@@ -1,63 +1,64 @@
 import { Activity, Cpu, Globe, ShieldCheck, Sparkles, TrendingUp, Workflow, Zap } from 'lucide-react'
 
+/** Sáu tính năng ĐÃ CHẠY THẬT. Gọi công cụ MCP, phân tích chi phí token… đã cắt khỏi phạm vi nên không quảng cáo. */
 const features = [
   {
     icon: Sparkles,
-    badge: 'Công nghệ Lõi',
-    title: 'AI RAG Engine & Kho Tri Thức Thông Minh',
+    badge: 'Công nghệ lõi',
+    title: 'Trợ lý AI trả lời theo tài liệu của bạn (RAG)',
     description:
-      'Tự động phân tích tài liệu PDF, DOCX, TXT nội bộ thành các vector embeddings trong PostgreSQL pgvector. AI trả lời chính xác dựa trên dữ liệu thật của công ty, có kèm trích dẫn nguồn rõ ràng và không bịa đặt.',
-    tag: 'Độ chính xác 99.2%',
+      'Tải lên PDF, DOCX, TXT, Markdown hoặc HTML. Hệ thống chia đoạn, vector hoá và tìm kết hợp ngữ nghĩa với từ khoá. AI trả lời kèm trích dẫn nguồn; không tìm thấy căn cứ thì nói chưa có thông tin và mời gặp nhân viên.',
+    tag: 'Kèm trích dẫn nguồn',
     className: 'lg:col-span-7',
     gradient: 'from-primary/10 via-primary/5 to-transparent',
   },
   {
     icon: Globe,
-    badge: '1 Dòng Script',
-    title: 'Livechat Widget Nhúng Mọi Website',
+    badge: '1 thẻ script',
+    title: 'Khung chat nhúng website',
     description:
-      'Tùy biến thương hiệu (màu sắc, logo, avatar, lời chào). Nhúng nhanh chóng vào WordPress, Next.js, Shopify, HTML chỉ với 1 đoạn mã script duy nhất.',
-    tag: 'Tương thích 100%',
+      'Tuỳ màu, vị trí, lời chào và tên hiển thị — đổi là áp dụng ngay, không phải dán lại mã. Chỉ chạy trên tên miền đã khai báo. Khách tự để lại tên, số điện thoại kèm đồng ý lưu dữ liệu.',
+    tag: 'Chặn tên miền lạ',
     className: 'lg:col-span-5',
     gradient: 'from-blue-500/10 via-indigo-500/5 to-transparent',
   },
   {
     icon: TrendingUp,
-    badge: 'CRM & Bán Hàng',
-    title: 'Phễu Cơ Hội Kinh Doanh Kanban Trực Quan',
+    badge: 'CRM & bán hàng',
+    title: 'Lead và phễu Deal kéo thả',
     description:
-      'Tự động trích xuất thông tin khách hàng từ cuộc hội thoại chat. Quản lý toàn bộ vòng đời khách hàng từ lúc mới quan tâm đến khi chốt hợp đồng thành công.',
-    tag: 'Tự động bắt Lead',
+      'Tạo lead từ hội thoại chỉ một lần bấm, chuyển thành deal và kéo qua các giai đoạn. Thua bắt buộc ghi lý do, lịch sử lưu thời gian deal nằm ở từng chặng.',
+    tag: 'Kanban kéo thả',
     className: 'lg:col-span-5',
     gradient: 'from-emerald-500/10 via-teal-500/5 to-transparent',
   },
   {
     icon: Workflow,
-    badge: 'Model Context Protocol',
-    title: 'Tác Tử AI Tự Động Hóa Với Giao Thức MCP',
+    badge: 'AI → Nhân viên',
+    title: 'Hộp thư hợp nhất & chuyển giao người thật',
     description:
-      'Tích hợp chuẩn giao thức MCP (Model Context Protocol). Trợ lý AI có thể tự động gọi công cụ tra cứu cơ sở dữ liệu, kiểm tra tồn kho, đặt lịch hẹn và kích hoạt luồng nghiệp vụ.',
-    tag: 'Hành động tự động',
+      'AI chuyển hội thoại cho nhân viên khi khách yêu cầu hoặc khi không chắc câu trả lời. Hệ thống tự giao cho người đang trực, cảnh báo quản trị khi khách chờ quá 5 phút.',
+    tag: 'Không để khách chờ',
     className: 'lg:col-span-7',
     gradient: 'from-primary/10 via-blue-500/5 to-transparent',
   },
   {
     icon: Activity,
-    badge: 'Giám sát chi phí',
-    title: 'Phân Tích Hội Thoại & Chi Phí Token AI',
+    badge: 'Chăm sóc khách',
+    title: 'Hoạt động & nhắc việc',
     description:
-      'Bảng điều khiển trực quan theo dõi số lượng tin nhắn, tỷ lệ tự động giải quyết của Bot, mức độ hài lòng khách hàng (CSAT) và kiểm soát ngân sách token AI theo từng ngày.',
-    tag: 'Kiểm soát thời gian thực',
+      'Ghi cuộc gọi, buổi gặp, báo giá kèm kết quả; đặt giờ nhắc gọi lại. Việc quá hạn nổi bật trong "Việc của tôi" và số đỏ trên menu.',
+    tag: 'Không bỏ sót khách',
     className: 'lg:col-span-6',
     gradient: 'from-amber-500/10 via-orange-500/5 to-transparent',
   },
   {
     icon: ShieldCheck,
-    badge: 'Pháp lý & Bảo mật',
-    title: 'Bảo Mật Multi-Tenant & Nghị Định 13/2023',
+    badge: 'Bảo mật',
+    title: 'Tách dữ liệu & định hướng Nghị định 13/2023',
     description:
-      'Dữ liệu mỗi doanh nghiệp được cô lập tuyệt đối nhờ PostgreSQL RLS (Row-Level Security). Đầy đủ chức năng Nhật ký kiểm toán (Audit Trail) và Quyền yêu cầu xóa dữ liệu cá nhân theo luật định.',
-    tag: 'Tuân thủ NĐ 13/2023',
+      'Dữ liệu mỗi doanh nghiệp tách ở tầng CSDL bằng PostgreSQL Row-Level Security. Thao tác quan trọng ghi nhật ký kiểm toán (không chép dữ liệu cá nhân vào nhật ký); ghi nhận đồng ý của khách trước khi lưu thông tin.',
+    tag: 'Nhật ký kiểm toán',
     className: 'lg:col-span-6',
     gradient: 'from-slate-500/10 via-primary/5 to-transparent',
   },
@@ -120,9 +121,6 @@ export function FeatureBentoGrid() {
                   <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                     <Zap className="size-3.5" />
                     {f.tag}
-                  </span>
-                  <span className="text-primary font-semibold group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                    Khám phá thêm →
                   </span>
                 </div>
               </div>

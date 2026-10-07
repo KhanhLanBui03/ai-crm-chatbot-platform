@@ -3,30 +3,31 @@ import { ChevronDown, HelpCircle } from 'lucide-react'
 
 const faqs = [
   {
-    q: 'Làm thế nào để nạp tài liệu cho AI học (công nghệ RAG)?',
-    a: 'Bạn chỉ cần vào mục "Kho tri thức" trong Dashboard và tải lên các tệp PDF, Word (DOCX) hoặc tài liệu văn bản về sản phẩm/chính sách. Hệ thống tự động phân tích (chunking), tạo vector embeddings và đưa vào cơ sở dữ liệu pgvector. Ngay lập tức AI có thể trả lời khách hàng theo đúng nội dung trong tài liệu.',
+    q: 'Làm thế nào để nạp tài liệu cho AI học (RAG)?',
+    a: 'Vào Tri thức → Tài liệu trên bảng điều khiển và tải lên tệp PDF, DOCX, TXT, Markdown hoặc HTML về sản phẩm, chính sách. Hệ thống chia đoạn, vector hoá rồi mới dùng để trả lời — theo dõi ở mục Tiến độ nạp; xử lý xong thì AI bắt đầu trích dẫn tài liệu đó.',
   },
   {
-    q: 'Nhúng khung chat Livechat vào website mất bao lâu?',
-    a: 'Chỉ mất chưa đầy 1 phút! Tại mục "Cài đặt Widget", bạn sao chép 1 dòng mã script HTML và dán vào phần thẻ <head> hoặc trước thẻ </body> trên website của bạn (hỗ trợ cả WordPress, Shopify, Next.js, React, Vue, HTML tĩnh). Khung chat sẽ xuất hiện ngay lập tức.',
+    q: 'Nhúng khung chat vào website như thế nào?',
+    a: 'Tại Cài đặt → Web Widget, khai báo tên miền website của bạn, bấm "Sinh mã nhúng" rồi dán một thẻ <script> ngay trước thẻ </body>. Website nào cho chèn thẻ script đều dùng được. Widget chỉ hiện trên tên miền đã khai báo — người khác chép mã sang site của họ thì không chạy.',
   },
   {
-    q: 'Dữ liệu của công ty tôi có bị lộ sang các doanh nghiệp khác không?',
-    a: 'Tuyệt đối không! Kiến trúc đa khách thuê (Multi-tenant) của chúng tôi áp dụng cơ chế phân quyền cấp dòng PostgreSQL Row-Level Security (RLS). Mọi câu truy vấn dữ liệu từ API đều được gắn ngữ cảnh tenant_id nghiêm ngặt, đảm bảo dữ liệu mỗi công ty được cô lập 100%.',
+    q: 'AI không trả lời được thì sao?',
+    a: 'AI không đoán bừa: câu hỏi ngoài tài liệu thì nói chưa có thông tin và mời gặp nhân viên. Khách bấm "Gặp nhân viên" (hoặc AI tự chuyển khi không chắc) thì hội thoại vào Hộp thư, giao cho người đang trực; khách có thể để lại số điện thoại để được gọi lại.',
   },
   {
-    q: 'Hệ thống có tuân thủ quy định bảo vệ dữ liệu cá nhân (Nghị định 13/2023) không?',
-    a: 'Có! Hệ thống được thiết kế tuân thủ nghiêm ngặt Nghị định 13/2023/NĐ-CP: toàn bộ thao tác truy xuất dữ liệu đều được ghi nhật ký kiểm toán bất biến (Audit Log) và có sẵn quy trình xử lý quyền yêu cầu xóa dữ liệu cá nhân (Right to be Forgotten).',
+    q: 'Dữ liệu của công ty tôi có bị lẫn sang doanh nghiệp khác không?',
+    a: 'Không. Dữ liệu mỗi doanh nghiệp được tách ngay ở tầng cơ sở dữ liệu bằng PostgreSQL Row-Level Security: mỗi truy vấn chỉ thấy dòng của đúng doanh nghiệp đang đăng nhập, kể cả kho tri thức của AI.',
   },
   {
-    q: 'Trợ lý AI có thể tự động tra cứu đơn hàng hoặc đặt lịch hẹn không?',
-    a: 'Có! Thông qua giao thức chuẩn Model Context Protocol (MCP) và cơ chế Tool Calling, bạn có thể cấp quyền cho AI gọi các API nội bộ để tra cứu trạng thái đơn hàng, kiểm tra lịch trống và tự động tạo lịch hẹn/cơ hội kinh doanh vào CRM.',
+    q: 'Hệ thống xử lý dữ liệu cá nhân theo Nghị định 13/2023 ra sao?',
+    a: 'Khách để lại thông tin phải tích ô đồng ý trước; hồ sơ ghi nhận thời điểm và nguồn đồng ý. Thao tác quan trọng được ghi nhật ký kiểm toán, và nhật ký không chép tên hay số điện thoại của khách. Quy trình yêu cầu xoá dữ liệu cá nhân đang được hoàn thiện.',
   },
   {
-    q: 'Chính sách dùng thử miễn phí như thế nào?',
-    a: 'Khi đăng ký tài khoản mới, bạn được tặng ngay 14 ngày dùng thử miễn phí toàn bộ tính năng cao cấp không giới hạn và không yêu cầu thẻ tín dụng. Sau thời gian dùng thử, bạn có thể tiếp tục sử dụng gói Starter miễn phí hoặc nâng cấp lên gói Pro.',
+    q: 'Chính sách dùng thử như thế nào?',
+    a: 'Đăng ký là được 14 ngày dùng thử miễn phí, không cần thẻ thanh toán, theo hạn mức của gói Dùng thử. Hết hạn thì chọn một gói trả phí trong phần Cài đặt để tiếp tục.',
   },
 ]
+
 
 export function FaqSection() {
   const [openIdx, setOpenIdx] = useState<number | null>(0)

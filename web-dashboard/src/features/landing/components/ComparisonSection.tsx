@@ -4,31 +4,31 @@ const comparisons = [
   {
     criteria: 'Thời gian phản hồi khách hàng',
     traditional: '15 - 30 phút (hoặc hôm sau nếu ngoài giờ)',
-    aiPlatform: '0.4 giây — Tức thì 24/7/365',
+    aiPlatform: 'AI trực 24/7; ngoài giờ vẫn trả lời và báo giờ làm việc',
     highlight: true,
   },
   {
     criteria: 'Khả năng phục vụ đồng thời',
     traditional: 'Chỉ 2 - 3 khách / nhân viên tại một thời điểm',
-    aiPlatform: 'Không giới hạn hàng ngàn khách cùng lúc',
+    aiPlatform: 'AI tiếp nhiều khách song song, chỉ chuyển người khi cần',
     highlight: true,
   },
   {
     criteria: 'Độ chuẩn xác thông tin sản phẩm',
     traditional: 'Dễ nhầm lẫn, phụ thuộc trí nhớ nhân sự mới',
-    aiPlatform: 'Chuẩn xác 99.2% theo tài liệu RAG chính thức',
+    aiPlatform: 'Trả lời theo tài liệu chính thức, kèm trích dẫn nguồn',
     highlight: false,
   },
   {
     criteria: 'Thu thập & Phân loại Khách hàng tiềm năng',
     traditional: 'Nhập tay vào Excel, dễ bỏ sót khách nóng',
-    aiPlatform: 'Tự động trích xuất thông tin & đưa vào phễu CRM',
+    aiPlatform: 'Tạo lead từ hội thoại một bấm; khách tự để lại SĐT kèm đồng ý',
     highlight: true,
   },
   {
     criteria: 'Chi phí vận hành ca đêm & ngày lễ',
     traditional: 'Tốn kém chi phí nhân sự trực ca 24/7',
-    aiPlatform: 'Tiết kiệm tới 80% ngân sách vận hành CSKH',
+    aiPlatform: 'AI trực ca đêm, nhân viên xử lý phần cần người trong giờ làm',
     highlight: true,
   },
 ]

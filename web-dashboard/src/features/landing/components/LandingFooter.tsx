@@ -63,7 +63,7 @@ export function LandingFooter() {
               </span>
             </Link>
             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-sm mt-1">
-              Nền tảng Tự động hóa Chăm sóc Khách hàng & Quản lý Bán hàng đa khách thuê (Multi-Tenant SaaS) ứng dụng AI RAG và giao thức MCP.
+              Nền tảng Tự động hóa Chăm sóc Khách hàng & Quản lý Bán hàng đa khách thuê (Multi-Tenant SaaS) ứng dụng trợ lý AI trả lời theo tài liệu (RAG).
             </p>
             <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
               <ShieldCheck className="size-4 text-emerald-600 dark:text-emerald-400" />
