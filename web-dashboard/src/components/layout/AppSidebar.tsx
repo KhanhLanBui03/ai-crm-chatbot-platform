@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   BarChart3,
   BookOpen,
@@ -50,6 +50,7 @@ import {
   SidebarMenuSubItem,
   SidebarSeparator,
 } from '@/components/ui/sidebar'
+import { cn } from '@/utils/cn'
 import { chuCaiDau, vietTatDoanhNghiep } from '@/utils/ten'
 
 /**
@@ -113,6 +114,24 @@ const MUC_PHAN_TICH = [
   { duongDan: '/phan-tich/hieu-qua-ai', nhan: 'Hiệu quả tác tử AI' },
 ] as const
 
+const KHOA_NHOM_MO = 'crm-sidebar-nhom-mo'
+
+function docNhomMo(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(KHOA_NHOM_MO) ?? '{}') as Record<string, boolean>
+  } catch {
+    return {}
+  }
+}
+
+function luuNhomMo(v: Record<string, boolean>): void {
+  try {
+    localStorage.setItem(KHOA_NHOM_MO, JSON.stringify(v))
+  } catch {
+    /* chế độ riêng tư chặn localStorage — vẫn dùng được, chỉ không nhớ */
+  }
+}
+
 export function AppSidebar() {
   const nguoiDung = useAppSelector((s) => s.auth.nguoiDung)
   const viTri = useLocation()
@@ -138,6 +157,38 @@ export function AppSidebar() {
   const moTriThuc = viTri.pathname.startsWith('/tri-thuc')
   const moTacTu = viTri.pathname.startsWith('/tac-tu-ai')
   const moKiemToan = viTri.pathname.startsWith('/kiem-toan')
+
+  /**
+   * Nhóm con thu gọn được. Chưa từng bấm thì chỉ mở nhóm chứa trang đang xem; đã bấm thì theo lựa chọn
+   * (nhớ qua lần tải sau). Đi tới một trang thuộc nhóm đang đóng thì tự mở nhóm đó — không để trang đang
+   * xem bị giấu trong nhóm đã thu gọn.
+   */
+  const [nhomMo, datNhomMo] = useState<Record<string, boolean>>(docNhomMo)
+  const laMo = (khoa: string, dangO: boolean) => nhomMo[khoa] ?? dangO
+  const doiNhom = (khoa: string, dangO: boolean) =>
+    datNhomMo((cu) => {
+      const moi = { ...cu, [khoa]: !(cu[khoa] ?? dangO) }
+      luuNhomMo(moi)
+      return moi
+    })
+  const dangOTrongNhom: Record<string, boolean> = {
+    'ban-hang': moBanHang,
+    'tri-thuc': moTriThuc,
+    'tac-tu-ai': moTacTu,
+    'phan-tich': moPhanTich,
+    'kiem-toan': moKiemToan,
+  }
+  const nhomCuaTrang = Object.keys(dangOTrongNhom).find((k) => dangOTrongNhom[k])
+  useEffect(() => {
+    if (nhomCuaTrang && nhomMo[nhomCuaTrang] === false) {
+      datNhomMo((cu) => {
+        const moi = { ...cu, [nhomCuaTrang]: true }
+        luuNhomMo(moi)
+        return moi
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nhomCuaTrang])
 
   // Số lời gọi công cụ đang chờ duyệt lấy thẳng từ cache RTK Query — cùng truy vấn với SCR035,
   // nên mở thanh bên không tốn thêm một lượt gọi mạng nào.
@@ -200,11 +251,18 @@ export function AppSidebar() {
               )}
 
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={moBanHang}>
+                <SidebarMenuButton
+                  isActive={moBanHang}
+                  aria-expanded={laMo('ban-hang', moBanHang)}
+                  onClick={() => doiNhom('ban-hang', moBanHang)}
+                >
                   <TrendingUp />
                   <span>Bán hàng</span>
-                  <ChevronDown className="ml-auto" />
+                  <ChevronDown
+                    className={cn('ml-auto transition-transform', !laMo('ban-hang', moBanHang) && '-rotate-90')}
+                  />
                 </SidebarMenuButton>
+                {laMo('ban-hang', moBanHang) && (
                 <SidebarMenuSub>
                   {MUC_BAN_HANG.map(({ duongDan, nhan }) => (
                     <SidebarMenuSubItem key={duongDan}>
@@ -224,14 +282,22 @@ export function AppSidebar() {
                     </SidebarMenuSubItem>
                   ))}
                 </SidebarMenuSub>
+                )}
               </SidebarMenuItem>
 
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={moTriThuc}>
+                <SidebarMenuButton
+                  isActive={moTriThuc}
+                  aria-expanded={laMo('tri-thuc', moTriThuc)}
+                  onClick={() => doiNhom('tri-thuc', moTriThuc)}
+                >
                   <BookOpen />
                   <span>Tri thức</span>
-                  <ChevronDown className="ml-auto" />
+                  <ChevronDown
+                    className={cn('ml-auto transition-transform', !laMo('tri-thuc', moTriThuc) && '-rotate-90')}
+                  />
                 </SidebarMenuButton>
+                {laMo('tri-thuc', moTriThuc) && (
                 <SidebarMenuSub>
                   {MUC_TRI_THUC.map(({ duongDan, nhan }) => (
                     <SidebarMenuSubItem key={duongDan}>
@@ -241,16 +307,24 @@ export function AppSidebar() {
                     </SidebarMenuSubItem>
                   ))}
                 </SidebarMenuSub>
+                )}
               </SidebarMenuItem>
 
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={moTacTu}>
+                <SidebarMenuButton
+                  isActive={moTacTu}
+                  aria-expanded={laMo('tac-tu-ai', moTacTu)}
+                  onClick={() => doiNhom('tac-tu-ai', moTacTu)}
+                >
                   <Sparkles />
                   <span>Tác tử AI</span>
-                  <ChevronDown className="ml-auto" />
+                  <ChevronDown
+                    className={cn('ml-auto transition-transform', !laMo('tac-tu-ai', moTacTu) && '-rotate-90', soChoDuyet > 0 && 'mr-6')}
+                  />
                 </SidebarMenuButton>
                 {/* Huy hiệu là số lời gọi công cụ đang chờ duyệt — tác tử dừng lại tới khi có người bấm */}
                 {soChoDuyet > 0 && <SidebarMenuBadge>{soChoDuyet}</SidebarMenuBadge>}
+                {laMo('tac-tu-ai', moTacTu) && (
                 <SidebarMenuSub>
                   {MUC_TAC_TU.map(({ duongDan, nhan }) => (
                     <SidebarMenuSubItem key={duongDan}>
@@ -260,14 +334,22 @@ export function AppSidebar() {
                     </SidebarMenuSubItem>
                   ))}
                 </SidebarMenuSub>
+                )}
               </SidebarMenuItem>
 
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={moPhanTich}>
+                <SidebarMenuButton
+                  isActive={moPhanTich}
+                  aria-expanded={laMo('phan-tich', moPhanTich)}
+                  onClick={() => doiNhom('phan-tich', moPhanTich)}
+                >
                   <BarChart3 />
                   <span>Phân tích</span>
-                  <ChevronDown className="ml-auto" />
+                  <ChevronDown
+                    className={cn('ml-auto transition-transform', !laMo('phan-tich', moPhanTich) && '-rotate-90')}
+                  />
                 </SidebarMenuButton>
+                {laMo('phan-tich', moPhanTich) && (
                 <SidebarMenuSub>
                   {MUC_PHAN_TICH.map(({ duongDan, nhan }) => (
                     <SidebarMenuSubItem key={duongDan}>
@@ -277,14 +359,22 @@ export function AppSidebar() {
                     </SidebarMenuSubItem>
                   ))}
                 </SidebarMenuSub>
+                )}
               </SidebarMenuItem>
 
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={moKiemToan}>
+                <SidebarMenuButton
+                  isActive={moKiemToan}
+                  aria-expanded={laMo('kiem-toan', moKiemToan)}
+                  onClick={() => doiNhom('kiem-toan', moKiemToan)}
+                >
                   <ScrollText />
                   <span>Kiểm toán</span>
-                  <ChevronDown className="ml-auto" />
+                  <ChevronDown
+                    className={cn('ml-auto transition-transform', !laMo('kiem-toan', moKiemToan) && '-rotate-90')}
+                  />
                 </SidebarMenuButton>
+                {laMo('kiem-toan', moKiemToan) && (
                 <SidebarMenuSub>
                   {MUC_KIEM_TOAN.map(({ duongDan, nhan }) => (
                     <SidebarMenuSubItem key={duongDan}>
@@ -294,6 +384,7 @@ export function AppSidebar() {
                     </SidebarMenuSubItem>
                   ))}
                 </SidebarMenuSub>
+                )}
               </SidebarMenuItem>
 
               <SidebarSeparator />
