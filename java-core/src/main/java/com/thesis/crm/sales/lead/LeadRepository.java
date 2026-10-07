@@ -198,6 +198,14 @@ public class LeadRepository {
                         .addValue("reason", disqualifiedReason));
     }
 
+    /** UC033 — lead đã thành deal: khoá lại, giữ bản ghi (đặc tả b7). */
+    public void markConverted(UUID tenantId, UUID leadId, UUID ownerUserId) {
+        jdbc.update("""
+                UPDATE sales.leads SET status = 'CONVERTED', converted_at = now(), owner_user_id = :owner
+                WHERE tenant_id = :t AND id = :id""",
+                new MapSqlParameterSource("t", tenantId).addValue("id", leadId).addValue("owner", ownerUserId));
+    }
+
     // ── tiện ích ────────────────────────────────────────────────────────────────
 
     private static LeadRow map(ResultSet rs, int i) throws SQLException {

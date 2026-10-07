@@ -7,6 +7,10 @@ import com.thesis.crm.common.audit.AuditLogWriter;
 import com.thesis.crm.common.exception.BusinessException;
 import com.thesis.crm.common.response.PageResponse;
 import com.thesis.crm.engagement.util.ContactNormalizer;
+import com.thesis.crm.sales.deal.DealDtos.ConvertRequest;
+import com.thesis.crm.sales.deal.DealDtos.ConvertResult;
+import com.thesis.crm.sales.deal.DealDtos.DealDto;
+import com.thesis.crm.sales.deal.DealService;
 import com.thesis.crm.sales.lead.LeadDtos.CreateLeadRequest;
 import com.thesis.crm.sales.lead.LeadDtos.LeadDetail;
 import com.thesis.crm.sales.lead.LeadDtos.LeadDto;
@@ -79,14 +83,16 @@ public class LeadService {
     private final AuditLogWriter audit;
     private final ObjectMapper json;
     private final JdbcTemplate jdbc;
+    private final DealService deals;
 
     public LeadService(LeadRepository repo, TenantTransactionScope scope, AuditLogWriter audit, ObjectMapper json,
-                       JdbcTemplate jdbc) {
+                       JdbcTemplate jdbc, DealService deals) {
         this.repo = repo;
         this.scope = scope;
         this.audit = audit;
         this.json = json;
         this.jdbc = jdbc;
+        this.deals = deals;
     }
 
     // ── đọc ─────────────────────────────────────────────────────────────────────
@@ -319,6 +325,61 @@ public class LeadService {
                     Map.of("fields", changedFields));
         }
         return detailOf(tenantId, require(tenantId, leadId));
+    }
+
+    // ── chuyển thành deal (UC033) ───────────────────────────────────────────────
+
+    /**
+     * Một transaction: tạo deal + ghi lịch sử giai đoạn đầu + đóng lead. Deal vào giai đoạn mở đầu tiên
+     * của phễu mặc định nếu không chỉ định; người phụ trách = người phụ trách lead (chưa ai thì người bấm).
+     * Khách đã có deal mở thì VẪN tạo, chỉ cảnh báo — một khách mua nhiều lần là bình thường.
+     */
+    @Transactional
+    public ConvertResult convert(UUID tenantId, Actor actor, UUID leadId, ConvertRequest r) {
+        scope.apply(tenantId);
+        if (!repo.lock(tenantId, leadId)) {
+            throw notFound();
+        }
+        LeadRow cur = require(tenantId, leadId);
+        if ("CONVERTED".equals(cur.status())) {
+            throw new BusinessException(HttpStatus.CONFLICT, "LEAD_ALREADY_CONVERTED",
+                    "Lead đã được chuyển thành Deal.");
+        }
+        if ("DISQUALIFIED".equals(cur.status())) {
+            throw new BusinessException(HttpStatus.CONFLICT, "LEAD_DISQUALIFIED",
+                    "Lead đã bị loại — mở lại lead trước khi chuyển thành Deal.");
+        }
+        if (!actor.admin() && cur.ownerUserId() != null && !cur.ownerUserId().equals(actor.userId())) {
+            throw forbidden("Lead đang do " + nameOr(cur.ownerName()) + " phụ trách.");
+        }
+        ConvertRequest req = r == null ? new ConvertRequest(null, null, null, null, null) : r;
+        String title = req.title() == null || req.title().isBlank()
+                ? cur.contactName() + (cur.interestedProduct() == null ? "" : " – " + cur.interestedProduct())
+                : req.title();
+        if (title.codePointCount(0, title.length()) > 200) {
+            title = new String(title.codePoints().limit(200).toArray(), 0, 200);
+        }
+        UUID owner = cur.ownerUserId() != null ? cur.ownerUserId() : actor.userId();
+        String source = "AI_AUTO".equals(cur.source()) ? "AI_LEAD" : "MANUAL";
+
+        int openDeals = deals.openDealsOfContact(tenantId, cur.contactId());
+        DealDto deal = deals.createFromLead(tenantId, actor, cur.contactId(), leadId, req.pipelineId(),
+                req.stageId(), title, req.amount(), req.expectedCloseDate(), source, owner);
+        repo.markConverted(tenantId, leadId, owner);
+
+        audit.recordUserAction(tenantId, actor.userId(), "LEAD_CONVERTED", "LEAD", leadId,
+                Map.of("dealId", deal.id().toString()));
+        if (cur.ownerUserId() == null) {
+            Map<String, Object> d = new LinkedHashMap<>();
+            d.put("fromUserId", null);
+            d.put("toUserId", owner.toString());
+            d.put("via", actor.admin() ? "ADMIN" : "CLAIM");
+            audit.recordUserAction(tenantId, actor.userId(), "LEAD_ASSIGNED", "LEAD", leadId, d);
+        }
+        List<String> warnings = openDeals > 0
+                ? List.of("Khách này đang có " + openDeals + " deal khác chưa đóng.")
+                : List.of();
+        return new ConvertResult(deal, toDto(require(tenantId, leadId)), warnings);
     }
 
     // ── nội bộ ──────────────────────────────────────────────────────────────────

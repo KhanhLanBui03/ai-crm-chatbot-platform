@@ -7,6 +7,8 @@ import static com.thesis.crm.security.CurrentActor.requireUserId;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.thesis.crm.common.response.ApiResponse;
 import com.thesis.crm.common.response.PageResponse;
+import com.thesis.crm.sales.deal.DealDtos.ConvertRequest;
+import com.thesis.crm.sales.deal.DealDtos.ConvertResult;
 import com.thesis.crm.sales.lead.LeadDtos.CreateLeadRequest;
 import com.thesis.crm.sales.lead.LeadDtos.LeadDetail;
 import com.thesis.crm.sales.lead.LeadDtos.LeadDto;
@@ -66,6 +68,14 @@ public class LeadController {
     @PatchMapping("/{leadId}")
     public ResponseEntity<ApiResponse<LeadDetail>> update(@PathVariable UUID leadId, @RequestBody JsonNode body) {
         return ResponseEntity.ok(ApiResponse.ok(service.update(requireTenantId(), actor(), leadId, body)));
+    }
+
+    /** UC033 — chuyển lead thành deal. */
+    @PostMapping("/{leadId}/convert")
+    public ResponseEntity<ApiResponse<ConvertResult>> convert(@PathVariable UUID leadId,
+                                                              @RequestBody(required = false) ConvertRequest body) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok(service.convert(requireTenantId(), actor(), leadId, body)));
     }
 
     @GetMapping("/{leadId}/scores")
