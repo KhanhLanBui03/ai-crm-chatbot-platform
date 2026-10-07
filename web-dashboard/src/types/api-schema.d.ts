@@ -3787,6 +3787,20 @@ export interface paths {
                         };
                     };
                 };
+                403: components["responses"]["KhongDuQuyen"];
+                404: components["responses"]["KhongThay"];
+                /**
+                 * @description `LEAD_ALREADY_OPEN` — khách đã có một lead đang mở (Mới / Đã liên hệ / Đủ tiềm năng). Mỗi
+                 *     khách tối đa một lead mở (chỉ mục duy nhất V132). `data` là `LeadDangMo` để giao diện dẫn
+                 *     tới lead cũ.
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                422: components["responses"]["DuLieuKhongHopLe"];
             };
         };
         delete?: never;
@@ -3843,6 +3857,15 @@ export interface paths {
          * Cập nhật cơ hội tiềm năng
          * @description Chuyển sang `DISQUALIFIED` **bắt buộc** kèm `disqualifyReason` — nhãn này là phản hồi phục
          *     vụ cải tiến mô hình chấm điểm, bỏ trống là mất dữ liệu học.
+         *
+         *     UC032 — luật đã chốt:
+         *     - **Đi tới, được bỏ bước:** NEW → CONTACTED → QUALIFIED, không lùi. Loại được từ mọi trạng
+         *       thái mở; lead đã loại chỉ mở lại về NEW (xoá lý do loại). `CONVERTED` chỉ đặt qua
+         *       `/convert` (UC033) và khoá luôn. Chuyển sai → 422 `INVALID_TRANSITION`, `data` là
+         *       `LoiChuyenTrangThai`.
+         *     - **Quyền:** nhân viên sửa lead của mình hoặc lead chưa ai nhận (sửa lead chưa ai nhận = tự
+         *       nhận). Chỉ quản trị viên đổi `ownerUserId` sang người khác hoặc bỏ trống.
+         *     - Trường không gửi thì giữ nguyên; gửi `null` là xoá giá trị.
          */
         patch: {
             parameters: {
@@ -3869,6 +3892,18 @@ export interface paths {
                             data?: components["schemas"]["LeadChiTiet"];
                         };
                     };
+                };
+                403: components["responses"]["KhongDuQuyen"];
+                404: components["responses"]["KhongThay"];
+                /**
+                 * @description `LEAD_CONVERTED` (đã thành Deal, không sửa), `LEAD_DISQUALIFIED` (đã loại — mở lại trước
+                 *     khi sửa thông tin), `LEAD_ALREADY_OPEN` (mở lại khi khách đã có lead mở khác).
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
                 422: components["responses"]["DuLieuKhongHopLe"];
             };
@@ -6041,7 +6076,7 @@ export interface components {
         };
         LeadChiTiet: components["schemas"]["Lead"] & {
             latestScore?: components["schemas"]["DiemLead"] | null;
-            disqualifyReason?: string | null;
+            disqualifyReason?: components["schemas"]["LyDoLoaiLead"] | null;
             /** Format: uuid */
             convertedDealId?: string | null;
             /** Format: date-time */
@@ -6049,6 +6084,33 @@ export interface components {
             activityCount?: number;
             /** Format: date-time */
             closedAt?: string | null;
+            /**
+             * @description Trạng thái được phép đi tiếp (UC032 luồng 8.2). Giao diện chỉ hiện đúng các nút này,
+             *     không tự suy luật chuyển trạng thái lần thứ hai.
+             */
+            allowedNextStatuses: components["schemas"]["TrangThaiLead"][];
+        };
+        /**
+         * @description Danh sách cố định để làm nhãn học cho mô hình chấm điểm (UC030) — chữ tự do không học được.
+         *     Không có ngân sách · Không có nhu cầu thật · Đã mua bên khác · Không liên lạc được ·
+         *     Thông tin sai/spam · Khác.
+         * @enum {string}
+         */
+        LyDoLoaiLead: "NO_BUDGET" | "NO_NEED" | "BOUGHT_ELSEWHERE" | "UNREACHABLE" | "SPAM" | "OTHER";
+        /** @description Ngữ cảnh của 409 `LEAD_ALREADY_OPEN`. */
+        LeadDangMo: {
+            /** Format: uuid */
+            leadId: string;
+            status: components["schemas"]["TrangThaiLead"];
+            /** Format: uuid */
+            ownerUserId?: string | null;
+            ownerName?: string | null;
+        };
+        /** @description Ngữ cảnh của 422 `INVALID_TRANSITION`. */
+        LoiChuyenTrangThai: {
+            from: components["schemas"]["TrangThaiLead"];
+            to: components["schemas"]["TrangThaiLead"];
+            allowedNextStatuses: components["schemas"]["TrangThaiLead"][];
         };
         DiemLead: {
             score: number;
@@ -6081,10 +6143,18 @@ export interface components {
         /**
          * @description Không có `tenantId` — khớp `CreateLeadRequest` đã có trong mã java-core, nơi trường này
          *     được cố ý bỏ đi. `source` luôn là `MANUAL`; cơ hội do tác tử AI tạo đi qua `/internal/leads`.
+         *
+         *     `ownerUserId` để trống = người tạo phụ trách; chỉ quản trị viên chọn được người khác.
          */
         TaoLeadRequest: {
             /** Format: uuid */
             contactId: string;
+            /**
+             * Format: uuid
+             * @description Nút "Tạo lead" trong Hộp thư gửi kèm hội thoại đang mở. Hội thoại phải thuộc đúng khách
+             *     `contactId` — không thì 422 (ghi sai nguồn là truy ngược doanh thu về sai cuộc trò chuyện).
+             */
+            sourceConversationId?: string | null;
             interestedProduct?: string | null;
             budgetMin?: number | null;
             budgetMax?: number | null;
@@ -6100,8 +6170,8 @@ export interface components {
             urgency?: components["schemas"]["MucDo"];
             /** Format: uuid */
             ownerUserId?: string | null;
-            /** @description **Bắt buộc** khi `status = DISQUALIFIED` — nhãn này là dữ liệu học của mô hình chấm điểm. */
-            disqualifyReason?: string | null;
+            /** @description **Bắt buộc** khi `status = DISQUALIFIED` — nhãn này là dữ liệu học của mô hình chấm điểm. Gửi khi trạng thái khác → 422. */
+            disqualifyReason?: components["schemas"]["LyDoLoaiLead"] | null;
         };
         ChuyenDoiLeadResult: {
             deal: components["schemas"]["Deal"];

@@ -2290,6 +2290,14 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/ApiResponse'
                   - properties: { data: { $ref: '#/components/schemas/Lead' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '404': { $ref: '#/components/responses/KhongThay' }
+        '409':
+          description: |
+            `LEAD_ALREADY_OPEN` — khách đã có một lead đang mở (Mới / Đã liên hệ / Đủ tiềm năng). Mỗi
+            khách tối đa một lead mở (chỉ mục duy nhất V132). `data` là `LeadDangMo` để giao diện dẫn
+            tới lead cũ.
+        '422': { $ref: '#/components/responses/DuLieuKhongHopLe' }
 
   /api/v1/leads/{leadId}:
     parameters:
@@ -2316,6 +2324,15 @@ paths:
       description: |
         Chuyển sang `DISQUALIFIED` **bắt buộc** kèm `disqualifyReason` — nhãn này là phản hồi phục
         vụ cải tiến mô hình chấm điểm, bỏ trống là mất dữ liệu học.
+
+        UC032 — luật đã chốt:
+        - **Đi tới, được bỏ bước:** NEW → CONTACTED → QUALIFIED, không lùi. Loại được từ mọi trạng
+          thái mở; lead đã loại chỉ mở lại về NEW (xoá lý do loại). `CONVERTED` chỉ đặt qua
+          `/convert` (UC033) và khoá luôn. Chuyển sai → 422 `INVALID_TRANSITION`, `data` là
+          `LoiChuyenTrangThai`.
+        - **Quyền:** nhân viên sửa lead của mình hoặc lead chưa ai nhận (sửa lead chưa ai nhận = tự
+          nhận). Chỉ quản trị viên đổi `ownerUserId` sang người khác hoặc bỏ trống.
+        - Trường không gửi thì giữ nguyên; gửi `null` là xoá giá trị.
       requestBody:
         required: true
         content:
@@ -2330,6 +2347,12 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/ApiResponse'
                   - properties: { data: { $ref: '#/components/schemas/LeadChiTiet' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '404': { $ref: '#/components/responses/KhongThay' }
+        '409':
+          description: |
+            `LEAD_CONVERTED` (đã thành Deal, không sửa), `LEAD_DISQUALIFIED` (đã loại — mở lại trước
+            khi sửa thông tin), `LEAD_ALREADY_OPEN` (mở lại khi khách đã có lead mở khác).
         '422': { $ref: '#/components/responses/DuLieuKhongHopLe' }
 
   /api/v1/leads/{leadId}/scores:
@@ -4421,11 +4444,50 @@ components:
               oneOf:
                 - { $ref: '#/components/schemas/DiemLead' }
                 - { type: 'null' }
-            disqualifyReason: { type: [string, 'null'] }
+            disqualifyReason:
+              oneOf:
+                - { $ref: '#/components/schemas/LyDoLoaiLead' }
+                - { type: 'null' }
             convertedDealId: { type: [string, 'null'], format: uuid }
             convertedAt: { type: [string, 'null'], format: date-time }
             activityCount: { type: integer }
             closedAt: { type: [string, 'null'], format: date-time }
+            allowedNextStatuses:
+              type: array
+              description: |
+                Trạng thái được phép đi tiếp (UC032 luồng 8.2). Giao diện chỉ hiện đúng các nút này,
+                không tự suy luật chuyển trạng thái lần thứ hai.
+              items: { $ref: '#/components/schemas/TrangThaiLead' }
+          required: [allowedNextStatuses]
+
+    LyDoLoaiLead:
+      type: string
+      description: |
+        Danh sách cố định để làm nhãn học cho mô hình chấm điểm (UC030) — chữ tự do không học được.
+        Không có ngân sách · Không có nhu cầu thật · Đã mua bên khác · Không liên lạc được ·
+        Thông tin sai/spam · Khác.
+      enum: [NO_BUDGET, NO_NEED, BOUGHT_ELSEWHERE, UNREACHABLE, SPAM, OTHER]
+
+    LeadDangMo:
+      type: object
+      description: Ngữ cảnh của 409 `LEAD_ALREADY_OPEN`.
+      required: [leadId, status]
+      properties:
+        leadId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/TrangThaiLead' }
+        ownerUserId: { type: [string, 'null'], format: uuid }
+        ownerName: { type: [string, 'null'] }
+
+    LoiChuyenTrangThai:
+      type: object
+      description: Ngữ cảnh của 422 `INVALID_TRANSITION`.
+      required: [from, to, allowedNextStatuses]
+      properties:
+        from: { $ref: '#/components/schemas/TrangThaiLead' }
+        to: { $ref: '#/components/schemas/TrangThaiLead' }
+        allowedNextStatuses:
+          type: array
+          items: { $ref: '#/components/schemas/TrangThaiLead' }
 
     DiemLead:
       type: object
@@ -4466,9 +4528,17 @@ components:
       description: |
         Không có `tenantId` — khớp `CreateLeadRequest` đã có trong mã java-core, nơi trường này
         được cố ý bỏ đi. `source` luôn là `MANUAL`; cơ hội do tác tử AI tạo đi qua `/internal/leads`.
+
+        `ownerUserId` để trống = người tạo phụ trách; chỉ quản trị viên chọn được người khác.
       required: [contactId]
       properties:
         contactId: { type: string, format: uuid }
+        sourceConversationId:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            Nút "Tạo lead" trong Hộp thư gửi kèm hội thoại đang mở. Hội thoại phải thuộc đúng khách
+            `contactId` — không thì 422 (ghi sai nguồn là truy ngược doanh thu về sai cuộc trò chuyện).
         interestedProduct: { type: [string, 'null'], maxLength: 200 }
         budgetMin: { type: [number, 'null'] }
         budgetMax: { type: [number, 'null'] }
@@ -4485,9 +4555,10 @@ components:
         urgency: { $ref: '#/components/schemas/MucDo' }
         ownerUserId: { type: [string, 'null'], format: uuid }
         disqualifyReason:
-          type: [string, 'null']
-          maxLength: 60
-          description: '**Bắt buộc** khi `status = DISQUALIFIED` — nhãn này là dữ liệu học của mô hình chấm điểm.'
+          oneOf:
+            - { $ref: '#/components/schemas/LyDoLoaiLead' }
+            - { type: 'null' }
+          description: '**Bắt buộc** khi `status = DISQUALIFIED` — nhãn này là dữ liệu học của mô hình chấm điểm. Gửi khi trạng thái khác → 422.'
 
     ChuyenDoiLeadResult:
       type: object

@@ -1,4 +1,3 @@
-import type { SortingState } from '@tanstack/react-table'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { vi } from 'date-fns/locale'
 import { Sparkles, Target, TriangleAlert } from 'lucide-react'
@@ -6,6 +5,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { useDanhSachLeadQuery, type BoLocLead } from '@/api/sales'
+import { useAppSelector } from '@/app/store/hooks'
 import { ListPage } from '@/components/layout/ListPage'
 import type { CotBang } from '@/components/ui/data-table'
 import { StatusChip } from '@/components/ui/status-chip'
@@ -24,32 +24,27 @@ import type { Lead } from '@/types/schema'
  * Sắp mặc định theo **điểm giảm dần**, không phải theo ngày tạo: giá trị của màn này là trả lời
  * "gọi ai trước", và câu trả lời đó nằm ở điểm chứ không ở thứ tự thời gian.
  *
- * Cột điểm hiện cả **độ tin cậy**: điểm 90 với `confidence = LOW` nghĩa là mô hình thiếu đặc
- * trưng bắt buộc, con số đó không dùng để ra quyết định được. Giấu nó đi là để nhân viên tin vào
- * một con số không có căn cứ.
+ * Thứ tự do MÁY CHỦ quyết định (điểm giảm dần, lead chưa chấm điểm xếp cuối — UC032 bước 3), nên
+ * các cột không bấm để sắp: sắp lại trên một trang 10 dòng là sắp sai cả danh sách.
  */
 export function LeadsPage() {
   const dieuHuong = useNavigate()
   const [moTao, datMoTao] = useState(false)
   const [boLoc, datBoLoc] = useState<BoLocLead>({ trang: 0 })
-  const [sapXep, datSapXep] = useState<SortingState>([{ id: 'currentScore', desc: true }])
+  const toi = useAppSelector((s) => s.auth.nguoiDung)
 
-  const truyVan = useDanhSachLeadQuery({
-    ...boLoc,
-    sapXep: sapXep[0] ? `${sapXep[0].desc ? '-' : ''}${sapXep[0].id}` : undefined,
-  })
+  const truyVan = useDanhSachLeadQuery(boLoc)
 
   const cot = useMemo<CotBang<Lead>[]>(
-    () => [
+    () => ([
       {
         id: 'currentScore',
         accessorKey: 'currentScore',
         header: 'Điểm',
-        enableSorting: true,
         cell: ({ row }) => {
           const l = row.original
           if (l.currentScore == null) {
-            return <span className="text-muted-foreground text-[13px]">Chưa chấm</span>
+            return <span className="text-muted-foreground text-[13px]">Chưa chấm điểm</span>
           }
           return (
             <StatusChip sacThai={sacThaiDiem(l.currentScore)}>
@@ -62,7 +57,6 @@ export function LeadsPage() {
         id: 'contactName',
         accessorKey: 'contactName',
         header: 'Khách hàng',
-        enableSorting: true,
         cell: ({ row }) => {
           const l = row.original
           return (
@@ -154,7 +148,6 @@ export function LeadsPage() {
         id: 'createdAt',
         accessorKey: 'createdAt',
         header: 'Tạo lúc',
-        enableSorting: true,
         cell: ({ row }) => (
           <span className="text-muted-foreground tabular-nums">
             {formatDistanceToNowStrict(new Date(row.original.createdAt), {
@@ -164,21 +157,21 @@ export function LeadsPage() {
           </span>
         ),
       },
-    ],
+    ] satisfies CotBang<Lead>[]).map((c): CotBang<Lead> => ({ ...c, enableSorting: false })),
     [],
   )
 
   return (
     <>
       <ListPage
-        tieuDe="Cơ hội tiềm năng"
+        tieuDe="Lead"
         moTa="Sắp theo điểm giảm dần — trả lời câu hỏi gọi ai trước, không phải ai đến trước."
         cot={cot}
         trang={truyVan.data}
         dangTai={truyVan.isLoading}
         onChonDong={(l) => dieuHuong(`/ban-hang/co-hoi-tiem-nang/${l.id}`)}
         timKiem={{
-          goiY: 'Tìm theo tên khách, sản phẩm quan tâm, số điện thoại…',
+          goiY: 'Tìm theo tên hoặc số điện thoại khách…',
           giaTri: boLoc.tuKhoa ?? '',
           onDoi: (v) => datBoLoc((cu) => ({ ...cu, tuKhoa: v, trang: 0 })),
         }}
@@ -200,6 +193,11 @@ export function LeadsPage() {
             ],
           },
           {
+            khoa: 'chuSoHuu',
+            nhan: 'Phụ trách',
+            luaChon: toi ? [{ giaTri: toi.id, nhan: 'Của tôi' }] : [],
+          },
+          {
             khoa: 'diemToiThieu',
             nhan: 'Điểm từ',
             luaChon: [
@@ -211,6 +209,7 @@ export function LeadsPage() {
         giaTriBoLoc={{
           trangThai: boLoc.trangThai,
           nguon: boLoc.nguon,
+          chuSoHuu: boLoc.chuSoHuu,
           diemToiThieu: boLoc.diemToiThieu?.toString(),
         }}
         onDoiBoLoc={(khoa, giaTri) =>
@@ -221,17 +220,18 @@ export function LeadsPage() {
               ? { trangThai: giaTri as BoLocLead['trangThai'] }
               : khoa === 'nguon'
                 ? { nguon: giaTri as BoLocLead['nguon'] }
-                : { diemToiThieu: giaTri ? Number(giaTri) : undefined }),
+                : khoa === 'chuSoHuu'
+                  ? { chuSoHuu: giaTri || undefined }
+                  : { diemToiThieu: giaTri ? Number(giaTri) : undefined }),
           }))
         }
         onGoHetBoLoc={() => datBoLoc({ trang: 0 })}
-        sapXep={{ trangThai: sapXep, onDoiSapXep: datSapXep }}
         onDoiTrang={(t) => datBoLoc((cu) => ({ ...cu, trang: t }))}
-        thaoTacChinh={{ nhan: 'Tạo cơ hội', onClick: () => datMoTao(true) }}
+        thaoTacChinh={{ nhan: 'Tạo lead', onClick: () => datMoTao(true) }}
         khiChuaCoDuLieu={{
           BieuTuong: Target,
-          tieuDe: 'Chưa có cơ hội tiềm năng nào',
-          moTa: 'Tác tử AI tự tạo cơ hội khi hội thoại đạt ngưỡng điểm cấu hình ở Hồ sơ doanh nghiệp.',
+          tieuDe: 'Chưa có lead nào',
+          moTa: 'Bấm "Tạo lead" để nhập tay, hoặc tạo từ một hội thoại trong Hộp thư.',
         }}
       />
 

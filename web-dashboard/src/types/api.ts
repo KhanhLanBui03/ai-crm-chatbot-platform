@@ -23,11 +23,17 @@ export type CursorPage<T> = Omit<Schemas['CursorPage'], 'items'> & { items: T[] 
 export class ApiError extends Error {
   readonly status: number
   readonly traceId: string | null
+  /** Mã nghiệp vụ (`LEAD_ALREADY_OPEN`…) — rẽ nhánh theo mã, không theo câu chữ. */
+  readonly code: string | null
+  /** Ngữ cảnh lỗi trong `ApiResponse.data` — vd. lead đang mở khi 409. */
+  readonly data: unknown
 
-  constructor(message: string, status: number, traceId: string | null) {
+  constructor(message: string, status: number, traceId: string | null, code: string | null = null, data: unknown = null) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.traceId = traceId
+    this.code = code
+    this.data = data
   }
 }

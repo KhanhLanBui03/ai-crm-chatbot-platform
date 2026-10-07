@@ -3,10 +3,12 @@ import type { Page } from '@/types/api'
 import type {
   Deal,
   DealChiTiet,
+  DiemLead,
   HoatDong,
   Lead,
   LeadChiTiet,
   LoaiHoatDong,
+  LyDoLoaiLead,
   MucDo,
   NguonLead,
   Pheu,
@@ -29,11 +31,24 @@ export interface BoLocLead {
 
 export interface TaoLead {
   contactId: string
+  /** Nút "Tạo lead" trong Hộp thư gửi kèm hội thoại đang mở. */
+  sourceConversationId?: string | null
   interestedProduct?: string | null
   budgetMin?: number | null
   budgetMax?: number | null
   urgency?: MucDo | null
   ownerUserId?: string | null
+}
+
+/** PATCH — trường không gửi thì giữ nguyên, gửi `null` là xoá giá trị. */
+export interface CapNhatLead {
+  status?: TrangThaiLead
+  interestedProduct?: string | null
+  budgetMin?: number | null
+  budgetMax?: number | null
+  urgency?: MucDo | null
+  ownerUserId?: string | null
+  disqualifyReason?: LyDoLoaiLead | null
 }
 
 export interface LuuDeal {
@@ -63,7 +78,6 @@ export const salesApi = apiSlice.injectEndpoints({
           source: bo.nguon,
           ownerUserId: bo.chuSoHuu,
           minScore: bo.diemToiThieu,
-          sort: bo.sapXep,
           page: bo.trang ?? 0,
           size: 10,
         },
@@ -82,9 +96,15 @@ export const salesApi = apiSlice.injectEndpoints({
       invalidatesTags: [CA_LEAD],
     }),
 
-    capNhatLead: build.mutation<Lead, { id: string; than: Partial<Lead> }>({
+    capNhatLead: build.mutation<LeadChiTiet, { id: string; than: CapNhatLead }>({
       query: ({ id, than }) => ({ url: `/api/v1/leads/${id}`, method: 'PATCH', body: than }),
       invalidatesTags: (_kq, _loi, { id }) => [{ type: 'Lead', id }, CA_LEAD],
+    }),
+
+    /** UC032 bước 6 — lịch sử điểm, mới nhất trước. */
+    lichSuDiemLead: build.query<DiemLead[], string>({
+      query: (id) => ({ url: `/api/v1/leads/${id}/scores` }),
+      providesTags: (_kq, _loi, id) => [{ type: 'Lead', id }],
     }),
 
     /** Chuyển cơ hội tiềm năng thành cơ hội bán hàng — sinh ra một `deal` mới. */
@@ -170,7 +190,6 @@ export const salesApi = apiSlice.injectEndpoints({
           dealId: bo.dealId,
           type: bo.loai,
           remindStatus: bo.nhacViec,
-          sort: bo.sapXep,
           page: bo.trang ?? 0,
           size: 10,
         },
@@ -206,6 +225,7 @@ export const {
   useChiTietLeadQuery,
   useTaoLeadMutation,
   useCapNhatLeadMutation,
+  useLichSuDiemLeadQuery,
   useChuyenLeadThanhDealMutation,
   useDanhSachPheuQuery,
   useDanhSachDealQuery,

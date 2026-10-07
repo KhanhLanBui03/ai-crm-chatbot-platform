@@ -153,6 +153,7 @@ export const banHangHandlers = [
       convertedAt: null,
       activityCount: 0,
       closedAt: null,
+      allowedNextStatuses: ['CONTACTED', 'QUALIFIED', 'DISQUALIFIED'],
     }
     return HttpResponse.json(ok(moi), { status: 201 })
   }),

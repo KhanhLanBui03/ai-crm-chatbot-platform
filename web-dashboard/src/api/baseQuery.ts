@@ -19,6 +19,8 @@ export interface LoiTruyVan {
   status: number
   message: string
   traceId: string | null
+  code?: string | null
+  data?: unknown
 }
 
 /**
@@ -50,7 +52,9 @@ export const axiosBaseQuery: BaseQueryFn<ThamSoTruyVan, unknown, LoiTruyVan> = a
     return { data }
   } catch (loi) {
     if (loi instanceof ApiError) {
-      return { error: { status: loi.status, message: loi.message, traceId: loi.traceId } }
+      return {
+        error: { status: loi.status, message: loi.message, traceId: loi.traceId, code: loi.code, data: loi.data },
+      }
     }
     return {
       error: {
