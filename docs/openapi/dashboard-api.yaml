@@ -2253,6 +2253,10 @@ paths:
         - name: minScore
           in: query
           schema: { type: integer, minimum: 0, maximum: 100 }
+        - name: contactId
+          in: query
+          description: Lead của một khách (hộp thoại ghi hoạt động UC035 chọn lead của khách)
+          schema: { type: string, format: uuid }
       responses:
         '200':
           description: Trang cơ hội tiềm năng
@@ -2471,6 +2475,10 @@ paths:
         - name: ownerUserId
           in: query
           schema: { type: string, format: uuid }
+        - name: contactId
+          in: query
+          description: Deal của một khách (hộp thoại ghi hoạt động UC035 chọn deal của khách)
+          schema: { type: string, format: uuid }
       responses:
         '200':
           description: Trang cơ hội bán hàng
@@ -2614,8 +2622,13 @@ paths:
       tags: [Bán hàng]
       summary: SCR047 — hoạt động chăm sóc và nhắc việc
       description: |
-        UC035. Mỗi hoạt động gắn với **đúng một** trong hai: cơ hội tiềm năng hoặc cơ hội bán hàng
-        — ràng buộc ở tầng cơ sở dữ liệu, không phải quy ước.
+        UC035. Mỗi hoạt động gắn với một khách hàng và **tối đa một** trong hai: lead hoặc deal của
+        chính khách đó (`num_nonnulls(lead_id, deal_id) <= 1`, V134). Không gắn cái nào = hoạt động
+        chỉ thuộc hồ sơ khách (vd. khách vãng lai được chuyển từ AI sang nhân viên).
+
+        `mine=true` là "Việc của tôi": lời nhắc giao cho người đang đăng nhập, còn PENDING/SENT, sắp
+        theo giờ nhắc. `bucket` (chỉ dùng kèm `mine`) chia OVERDUE / TODAY / UPCOMING theo ngày ở Việt
+        Nam. Mặc định sắp theo thời điểm thực hiện mới nhất.
 
         `source` phân biệt hoạt động nhân viên chủ động tạo với hoạt động hệ thống sinh tự động khi
         chuyển giao hội thoại; gộp chung sẽ làm sai chỉ số năng suất nhân viên.
@@ -2637,6 +2650,12 @@ paths:
         - name: remindStatus
           in: query
           schema: { $ref: '#/components/schemas/TrangThaiNhacViec' }
+        - name: mine
+          in: query
+          schema: { type: boolean, default: false }
+        - name: bucket
+          in: query
+          schema: { type: string, enum: [OVERDUE, TODAY, UPCOMING] }
       responses:
         '200':
           description: Trang hoạt động
@@ -2656,7 +2675,12 @@ paths:
     post:
       tags: [Bán hàng]
       summary: Ghi nhận một hoạt động
-      description: '`remindAt` trong quá khứ bị từ chối 422 — nhắc việc đã qua là vô nghĩa.'
+      description: |
+        `remindAt` trong quá khứ bị từ chối 422 — nhắc việc đã qua là vô nghĩa. `outcome =
+        RESCHEDULED` bắt buộc có `remindAt`. `performedAt` bỏ trống = bây giờ, không được ở tương lai
+        (dùng nhắc việc để hẹn). `remindUserId` bỏ trống = người ghi; chỉ quản trị viên giao nhắc cho
+        người khác. Mọi người ghi được lên mọi khách/lead/deal (kể cả đã đóng). `source` luôn MANUAL —
+        AUTO chỉ do hệ thống ghi khi nhân viên nhận hội thoại từ AI.
       requestBody:
         required: true
         content:
@@ -2671,12 +2695,41 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/ApiResponse'
                   - properties: { data: { $ref: '#/components/schemas/HoatDong' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '404': { $ref: '#/components/responses/KhongThay' }
         '422': { $ref: '#/components/responses/DuLieuKhongHopLe' }
+
+  /api/v1/activities/todo-count:
+    get:
+      tags: [Bán hàng]
+      summary: Số việc của tôi — số đỏ trên menu "Hoạt động"
+      description: |
+        Lời nhắc giao cho người đang đăng nhập, còn PENDING/SENT: `overdue` (đã quá giờ) và `today`
+        (từ giờ tới hết hôm nay, giờ Việt Nam). Giao diện hỏi lại mỗi phút — chưa có thông báo đẩy.
+      responses:
+        '200':
+          description: Số việc
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: object
+                        required: [overdue, today]
+                        properties:
+                          overdue: { type: integer }
+                          today: { type: integer }
 
   /api/v1/activities/{activityId}:
     patch:
       tags: [Bán hàng]
       summary: Cập nhật kết quả hoạt động
+      description: |
+        Không có DELETE — hoạt động là lịch sử. Người ghi hoặc quản trị viên sửa `outcome`, `content`,
+        `remindAt` (hẹn lại → PENDING), `remindStatus`; người được nhắc chỉ đổi `remindStatus` (DONE /
+        CANCELED / PENDING). Hoạt động AUTO không ai sửa (403).
       parameters:
         - name: activityId
           in: path
@@ -2691,7 +2744,10 @@ paths:
               properties:
                 outcome: { $ref: '#/components/schemas/KetQuaHoatDong' }
                 content: { type: [string, 'null'] }
-                remindStatus: { $ref: '#/components/schemas/TrangThaiNhacViec' }
+                remindAt: { type: string, format: date-time, description: 'Hẹn lại — phải ở tương lai' }
+                remindStatus:
+                  type: string
+                  enum: [PENDING, DONE, CANCELED]
       responses:
         '200':
           description: Đã cập nhật
@@ -4727,7 +4783,13 @@ components:
         contactId: { type: string, format: uuid }
         contactName: { type: string }
         leadId: { type: [string, 'null'], format: uuid }
+        leadLabel: { type: [string, 'null'], description: 'Sản phẩm quan tâm của lead đang gắn (hiển thị)' }
         dealId: { type: [string, 'null'], format: uuid }
+        dealTitle: { type: [string, 'null'] }
+        conversationId:
+          type: [string, 'null']
+          format: uuid
+          description: Hội thoại gốc — có ở hoạt động AUTO "Tiếp nhận hội thoại từ AI"
         type: { $ref: '#/components/schemas/LoaiHoatDong' }
         subject: { type: [string, 'null'] }
         content: { type: [string, 'null'] }
@@ -4742,6 +4804,7 @@ components:
         performedAt: { type: [string, 'null'], format: date-time }
         remindAt: { type: [string, 'null'], format: date-time }
         remindUserId: { type: [string, 'null'], format: uuid }
+        remindUserName: { type: [string, 'null'] }
         remindStatus: { $ref: '#/components/schemas/TrangThaiNhacViec' }
         createdAt: { type: string, format: date-time }
 
@@ -4755,8 +4818,9 @@ components:
     LuuHoatDongRequest:
       type: object
       description: |
-        Gắn với **đúng một** trong hai: `leadId` hoặc `dealId`. Ràng buộc này ở tầng cơ sở dữ liệu
-        (`num_nonnulls(lead_id, deal_id) = 1`), gửi cả hai hoặc không gửi cái nào đều bị từ chối.
+        Gắn với **tối đa một** trong hai: `leadId` hoặc `dealId` — của chính khách `contactId` (khác
+        khách → 422). Gửi cả hai → 422; không gửi cái nào = hoạt động của hồ sơ khách. Ràng buộc ở CSDL:
+        `num_nonnulls(lead_id, deal_id) <= 1` (V134). Phải có `subject` hoặc `content`.
       required: [contactId, type]
       properties:
         contactId: { type: string, format: uuid }

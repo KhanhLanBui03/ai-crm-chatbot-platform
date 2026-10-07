@@ -15,6 +15,7 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { useChiTietKhachHangQuery, useGhiChuKhachHangQuery } from '@/api/contacts'
+import { ActivityTimeline } from '@/features/activities/ActivityTimeline'
 import { DetailPage, HangThongTin } from '@/components/layout/DetailPage'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -153,6 +154,14 @@ export function ContactDetailPage() {
                   k.channelIdentities?.map((d) => <DongDanhTinh key={d.id} danhTinh={d} />)
                 )}
               </div>
+            ),
+          },
+          {
+            khoa: 'hoat-dong',
+            nhan: 'Hoạt động',
+            // Mọi hoạt động của khách: kể cả gắn lead/deal và dòng AUTO tiếp nhận từ AI
+            noiDung: k && (
+              <ActivityTimeline dich={{ contactId: k.id, contactName: k.fullName ?? 'Khách chưa có tên' }} hienNoiGan />
             ),
           },
           {

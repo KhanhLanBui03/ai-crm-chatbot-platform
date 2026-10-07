@@ -22,6 +22,7 @@ import { useDangXuatMutation } from '@/api/auth'
 import { dangXuat } from '@/app/store/authSlice'
 import { useAppDispatch, useAppSelector } from '@/app/store/hooks'
 import { useDanhSachGoiCongCuQuery } from '@/api/ai-agent'
+import { useSoViecCuaToiQuery } from '@/api/sales'
 import { XacNhanDangXuatDialog } from '@/components/layout/XacNhanDangXuatDialog'
 import {
   DropdownMenu,
@@ -139,6 +140,9 @@ export function AppSidebar() {
 
   // Số lời gọi công cụ đang chờ duyệt lấy thẳng từ cache RTK Query — cùng truy vấn với SCR035,
   // nên mở thanh bên không tốn thêm một lượt gọi mạng nào.
+  // UC035 — việc quá hạn + hôm nay của tôi. Chưa có thông báo đẩy nên hỏi lại mỗi phút.
+  const viec = useSoViecCuaToiQuery(undefined, { pollingInterval: 60_000 })
+  const soViec = (viec.data?.overdue ?? 0) + (viec.data?.today ?? 0)
   const soChoDuyet =
     useDanhSachGoiCongCuQuery({ trangThaiDuyet: 'PENDING' }).data?.totalItems ?? 0
 
@@ -202,7 +206,17 @@ export function AppSidebar() {
                   {MUC_BAN_HANG.map(({ duongDan, nhan }) => (
                     <SidebarMenuSubItem key={duongDan}>
                       <SidebarMenuSubButton asChild isActive={viTri.pathname === duongDan}>
-                        <NavLink to={duongDan}>{nhan}</NavLink>
+                        <NavLink to={duongDan}>
+                          <span>{nhan}</span>
+                          {duongDan === '/ban-hang/hoat-dong' && soViec > 0 && (
+                            <span
+                              className="bg-destructive ml-auto rounded-full px-1.5 text-[11px] leading-4 text-white tabular-nums"
+                              aria-label={`${soViec} việc cần làm`}
+                            >
+                              {soViec}
+                            </span>
+                          )}
+                        </NavLink>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
                   ))}

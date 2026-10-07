@@ -6,6 +6,7 @@ import type {
   DealChiTiet,
   DiemLead,
   HoatDong,
+  KetQuaHoatDong,
   Lead,
   LeadChiTiet,
   LoaiHoatDong,
@@ -27,6 +28,8 @@ export interface BoLocLead {
   nguon?: NguonLead
   chuSoHuu?: string
   diemToiThieu?: number
+  /** Lead của một khách — hộp thoại ghi hoạt động (UC035). */
+  khachHangId?: string
   trang?: number
   sapXep?: string
 }
@@ -87,6 +90,7 @@ export const salesApi = apiSlice.injectEndpoints({
           source: bo.nguon,
           ownerUserId: bo.chuSoHuu,
           minScore: bo.diemToiThieu,
+          contactId: bo.khachHangId,
           page: bo.trang ?? 0,
           size: 10,
         },
@@ -145,7 +149,7 @@ export const salesApi = apiSlice.injectEndpoints({
      */
     danhSachDeal: build.query<
       Page<Deal>,
-      { pheuId?: string; giaiDoanId?: string; trangThai?: TrangThaiDeal; chuSoHuu?: string }
+      { pheuId?: string; giaiDoanId?: string; trangThai?: TrangThaiDeal; chuSoHuu?: string; khachHangId?: string }
     >({
       query: (bo) => ({
         url: '/api/v1/deals',
@@ -155,6 +159,7 @@ export const salesApi = apiSlice.injectEndpoints({
           // Không mặc định OPEN: bảng phễu cần cả cột Thắng/Thua
           status: bo.trangThai,
           ownerUserId: bo.chuSoHuu,
+          contactId: bo.khachHangId,
           size: 200,
         },
       }),
@@ -200,8 +205,11 @@ export const salesApi = apiSlice.injectEndpoints({
         dealId?: string
         loai?: LoaiHoatDong
         nhacViec?: TrangThaiNhacViec
+        /** "Việc của tôi" — người "tôi" lấy từ JWT ở máy chủ. */
+        cuaToi?: boolean
+        nhomViec?: 'OVERDUE' | 'TODAY' | 'UPCOMING'
         trang?: number
-        sapXep?: string
+        coTrang?: number
       }
     >({
       query: (bo) => ({
@@ -212,8 +220,10 @@ export const salesApi = apiSlice.injectEndpoints({
           dealId: bo.dealId,
           type: bo.loai,
           remindStatus: bo.nhacViec,
+          mine: bo.cuaToi || undefined,
+          bucket: bo.nhomViec,
           page: bo.trang ?? 0,
-          size: 10,
+          size: bo.coTrang ?? 10,
         },
       }),
       providesTags: (kq) =>
@@ -234,10 +244,36 @@ export const salesApi = apiSlice.injectEndpoints({
         type: LoaiHoatDong
         subject?: string | null
         content?: string | null
+        outcome?: KetQuaHoatDong | null
+        remindAt?: string | null
+        remindUserId?: string | null
       }
     >({
       query: (than) => ({ url: '/api/v1/activities', method: 'POST', body: than }),
       invalidatesTags: ['HoatDong', 'Lead', 'Deal'],
+    }),
+
+    /** UC035 — cập nhật kết quả / nội dung / hẹn lại / đánh dấu nhắc việc. Không có xoá. */
+    capNhatHoatDong: build.mutation<
+      HoatDong,
+      {
+        id: string
+        than: {
+          outcome?: KetQuaHoatDong | null
+          content?: string | null
+          remindAt?: string
+          remindStatus?: 'PENDING' | 'DONE' | 'CANCELED'
+        }
+      }
+    >({
+      query: ({ id, than }) => ({ url: `/api/v1/activities/${id}`, method: 'PATCH', body: than }),
+      invalidatesTags: ['HoatDong', 'Lead', 'Deal'],
+    }),
+
+    /** Số đỏ trên menu "Hoạt động": việc quá hạn + hôm nay của tôi. */
+    soViecCuaToi: build.query<{ overdue: number; today: number }, void>({
+      query: () => ({ url: '/api/v1/activities/todo-count' }),
+      providesTags: [{ type: 'HoatDong' as const, id: 'DEM' }],
     }),
   }),
 })
@@ -257,4 +293,6 @@ export const {
   useKeoDealSangGiaiDoanMutation,
   useDanhSachHoatDongQuery,
   useGhiNhanHoatDongMutation,
+  useCapNhatHoatDongMutation,
+  useSoViecCuaToiQuery,
 } = salesApi

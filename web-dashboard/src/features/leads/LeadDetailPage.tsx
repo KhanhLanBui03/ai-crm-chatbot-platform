@@ -28,6 +28,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Progress } from '@/components/ui/progress'
 import { StatusChip } from '@/components/ui/status-chip'
+import { ActivityTimeline } from '@/features/activities/ActivityTimeline'
 import { ChuyenDealDialog } from '@/features/leads/ChuyenDealDialog'
 import { DoiPhuTrachDialog, LoaiLeadDialog, SuaLeadDialog } from '@/features/leads/LeadDialogs'
 import {
@@ -48,8 +49,8 @@ import { cn } from '@/utils/cn'
  * "đi tới, được bỏ bước, không lùi" lần thứ hai. Quyền sửa giống máy chủ: lead của mình, lead chưa
  * ai nhận (sửa = tự nhận), hoặc quản trị viên.
  *
- * "Chuyển thành Deal" (UC033) là thao tác chính khi lead còn mở. Danh sách hoạt động (UC035) chưa có
- * API — ẩn đi thay vì để nút bấm ra lỗi.
+ * "Chuyển thành Deal" (UC033) là thao tác chính khi lead còn mở. Tab Hoạt động (UC035) ghi được cả khi
+ * lead đã đóng — chăm sóc sau bán là việc bình thường.
  */
 export function LeadDetailPage() {
   const { id = '' } = useParams()
@@ -276,6 +277,14 @@ export function LeadDetailPage() {
                   </div>
                 )}
               </div>
+            ),
+          },
+          {
+            khoa: 'hoat-dong',
+            nhan: 'Hoạt động',
+            soLuong: l?.activityCount,
+            noiDung: l && (
+              <ActivityTimeline dich={{ contactId: l.contactId, contactName: l.contactName, leadId: l.id }} />
             ),
           },
         ]}
