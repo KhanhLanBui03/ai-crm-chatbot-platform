@@ -48,5 +48,21 @@ export const CSS = `
 .chan .gap-nv { background: none; border: none; color: #374151; text-decoration: underline; cursor: pointer; font-size: 12px; padding: 0; }
 .chan .gap-nv[hidden] { display: none; }
 
+.chan .nut { display: flex; gap: 12px; }
+.chan .gap-nv[hidden] { display: none; }
+.the-tt { align-self: stretch; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px;
+  display: flex; flex-direction: column; gap: 8px; }
+.the-tt .tieu-de { font-weight: 600; font-size: 13.5px; }
+.the-tt input[type=text], .the-tt input[type=tel], .the-tt input[type=email] { border: 1px solid #d1d5db;
+  border-radius: 8px; padding: 7px 9px; font-size: 13.5px; width: 100%; }
+.the-tt .dong-y { font-size: 12.5px; color: #374151; line-height: 1.4; display: flex; gap: 6px; align-items: flex-start; }
+.the-tt .dong-y input { margin-top: 2px; }
+.the-tt .loi-tt { color: #991b1b; font-size: 12.5px; }
+.the-tt .loi-tt[hidden] { display: none; }
+.the-tt .hang-nut { display: flex; justify-content: flex-end; gap: 8px; }
+.the-tt .gui { background: var(--mau); color: #fff; border: none; border-radius: 8px; padding: 7px 14px; cursor: pointer; font-weight: 600; }
+.the-tt .gui:disabled { opacity: .5; cursor: default; }
+.the-tt .de-sau { background: none; border: none; color: #6b7280; cursor: pointer; font-size: 12.5px; }
+
 .tam-ngung { padding: 24px 18px; text-align: center; color: #4b5563; line-height: 1.5; }
 `

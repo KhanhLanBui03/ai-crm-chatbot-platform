@@ -4,7 +4,7 @@
 //   <script src="https://<gateway>/widget.js" data-widget-key="wk_..." async></script>
 // Tuỳ chọn data-api-url khi API nằm ở địa chỉ khác nơi phục vụ widget.js.
 
-import { LoiApi, WidgetApi, type TinNhan } from './api'
+import { LoiApi, WidgetApi, type ThongTinLienHe, type TinNhan } from './api'
 import { docToken, luuToken, xoaToken } from './session'
 import { GiaoDienChat } from './ui'
 
@@ -30,6 +30,8 @@ class WidgetApp {
   private moc: string | null = null
   private hoi: number | undefined
   private daKhoiTao = false
+  /** Đã tự bật ô "để lại thông tin" một lần (lúc chuyển sang nhân viên) — không bật lại liên tục. */
+  private daHoiThongTin = false
   private readonly ui: GiaoDienChat
   private readonly api: WidgetApi
   private readonly key: string
@@ -45,6 +47,7 @@ class WidgetApp {
       onGui: (n) => void this.gui(n),
       onGapNhanVien: () => void this.gapNhanVien(),
       onMo: () => this.batDauHoi(),
+      onDeLaiThongTin: (tt) => void this.deLaiThongTin(tt),
     })
   }
 
@@ -60,6 +63,8 @@ class WidgetApp {
       luuToken(this.key, p.token)
       this.ui.apDungGiaoDien(p.appearance)
       this.ui.hienLoiChao(p.appearance?.greetingMessage ?? null)
+      this.ui.datDaDeLaiThongTin(p.infoShared)
+      this.daHoiThongTin = DANG_CO_NHAN_VIEN.has(p.conversationStatus ?? '') // tải lại trang: không bật ô lần nữa
       this.capNhat(p.conversationStatus, p.messages)
     } catch (e) {
       // 403 = tên miền chưa được phép (UC009 10.2): KHÔNG hiện widget trên trang nhúng trái phép
@@ -82,7 +87,34 @@ class WidgetApp {
     // Chỉ cho bấm "Gặp nhân viên" khi đã có hội thoại và AI đang giữ
     this.ui.datCoTheGapNhanVien(this.trangThai === 'BOT_HANDLING')
     this.ui.datNguoiTraLoi(this.trangThai)
+    // Hội thoại vừa chuyển sang nhân viên → đúng lúc khách cần được liên hệ lại
+    if (this.trangThai && DANG_CO_NHAN_VIEN.has(this.trangThai) && !this.daHoiThongTin) {
+      this.daHoiThongTin = true
+      if (!this.ui.daDeLaiThongTin) this.ui.hienFormThongTin()
+    }
     this.batDauHoi()
+  }
+
+  private async deLaiThongTin(tt: ThongTinLienHe): Promise<void> {
+    if (!this.token) {
+      if (!this.daKhoiTao) await this.khoiTao()
+      if (!this.token) return
+    }
+    try {
+      const kq = await this.api.deLaiThongTin(this.token, tt)
+      this.ui.datDaDeLaiThongTin(true)
+      this.capNhat(kq.conversationStatus, kq.messages)
+      if (kq.messages.length === 0) {
+        // Chưa có hội thoại nên máy chủ không chèn tin — tự báo cho khách yên tâm
+        this.ui.themTin([{ id: 'da-de-lai', senderType: 'SYSTEM', content: 'Cảm ơn bạn! Nhân viên sẽ liên hệ lại sớm.', citations: [], sentAt: new Date().toISOString() }])
+      }
+    } catch (e) {
+      if (e instanceof LoiApi && e.maHttp === 401) {
+        this.xuLyLoi(e)
+        return
+      }
+      this.ui.baoLoiFormThongTin(e instanceof Error ? e.message : 'Chưa gửi được, bạn thử lại nhé.')
+    }
   }
 
   private async gui(noiDung: string): Promise<void> {
