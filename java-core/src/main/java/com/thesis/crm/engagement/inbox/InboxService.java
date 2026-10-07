@@ -293,6 +293,18 @@ public class InboxService {
         return assignment.assignees(tenantId);
     }
 
+    /**
+     * Số trên menu "Hộp thư": hội thoại đang CHỜ NHÂN VIÊN mà chưa ai nhận. Chỉ đọc — KHÔNG ghi mốc
+     * "đang trực" như {@link #list}: menu hỏi định kỳ trên mọi trang, ghi mốc ở đây thì ai mở dashboard
+     * (dù đang xem Deal) cũng thành "đang trực" và bị tự giao hội thoại (UC014).
+     */
+    @Transactional(readOnly = true)
+    public long waitingCount(UUID tenantId, Actor actor) {
+        scope.apply(tenantId);
+        return repo.count(tenantId, new Filter("unassigned", actor.userId(), List.of("PENDING_AGENT"),
+                null, null, null, 0, 1));
+    }
+
     /** Thanh cảnh báo của quản trị viên (UC014 6.2, 7.2). */
     @Transactional(readOnly = true)
     public QueueStatus queueStatus(UUID tenantId, Actor actor) {

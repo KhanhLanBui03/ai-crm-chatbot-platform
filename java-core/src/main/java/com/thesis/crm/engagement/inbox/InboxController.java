@@ -65,6 +65,12 @@ public class InboxController {
         return ResponseEntity.ok(ApiResponse.ok(service.assignees(requireTenantId())));
     }
 
+    /** Số trên menu "Hộp thư" — hội thoại chờ nhân viên chưa ai nhận. */
+    @GetMapping("/waiting-count")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Long>>> waitingCount() {
+        return ResponseEntity.ok(ApiResponse.ok(java.util.Map.of("waiting", service.waitingCount(requireTenantId(), actor()))));
+    }
+
     @GetMapping("/queue-status")
     public ResponseEntity<ApiResponse<QueueStatus>> queueStatus() {
         return ResponseEntity.ok(ApiResponse.ok(service.queueStatus(requireTenantId(), actor())));
