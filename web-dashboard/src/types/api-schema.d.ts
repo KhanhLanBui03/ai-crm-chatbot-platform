@@ -5839,6 +5839,11 @@ export interface components {
             totalDealValue?: number;
             /** Format: date-time */
             anonymizedAt?: string | null;
+            /**
+             * @description Khách khác (đang hoạt động) trùng SĐT hoặc email — vd. khách web tự để lại số đã có trong
+             *     danh bạ. KHÔNG tự gộp (ai cũng gõ được số người khác); giao diện gợi ý Hợp nhất.
+             */
+            duplicateCandidates?: components["schemas"]["KhachHang"][];
         };
         DanhTinhKenh: {
             /** Format: uuid */

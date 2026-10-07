@@ -116,6 +116,39 @@ export function ContactDetailPage() {
                   </Alert>
                 )}
 
+                {/* Khách web tự để lại SĐT/email trùng hồ sơ khác — KHÔNG tự gộp (ai cũng gõ được số người
+                    khác), nhân viên xem rồi tự quyết Hợp nhất */}
+                {(k.duplicateCandidates?.length ?? 0) > 0 && (
+                  <Alert>
+                    <GitMerge />
+                    <AlertDescription className="flex flex-col items-start gap-1.5">
+                      <span>
+                        Có <strong>{k.duplicateCandidates?.length}</strong> hồ sơ khác trùng số điện thoại hoặc
+                        email. Kiểm tra đúng cùng một người rồi mới hợp nhất.
+                      </span>
+                      {k.duplicateCandidates?.map((d) => (
+                        <button
+                          key={d.id}
+                          type="button"
+                          className="underline underline-offset-2"
+                          onClick={() => dieuHuong(`/khach-hang/${d.id}`)}
+                        >
+                          {d.fullName ?? 'Chưa có tên'}
+                          {d.phone ? ` · ${d.phone}` : ''}
+                          {d.email ? ` · ${d.email}` : ''}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="font-medium underline underline-offset-2"
+                        onClick={() => datMoHopNhat(true)}
+                      >
+                        Hợp nhất…
+                      </button>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <div className="grid gap-3 sm:grid-cols-3">
                   <TheSo nhan="Hội thoại" giaTri={k.conversationCount ?? 0} />
                   <TheSo nhan="Cơ hội đang mở" giaTri={k.openLeadCount ?? 0} />

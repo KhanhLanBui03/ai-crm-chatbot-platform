@@ -3,7 +3,7 @@
 // nhân viên có thể chứa chuỗi do khách khác cố tình nhét vào (bề mặt T2) — innerHTML là XSS ngay
 // trên website của doanh nghiệp.
 
-import type { GiaoDien, TinNhan } from './api'
+import type { GiaoDien, ThongTinLienHe, TinNhan } from './api'
 import { CSS } from './styles'
 
 const MAU_MAC_DINH = '#4F46E5'
@@ -27,6 +27,7 @@ export interface SuKienUi {
   onGui: (noiDung: string) => void
   onGapNhanVien: () => void
   onMo: () => void
+  onDeLaiThongTin: (tt: ThongTinLienHe) => void
 }
 
 export class GiaoDienChat {
@@ -42,6 +43,9 @@ export class GiaoDienChat {
   private readonly chan: HTMLDivElement
   private readonly chanTrang: HTMLSpanElement
   private dangGo: HTMLDivElement | null = null
+  private readonly nutThongTin: HTMLButtonElement
+  private form: HTMLFormElement | null = null
+  private daDeLai = false
   private readonly daCo = new Set<string>()
 
   constructor(chuNha: HTMLElement, private readonly suKien: SuKienUi) {
@@ -98,7 +102,12 @@ export class GiaoDienChat {
     this.nutGapNv.hidden = true
     this.nutGapNv.addEventListener('click', () => this.suKien.onGapNhanVien())
     this.chanTrang = tao('span', undefined, 'Trả lời tự động bởi trợ lý AI')
-    phu.append(this.chanTrang, this.nutGapNv)
+    this.nutThongTin = tao('button', 'gap-nv', 'Để lại thông tin')
+    this.nutThongTin.type = 'button'
+    this.nutThongTin.addEventListener('click', () => this.hienFormThongTin())
+    const nut = tao('span', 'nut')
+    nut.append(this.nutThongTin, this.nutGapNv)
+    phu.append(this.chanTrang, nut)
     this.chan.append(hang, phu)
 
     this.khung.append(dau, this.than, this.loi, this.chan)
@@ -187,6 +196,92 @@ export class GiaoDienChat {
         : trangThai === 'PENDING_AGENT'
           ? 'Đang chờ nhân viên tiếp nhận…'
           : 'Trả lời tự động bởi trợ lý AI'
+  }
+
+  /** Khách đã để lại thông tin → ẩn nút và ô nhập, không hỏi lại. */
+  datDaDeLaiThongTin(da: boolean): void {
+    this.daDeLai = da
+    this.nutThongTin.hidden = da
+    if (da) this.anFormThongTin()
+  }
+
+  get daDeLaiThongTin(): boolean {
+    return this.daDeLai
+  }
+
+  /**
+   * Ô "Để lại thông tin". Bắt buộc tích đồng ý mới gửi được (Nghị định 13). Phải có SĐT hoặc email —
+   * máy chủ kiểm lại lần nữa; ở đây chỉ để khách khỏi bấm gửi vô ích.
+   */
+  hienFormThongTin(): void {
+    if (this.daDeLai || this.form) return
+    const f = tao('form', 'the-tt')
+    f.noValidate = true
+    f.appendChild(tao('div', 'tieu-de', 'Để lại thông tin để nhân viên liên hệ lại nhé'))
+    const ten = this.oTt('Tên của bạn', 'text', 'name', 200)
+    const sdt = this.oTt('Số điện thoại', 'tel', 'tel', 20)
+    const email = this.oTt('Email (không bắt buộc)', 'email', 'email', 255)
+    const dongY = tao('label', 'dong-y')
+    const hop = tao('input')
+    hop.type = 'checkbox'
+    dongY.append(hop, document.createTextNode(' Tôi đồng ý cho cửa hàng lưu thông tin này để liên hệ lại.'))
+    const loi = tao('div', 'loi-tt')
+    loi.hidden = true
+    const hang = tao('div', 'hang-nut')
+    const gui = tao('button', 'gui', 'Gửi')
+    gui.type = 'submit'
+    gui.disabled = true
+    const deSau = tao('button', 'de-sau', 'Để sau')
+    deSau.type = 'button'
+    deSau.addEventListener('click', () => this.anFormThongTin())
+    hang.append(deSau, gui)
+    hop.addEventListener('change', () => (gui.disabled = !hop.checked))
+    f.append(ten, sdt, email, dongY, loi, hang)
+    f.addEventListener('submit', (e) => {
+      e.preventDefault()
+      const giaTri = (o: HTMLInputElement) => o.value.trim() || null
+      const s = giaTri(sdt), m = giaTri(email)
+      if (!s && !m) {
+        loi.textContent = 'Bạn để lại số điện thoại hoặc email nhé.'
+        loi.hidden = false
+        return
+      }
+      loi.hidden = true
+      gui.disabled = true
+      this.suKien.onDeLaiThongTin({ fullName: giaTri(ten), phone: s, email: m, consent: hop.checked })
+    })
+    this.form = f
+    this.than.appendChild(f)
+    this.cuonXuong()
+    ten.focus()
+  }
+
+  /** Máy chủ từ chối (SĐT sai…) — hiện lỗi ngay trong ô, cho sửa và gửi lại. */
+  baoLoiFormThongTin(chu: string): void {
+    if (!this.form) return
+    const loi = this.form.querySelector<HTMLDivElement>('.loi-tt')
+    const gui = this.form.querySelector<HTMLButtonElement>('button[type=submit]')
+    const hop = this.form.querySelector<HTMLInputElement>('input[type=checkbox]')
+    if (loi) {
+      loi.textContent = chu
+      loi.hidden = false
+    }
+    if (gui && hop) gui.disabled = !hop.checked
+  }
+
+  anFormThongTin(): void {
+    this.form?.remove()
+    this.form = null
+  }
+
+  private oTt(nhan: string, kieu: string, tuDien: string, toiDa: number): HTMLInputElement {
+    const o = tao('input')
+    o.type = kieu
+    o.placeholder = nhan
+    o.setAttribute('autocomplete', tuDien)
+    o.maxLength = toiDa
+    o.setAttribute('aria-label', nhan)
+    return o
   }
 
   baoLoi(chu: string | null): void {

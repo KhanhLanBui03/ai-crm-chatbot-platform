@@ -4083,6 +4083,12 @@ components:
             openDealCount: { type: integer }
             totalDealValue: { type: number }
             anonymizedAt: { type: [string, 'null'], format: date-time }
+            duplicateCandidates:
+              type: array
+              description: |
+                Khách khác (đang hoạt động) trùng SĐT hoặc email — vd. khách web tự để lại số đã có trong
+                danh bạ. KHÔNG tự gộp (ai cũng gõ được số người khác); giao diện gợi ý Hợp nhất.
+              items: { $ref: '#/components/schemas/KhachHang' }
 
     DanhTinhKenh:
       type: object

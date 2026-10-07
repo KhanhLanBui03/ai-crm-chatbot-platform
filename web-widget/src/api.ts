@@ -31,6 +31,15 @@ export interface KetQuaPhien {
   appearance: GiaoDien | null
   conversationStatus: string | null
   messages: TinNhan[]
+  /** Khách đã để lại thông tin (đã đồng ý) — không hỏi lại. */
+  infoShared: boolean
+}
+
+export interface ThongTinLienHe {
+  fullName: string | null
+  phone: string | null
+  email: string | null
+  consent: boolean
 }
 
 export interface KetQuaLuot {
@@ -64,6 +73,11 @@ export class WidgetApi {
 
   gapNhanVien(token: string): Promise<KetQuaLuot> {
     return this.goi('POST', '/api/v1/widget/handoff', token, undefined)
+  }
+
+  /** Khách để lại tên / SĐT / email kèm đồng ý lưu dữ liệu (bổ sung UC010). */
+  deLaiThongTin(token: string, tt: ThongTinLienHe): Promise<KetQuaLuot & { infoShared: boolean }> {
+    return this.goi('POST', '/api/v1/widget/contact-info', token, tt)
   }
 
   tinMoi(token: string, sau: string | null): Promise<KetQuaLuot> {

@@ -100,6 +100,58 @@ public class WidgetRepository {
     }
 
     /** Hồ sơ khách tên tạm, chưa đồng ý dữ liệu (UC016 vẫn tìm được nhờ trigger search_text). */
+    /** Khách web này đã để lại thông tin (đã đồng ý) chưa — widget dựa vào đây để không hỏi lại. */
+    public boolean visitorShared(UUID tenantId, UUID channelId, String externalUserId) {
+        Boolean b = jdbc.query("""
+                SELECT k.consent_granted FROM engagement.channel_identities i
+                JOIN engagement.contacts k ON k.id = i.contact_id AND k.tenant_id = i.tenant_id
+                WHERE i.tenant_id = :t AND i.channel_id = :c AND i.external_user_id = :e""",
+                new MapSqlParameterSource("t", tenantId).addValue("c", channelId).addValue("e", externalUserId),
+                rs -> rs.next() ? rs.getBoolean(1) : Boolean.FALSE);
+        return Boolean.TRUE.equals(b);
+    }
+
+    /**
+     * Khách tự để lại thông tin: tên chỉ thay khi hồ sơ còn tên tạm "Khách web #…" (không ghi đè tên nhân
+     * viên đã sửa); SĐT/email chỉ điền vào ô trống; đồng ý dữ liệu → nguồn WIDGET. Trả các trường đã thực
+     * sự được ghi.
+     */
+    public java.util.List<String> applyVisitorInfo(UUID tenantId, UUID contactId, String name, String phone,
+                                                    String email) {
+        return jdbc.query("""
+                WITH cu AS (SELECT full_name, phone, email FROM engagement.contacts
+                            WHERE tenant_id = :t AND id = :id FOR UPDATE)
+                UPDATE engagement.contacts k SET
+                    full_name = CASE WHEN CAST(:name AS varchar) IS NOT NULL
+                                      AND (cu.full_name IS NULL OR cu.full_name LIKE 'Khách web #%')
+                                     THEN :name ELSE k.full_name END,
+                    phone = coalesce(k.phone, :phone),
+                    email = coalesce(k.email, :email),
+                    consent_granted = true, consent_at = now(), consent_source = 'WIDGET'
+                FROM cu
+                WHERE k.tenant_id = :t AND k.id = :id
+                RETURNING (k.full_name IS DISTINCT FROM cu.full_name) AS doi_ten,
+                          (k.phone IS DISTINCT FROM cu.phone) AS doi_sdt,
+                          (k.email IS DISTINCT FROM cu.email) AS doi_email""",
+                new MapSqlParameterSource("t", tenantId).addValue("id", contactId).addValue("name", name)
+                        .addValue("phone", phone).addValue("email", email),
+                rs -> {
+                    java.util.List<String> out = new java.util.ArrayList<>();
+                    if (rs.next()) {
+                        if (rs.getBoolean("doi_ten")) {
+                            out.add("fullName");
+                        }
+                        if (rs.getBoolean("doi_sdt")) {
+                            out.add("phone");
+                        }
+                        if (rs.getBoolean("doi_email")) {
+                            out.add("email");
+                        }
+                    }
+                    return out;
+                });
+    }
+
     public UUID insertVisitorContact(UUID tenantId, String fullName) {
         return jdbc.queryForObject("""
                 INSERT INTO engagement.contacts (tenant_id, full_name, primary_channel, last_contacted_at)

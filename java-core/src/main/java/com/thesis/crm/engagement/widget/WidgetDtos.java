@@ -30,7 +30,19 @@ public final class WidgetDtos {
      * kênh tắt, widget hiện "dịch vụ tạm ngừng" (UC009 11.2). Khi SUSPENDED thì không có token.
      */
     public record SessionResponse(String status, String token, Appearance appearance,
-                                  String conversationStatus, List<MessageDto> messages) {}
+                                  String conversationStatus, List<MessageDto> messages, boolean infoShared) {}
+
+    /**
+     * Khách để lại thông tin (bổ sung UC010). {@code consent} BẮT BUỘC true — Nghị định 13: không đồng ý thì
+     * không lưu tên/SĐT. Phải có ít nhất SĐT hoặc email.
+     */
+    public record ContactInfoRequest(String fullName, String phone, String email, Boolean consent) {}
+
+    /**
+     * Không trả gì về hồ sơ khác (kể cả "SĐT này đã có người dùng") — khách là người ngoài, lộ chuyện
+     * trùng là lộ việc một số điện thoại đã là khách của cửa hàng.
+     */
+    public record ContactInfoResponse(boolean infoShared, String conversationStatus, List<MessageDto> messages) {}
 
     /** Các tin MỚI phát sinh từ thao tác (tin của khách + trả lời) và trạng thái hội thoại sau đó. */
     public record TurnResponse(String conversationStatus, List<MessageDto> messages) {}

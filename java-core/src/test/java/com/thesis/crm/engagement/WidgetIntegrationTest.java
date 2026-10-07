@@ -355,6 +355,114 @@ class WidgetIntegrationTest extends EngagementIntegrationTestBase {
         assertThat(data(body).get("messages")).isEmpty();
     }
 
+    // ── Khách để lại thông tin (bổ sung UC010) ──────────────────────────────────
+
+    @Test
+    void deLaiThongTin_capNhatHoSo_dongYWidget_tinHeThong_khongHoiLai() throws Exception {
+        String token = newToken(KEY_W, ORIGIN_W);
+        turnOf(send(token, ORIGIN_W, "cho mình hỏi gói pro"));
+        JsonNode kq = data(thongTin(token, ORIGIN_W,
+                "{\"fullName\":\" Trần Văn Bình \",\"phone\":\"0912 000 111\",\"email\":\"Binh@Ex.VN\",\"consent\":true}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertThat(kq.get("infoShared").asBoolean()).isTrue();
+        assertThat(kq.has("duplicateCandidates")).isFalse();
+        assertThat(lastSystemMessage(kq)).contains("Trần Văn Bình").contains("0912000111").contains("binh@ex.vn");
+
+        UUID contact = contactOf(token);
+        assertThat(sqlRow("SELECT full_name || '|' || phone || '|' || email || '|' || consent_granted || '|' || consent_source "
+                + "FROM engagement.contacts WHERE id = ?", contact))
+                .isEqualTo("Trần Văn Bình|0912000111|binh@ex.vn|true|WIDGET");
+        // Nhật ký chỉ có sự kiện + tên trường, KHÔNG có SĐT/tên (NĐ 13)
+        String nhatKy = sqlRow("SELECT after_data::text FROM platform.audit_logs WHERE entity_id = ? "
+                + "AND action = 'CONTACT_CONSENT_GRANTED'", contact);
+        assertThat(nhatKy).contains("WIDGET").contains("phone").doesNotContain("0912").doesNotContain("Bình");
+
+        // Mở lại widget (cùng token) → biết đã để lại, không hỏi lại
+        JsonNode phien = data(mvc.perform(post("/api/v1/widget/session").header("Origin", ORIGIN_W)
+                .header("X-Forwarded-For", randomIp()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"widgetKey\":\"" + KEY_W + "\",\"token\":\"" + token + "\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertThat(phien.get("infoShared").asBoolean()).isTrue();
+        assertThat(data(session(KEY_W, ORIGIN_W).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8))
+                .get("infoShared").asBoolean()).isFalse();
+    }
+
+    @Test
+    void deLaiThongTin_batBuocDongY_coCachLienHe_dungDinhDang() throws Exception {
+        String token = newToken(KEY_W, ORIGIN_W);
+        turnOf(send(token, ORIGIN_W, "hỏi chút"));
+        thongTin(token, ORIGIN_W, "{\"fullName\":\"A\",\"phone\":\"0912000222\",\"consent\":false}")
+                .andExpect(status().isUnprocessableEntity());
+        thongTin(token, ORIGIN_W, "{\"fullName\":\"A\",\"phone\":\"0912000222\"}").andExpect(status().isUnprocessableEntity());
+        thongTin(token, ORIGIN_W, "{\"fullName\":\"A\",\"consent\":true}").andExpect(status().isUnprocessableEntity());
+        thongTin(token, ORIGIN_W, "{\"phone\":\"12ab\",\"consent\":true}").andExpect(status().isUnprocessableEntity());
+        thongTin(token, ORIGIN_W, "{\"email\":\"khong-phai-email\",\"consent\":true}").andExpect(status().isUnprocessableEntity());
+        thongTin(token, "https://site-la.vn", "{\"phone\":\"0912000222\",\"consent\":true}").andExpect(status().isForbidden());
+        thongTin(null, ORIGIN_W, "{\"phone\":\"0912000222\",\"consent\":true}")
+                .andExpect(r -> assertThat(r.getResponse().getStatus()).isIn(401, 403));
+        // Bị từ chối thì hồ sơ không đổi
+        assertThat(sqlRow("SELECT consent_granted || '|' || coalesce(phone, '-') FROM engagement.contacts WHERE id = ?",
+                contactOf(token))).isEqualTo("false|-");
+    }
+
+    @Test
+    void deLaiThongTin_khongGhiDeTenVaSoNhanVienDaNhap_chuaNhanTinVanDuoc() throws Exception {
+        String token = newToken(KEY_W, ORIGIN_W);
+        turnOf(send(token, ORIGIN_W, "xin chào"));
+        UUID contact = contactOf(token);
+        try (Connection c = owner(); PreparedStatement ps = c.prepareStatement(
+                "UPDATE engagement.contacts SET full_name = 'Chị Hoa (NV sửa)', phone = '0900000001' WHERE id = ?")) {
+            ps.setObject(1, contact);
+            ps.executeUpdate();
+        }
+        thongTin(token, ORIGIN_W, "{\"fullName\":\"Hoa\",\"phone\":\"0900000002\",\"email\":\"hoa@x.vn\",\"consent\":true}")
+                .andExpect(status().isOk());
+        assertThat(sqlRow("SELECT full_name || '|' || phone || '|' || email || '|' || consent_granted "
+                + "FROM engagement.contacts WHERE id = ?", contact)).isEqualTo("Chị Hoa (NV sửa)|0900000001|hoa@x.vn|true");
+
+        // Khách chưa nhắn tin nào vẫn để lại được — hồ sơ tạo luôn, chưa có hội thoại nên không có tin hệ thống
+        String moi = newToken(KEY_W, ORIGIN_W);
+        JsonNode kq = data(thongTin(moi, ORIGIN_W, "{\"phone\":\"0900000003\",\"consent\":true}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertThat(kq.get("messages")).isEmpty();
+        assertThat(sqlRow("SELECT phone FROM engagement.contacts WHERE id = ?", contactOf(moi))).isEqualTo("0900000003");
+    }
+
+    @Test
+    void trungSdt_khongTuGop_hoSoKhachHienNghiTrung() throws Exception {
+        UUID cu = UUID.randomUUID();
+        UUID quanTri = UUID.randomUUID();
+        try (Connection c = owner()) {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    INSERT INTO engagement.contacts (id, tenant_id, full_name, phone, primary_channel)
+                    VALUES (?, ?, 'Khách cũ gọi điện', '0977000222', 'PHONE')""")) {
+                ps.setObject(1, cu);
+                ps.setObject(2, TENANT_W);
+                ps.executeUpdate();
+            }
+            try (PreparedStatement ps = c.prepareStatement("""
+                    INSERT INTO platform.users (id, tenant_id, email, password_hash, full_name, status)
+                    VALUES (?, ?, ?, 'x', 'Quản trị W', 'ACTIVE')""")) {
+                ps.setObject(1, quanTri);
+                ps.setObject(2, TENANT_W);
+                ps.setString(3, quanTri.toString().substring(0, 8) + "@w.vn");
+                ps.executeUpdate();
+            }
+        }
+        String token = newToken(KEY_W, ORIGIN_W);
+        turnOf(send(token, ORIGIN_W, "mình là khách cũ"));
+        thongTin(token, ORIGIN_W, "{\"phone\":\"+84 977 000 222\",\"consent\":true}").andExpect(status().isOk());
+        UUID khachWeb = contactOf(token);
+        assertThat(khachWeb).isNotEqualTo(cu);
+        assertThat(sqlRow("SELECT count(*) FROM engagement.contacts WHERE tenant_id = ? AND phone = '0977000222'", TENANT_W))
+                .isEqualTo("2");
+        JsonNode chiTiet = data(mvc.perform(get("/api/v1/contacts/" + khachWeb)
+                .with(asUser(TENANT_W, quanTri, "TENANT_ADMIN"))).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertThat(chiTiet.get("duplicateCandidates")).hasSize(1);
+        assertThat(chiTiet.get("duplicateCandidates").get(0).get("id").asText()).isEqualTo(cu.toString());
+    }
+
     // ── tiện ích ────────────────────────────────────────────────────────────────
 
     private ResultActions session(String key, String origin) throws Exception {
@@ -376,6 +484,31 @@ class WidgetIntegrationTest extends EngagementIntegrationTestBase {
             req.header("X-Widget-Token", token);
         }
         return mvc.perform(req);
+    }
+
+    private ResultActions thongTin(String token, String origin, String body) throws Exception {
+        var req = post("/api/v1/widget/contact-info").header("Origin", origin)
+                .contentType(MediaType.APPLICATION_JSON).content(body);
+        if (token != null) {
+            req.header("X-Widget-Token", token);
+        }
+        return mvc.perform(req);
+    }
+
+    /** Hồ sơ khách của token (qua danh tính kênh — mã khách nằm trong phần {@code sub} của token). */
+    private UUID contactOf(String token) throws Exception {
+        String payload = new String(java.util.Base64.getUrlDecoder().decode(token.split("\\.")[1]), StandardCharsets.UTF_8);
+        String visitor = json.readTree(payload).get("sub").asText();
+        return UUID.fromString(sqlRow("SELECT contact_id::text FROM engagement.channel_identities WHERE external_user_id = ?",
+                visitor));
+    }
+
+    private static String sqlRow(String query, Object arg) throws Exception {
+        try (Connection c = owner(); PreparedStatement ps = c.prepareStatement(query)) {
+            ps.setObject(1, arg);
+            ResultSet rs = ps.executeQuery();
+            return rs.next() ? rs.getString(1) : null;
+        }
     }
 
     private ResultActions handoff(String token) throws Exception {
