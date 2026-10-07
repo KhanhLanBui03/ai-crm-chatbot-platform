@@ -1553,6 +1553,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/waiting-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Số hội thoại chờ nhân viên — số trên menu "Hộp thư"
+         * @description Hội thoại `PENDING_AGENT` chưa ai nhận. Mọi nhân viên gọi được. Chỉ đọc: KHÔNG ghi mốc "đang
+         *     trực" (khác GET /conversations) — menu hỏi định kỳ trên mọi trang, ghi mốc thì người chỉ đang
+         *     xem trang khác cũng bị tự giao hội thoại (UC014).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Số hội thoại chờ */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"] & {
+                            data?: {
+                                waiting: number;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/queue-status": {
         parameters: {
             query?: never;

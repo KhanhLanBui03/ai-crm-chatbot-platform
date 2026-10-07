@@ -935,6 +935,29 @@ paths:
                         type: array
                         items: { $ref: '#/components/schemas/NguoiNhanHoiThoai' }
 
+  /api/v1/conversations/waiting-count:
+    get:
+      tags: [Hộp thư]
+      summary: Số hội thoại chờ nhân viên — số trên menu "Hộp thư"
+      description: |
+        Hội thoại `PENDING_AGENT` chưa ai nhận. Mọi nhân viên gọi được. Chỉ đọc: KHÔNG ghi mốc "đang
+        trực" (khác GET /conversations) — menu hỏi định kỳ trên mọi trang, ghi mốc thì người chỉ đang
+        xem trang khác cũng bị tự giao hội thoại (UC014).
+      responses:
+        '200':
+          description: Số hội thoại chờ
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: object
+                        required: [waiting]
+                        properties:
+                          waiting: { type: integer }
+
   /api/v1/conversations/queue-status:
     get:
       tags: [Hộp thư]

@@ -283,6 +283,50 @@ class InboxIntegrationTest extends EngagementIntegrationTestBase {
         }
     }
 
+    // ── số trên menu "Hộp thư" ──────────────────────────────────────────────────
+
+    @Test
+    void soHoiThoaiCho_khopCsdl_khongLanDoanhNghiep_khongGhiMocDangTruc() throws Exception {
+        Khach k = khachMoi("cho mình gặp nhân viên");
+        mvc.perform(post("/api/v1/conversations/" + k.conversationId() + "/handoff").with(admin())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"direction\":\"BOT_TO_AGENT\",\"reason\":\"CUSTOMER_REQUEST\"}"))
+                .andExpect(status().isOk());
+        long trongCsdl;
+        UUID moi = UUID.randomUUID();
+        try (Connection c = owner()) {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    SELECT count(*) FROM engagement.conversations
+                    WHERE tenant_id = ? AND status = 'PENDING_AGENT' AND assigned_user_id IS NULL""")) {
+                ps.setObject(1, TENANT_I);
+                try (ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    trongCsdl = rs.getLong(1);
+                }
+            }
+            exec(c, """
+                    INSERT INTO platform.users (id, tenant_id, email, password_hash, full_name, status)
+                    VALUES (?, ?, ?, 'x', 'Mới vào', 'ACTIVE')""", moi, TENANT_I, moi.toString().substring(0, 8) + "@i.vn");
+        }
+        assertThat(trongCsdl).isPositive();
+        JsonNode d = data(mvc.perform(get("/api/v1/conversations/waiting-count").with(nv(moi)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertThat(d.get("waiting").asLong()).isEqualTo(trongCsdl);
+        // Menu hỏi định kỳ trên mọi trang → không được biến người đang xem trang khác thành "đang trực"
+        try (Connection c = owner(); PreparedStatement ps = c.prepareStatement(
+                "SELECT count(*) FROM platform.user_presence WHERE user_id = ?")) {
+            ps.setObject(1, moi);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                assertThat(rs.getLong(1)).isZero();
+            }
+        }
+        JsonNode j = data(mvc.perform(get("/api/v1/conversations/waiting-count")
+                .with(asUser(TENANT_J, ADMIN_J, "TENANT_ADMIN"))).andReturn().getResponse()
+                .getContentAsString(StandardCharsets.UTF_8));
+        assertThat(j.get("waiting").asLong()).isZero();
+    }
+
     // ── tiện ích ────────────────────────────────────────────────────────────────
 
     private static void setUsage(UUID tenant, boolean exhausted) throws Exception {

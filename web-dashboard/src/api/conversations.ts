@@ -224,6 +224,12 @@ export const conversationsApi = apiSlice.injectEndpoints({
       providesTags: [CA_DANH_SACH],
     }),
 
+    /** Số trên menu "Hộp thư": hội thoại chờ nhân viên chưa ai nhận (không ghi mốc "đang trực"). */
+    soHoiThoaiCho: build.query<{ waiting: number }, void>({
+      query: () => ({ url: '/api/v1/conversations/waiting-count' }),
+      providesTags: [CA_DANH_SACH],
+    }),
+
     // ── UC014 6.2 / 7.2 — thanh cảnh báo của quản trị viên ──
     tinhTrangHangCho: build.query<TinhTrangHangCho, void>({
       query: () => ({ url: '/api/v1/conversations/queue-status' }),
@@ -251,4 +257,5 @@ export const {
   useTraVeHangChoMutation,
   useNguoiNhanHoiThoaiQuery,
   useTinhTrangHangChoQuery,
+  useSoHoiThoaiChoQuery,
 } = conversationsApi

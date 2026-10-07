@@ -22,6 +22,7 @@ import { useDangXuatMutation } from '@/api/auth'
 import { dangXuat } from '@/app/store/authSlice'
 import { useAppDispatch, useAppSelector } from '@/app/store/hooks'
 import { useDanhSachGoiCongCuQuery } from '@/api/ai-agent'
+import { useSoHoiThoaiChoQuery } from '@/api/conversations'
 import { useSoViecCuaToiQuery } from '@/api/sales'
 import { XacNhanDangXuatDialog } from '@/components/layout/XacNhanDangXuatDialog'
 import {
@@ -57,7 +58,7 @@ import { chuCaiDau, vietTatDoanhNghiep } from '@/utils/ten'
  */
 const MUC_CHINH = [
   { duongDan: '/tong-quan', nhan: 'Tổng quan', BieuTuong: LayoutDashboard },
-  { duongDan: '/hop-thu', nhan: 'Hộp thư', BieuTuong: Inbox, huyHieu: '12' },
+  { duongDan: '/hop-thu', nhan: 'Hộp thư', BieuTuong: Inbox },
   { duongDan: '/khach-hang', nhan: 'Khách hàng', BieuTuong: Users },
 ] as const
 
@@ -143,6 +144,8 @@ export function AppSidebar() {
   // UC035 — việc quá hạn + hôm nay của tôi. Chưa có thông báo đẩy nên hỏi lại mỗi phút.
   const viec = useSoViecCuaToiQuery(undefined, { pollingInterval: 60_000 })
   const soViec = (viec.data?.overdue ?? 0) + (viec.data?.today ?? 0)
+  // Hội thoại chờ nhân viên chưa ai nhận — trước đây là số cứng "12"
+  const soCho = useSoHoiThoaiChoQuery(undefined, { pollingInterval: 30_000 }).data?.waiting ?? 0
   const soChoDuyet =
     useDanhSachGoiCongCuQuery({ trangThaiDuyet: 'PENDING' }).data?.totalItems ?? 0
 
@@ -168,7 +171,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {MUC_CHINH.map(({ duongDan, nhan, BieuTuong, ...rest }) => (
+              {MUC_CHINH.map(({ duongDan, nhan, BieuTuong }) => (
                 <SidebarMenuItem key={duongDan}>
                   <SidebarMenuButton asChild isActive={viTri.pathname.startsWith(duongDan)}>
                     <NavLink to={duongDan}>
@@ -176,9 +179,9 @@ export function AppSidebar() {
                       <span>{nhan}</span>
                     </NavLink>
                   </SidebarMenuButton>
-                  {'huyHieu' in rest && rest.huyHieu ? (
-                    <SidebarMenuBadge>{rest.huyHieu}</SidebarMenuBadge>
-                  ) : null}
+                  {duongDan === '/hop-thu' && soCho > 0 && (
+                    <SidebarMenuBadge aria-label={`${soCho} hội thoại chờ nhận`}>{soCho}</SidebarMenuBadge>
+                  )}
                 </SidebarMenuItem>
               ))}
 
