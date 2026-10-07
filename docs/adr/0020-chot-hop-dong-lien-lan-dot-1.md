@@ -68,7 +68,18 @@ của `crm.document.v1` là java-core.
    `ai-service/src/worker/main.py` đã dự kiến tiêu thụ. Các topic còn lại (theo cả bộ §2.6 hay giữ
    `crm.*.v1`) **chưa chốt** — hạn: trước producer/consumer tiếp theo.
 5. **Chỗ đặt bộ vàng — chưa chốt.** Hạn: trước Ngày 6.
+   **Cập nhật 06/10/2026 — đã chốt và đóng băng:** `ai-service/tests/eval/golden_set.jsonl`,
+   **100 câu có đáp án** (mẫu số recall@5) + 12 câu ngoài kho (UC025), sha256 `323baf73…765aba2f`.
+   **Nguồn là AI, không phải người** (chiến thuật từ 05/10: AI làm trọn từng ngày). Bản 27/09 ghi
+   "Gemini sinh câu hỏi + người gán căn cứ"; thực tế Claude làm cả hai bước, theo ba chốt chống tự
+   thiên vị:
+   - câu hỏi viết chỉ từ mục lục;
+   - danh sách 134 ứng viên khoá bằng sha256 trước khi mở nội dung đoạn;
+   - luật cắt định trước: xáo seed 42, lấy tới đủ 100 câu có đáp án.
+
+   Hệ quả cho báo cáo: không có đánh giá độc lập giữa hai người gán — ghi là giới hạn của bộ vàng.
 6. **Cỡ tập test người thật — chưa chốt.** Chốt ở buổi gõ tay chung với Dev B; ghi lý do nếu là 200.
+   **Cập nhật 06/10/2026:** tập 200 câu ý định đã do Dev B làm (ADR-0017); không đổi.
 
 Hợp đồng chi tiết của UC018 (JSON, bảng mã lỗi, định dạng key, thứ tự bước):
 [`docs/contracts/uc018-tai-tai-lieu.md`](../contracts/uc018-tai-tai-lieu.md).

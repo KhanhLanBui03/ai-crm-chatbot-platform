@@ -4,7 +4,7 @@
 #     docker compose -f inference/compose.inference.yml up -d
 #
 # BA CỔNG (§3.9.3 — ma trận địa chỉ kết nối, "nguồn lỗi số một"):
-#     ai-embed     8081
+#     ai-embed     8091   (không phải 8081: java-core profile `local` chạy trên máy chiếm 8081)
 #     ai-rerank    8082
 #     ai-classify  8083
 #
@@ -34,11 +34,15 @@ services:
     <<: *inference-common
     container_name: ai-embed
     ports:
-      - "8081:8080"
+      - "8091:8080"
     environment:
       <<: *inference-env
       MODEL_ROLE: embed
       OMP_NUM_THREADS: "4"        # PHẢI bằng cpus bên dưới
+    # bge-m3-int8.onnx (+ .onnx.data, 541 MB) và tokenizer.json ở artifacts/models/ — mount, không
+    # COPY vào image. Thiếu file thì /ready = 503 (embed.check_invariants), không trả vector giả.
+    volumes:
+      - ../artifacts:/app/artifacts:ro
     deploy:
       resources:
         limits: { cpus: "4", memory: 8G }

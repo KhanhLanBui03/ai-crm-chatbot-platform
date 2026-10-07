@@ -158,6 +158,10 @@ class OutboxPublisherIntegrationTest {
         chenOutbox(TENANT_B, TOPIC_LEAD, "{\"thu_tu\": 1}");
 
         assertThat(publisher.publishPendingBatch()).isEqualTo(1);
+        // Lượt kế tiếp NGAY sau đó: còn trong khoảng lùi 2 s — không thử lại, không phát gì của A.
+        // Gọi trước khi đọc Kafka: consumer mới vào group mất ~2–3 s, đọc xen giữa thì khoảng lùi đã
+        // hết và lượt này thử lại sự kiện hỏng (attempt_count = 2) — test chập chờn, không phải lỗi code.
+        assertThat(publisher.publishPendingBatch()).isZero();
 
         // B không bị kẹt vì A; sự kiện sau của A phải CHỜ sự kiện hỏng — phát nó là sai thứ tự.
         List<ConsumerRecord<String, String>> banTin = doc(TOPIC_LEAD, 1);
@@ -168,10 +172,6 @@ class OutboxPublisherIntegrationTest {
         assertThat((String) dongHong.get("last_error")).isNotBlank();
         assertThat(dong(sauHong).get("published_at")).isNull();
         assertThat(dong(sauHong).get("attempt_count")).isEqualTo(0);
-
-        // Lượt kế tiếp ngay sau đó: còn trong khoảng lùi 2 s — không thử lại, không phát gì của A.
-        assertThat(publisher.publishPendingBatch()).isZero();
-        assertThat(dong(hong).get("attempt_count")).isEqualTo(1);
     }
 
     @Test

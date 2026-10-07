@@ -1,6 +1,7 @@
 # ADR-0021 — Cổng parity INT8 trượt: hoãn phán quyết, phân xử bằng Recall@5 ở Ngày 7
 
-- **Trạng thái:** Đề xuất
+- **Trạng thái:** Chấp nhận — kèm giới hạn (06/10/2026): ship INT8, phép phân xử fp32 bị bỏ.
+  Xem "Cập nhật 06/10/2026 (2)" ở cuối mục Hệ quả
 - **Ngày:** 2026-09-26
 - **Làn sở hữu:** Track B (module AI) · Dev A
 - **Quan hệ:** thi hành [ADR-0015](0015-cau-truc-src-hai-tang-theo-master-plan-v8.md) (kiến
@@ -183,6 +184,61 @@ chunk, nhúng lại trong vài phút chứ không phải 15–30 phút như rein
   `CONG_PARITY_DAT` và in rõ kết quả trượt. Lý do: `assert` làm gãy lượt `Save & Run All`,
   khiến không có version nào lưu được chính bằng chứng của lần trượt.
 - Bản fp32 (2,16 GB) **phải giữ lại** tới hết Ngày 7 — không có nó thì không có đối chứng.
+
+### Cập nhật 06/10/2026 — một phần sai số có thể nằm ở cách đo, không ở model
+
+Khi dựng `ai-embed` thật, cùng một đoạn được nhúng hai cách bằng **chính bản INT8**: một mình, và
+chung lô 32 với các đoạn khác. Đo trên 190 đoạn thật của `data/kb_samples`, chi tiết ở
+`docs/report/uc023-ngay6-2026-10-06.md` §5:
+
+| INT8 lô 32 so với INT8 lô 1 | `mean` | `min` |
+|---|---|---|
+| lô xếp theo độ dài | 0,98508 | 0,97439 |
+| lô không xếp | 0,98466 | 0,97570 |
+
+Hai bản INT8 **giống hệt nhau** mà vẫn chỉ đạt ~0,985, ngang `parity.mean = 0,98476` ở trên.
+Đây chính là cơ chế giả thuyết "activation per-tensor" đã nêu: `DynamicQuantizeLinear` tính thang
+trên **cả tensor của lô**, gồm các câu đi cùng và vị trí pad. Ô parity của notebook 06 tokenize theo
+lô với `padding=True`, tức bên INT8 mang sai số ghép lô, còn bên fp32 thì không.
+
+Hệ quả:
+- **`ai-embed` chạy lô 1** (`inference/src/roles/embed.py`). Vector chỉ còn là hàm của riêng văn bản
+  đó, và trên CPU lô 1 còn nhanh gấp ~3 lần lô 32.
+- **Phép phân xử Ngày 7 phải đo cả fp32 lẫn INT8 ở lô 1.** Nếu cosine fp32 ↔ INT8 ở lô 1 lên
+  ≥ 0,995 thì cổng parity trượt vì cách đo, không vì lượng tử hoá — ghi lại kết luận đó thay cho
+  phần Bối cảnh. Chưa đo nên chưa kết luận.
+- `artifacts/models/` trên máy dev **thiếu `bge-m3-fp32.data`** (graph 0,58 MB còn, trọng số
+  2,16 GB không). Phải tải lại từ output Kaggle notebook 06 trước Ngày 7; sha256 phải bắt đầu bằng
+  `303112e4`.
+
+### Cập nhật 06/10/2026 (2) — bỏ phép phân xử fp32, ship INT8 kèm giới hạn
+
+**Quyết định của người dùng:** không tải `bge-m3-fp32.data` và **bỏ phép đo fp32 ↔ INT8**. Lý do:
+ưu tiên cho luồng chính chạy được trước (Ngày 8 trở đi). Quyết định 4 ở trên vì thế không thi hành.
+
+- **Ship `bge-m3-int8` chạy lô 1** trong container `ai-embed` (`inference/compose.inference.yml`).
+- Căn cứ để ship là **chất lượng truy hồi tuyệt đối** trên bộ vàng v1 (100 câu có đáp án), không phải
+  phép so với fp32: recall@5 dense 0,800, hybrid 0,740 (`docs/report/uc023-ngay6-2026-10-06.md` §6).
+- Ngưỡng 0,995 **không hạ** (quyết định 1 giữ nguyên). Cổng parity ghi **TRƯỢT — chưa phân xử**.
+
+**Giới hạn phải ghi trong báo cáo:**
+1. Không biết INT8 làm mất bao nhiêu recall so với fp32.
+2. Giả thuyết "trượt parity một phần vì đo theo lô" (mục Cập nhật phía trên) **chưa kiểm**.
+
+**Phát hiện thêm cùng ngày — vector INT8 phụ thuộc nền tảng chạy.**
+- Cùng `int8-71e2aa91`, cùng onnxruntime 1.30.0, nhưng macOS và container Linux cho cos trung bình
+  0,9956, thấp nhất 0,982; chỉ 53/112 câu trùng khít.
+- Ràng buộc vận hành: **kho và câu hỏi phải nhúng bằng cùng một đường**, tức cùng image `ai-embed`.
+  Không trộn vector nhúng khi chạy tay trên máy dev vào kho đo.
+- `model_version` hiện không mã hoá nền tảng. Đổi image hoặc nền tảng của `ai-embed` thì phải nhúng
+  lại kho, giống như khi đổi model.
+
+**Tái lập nếu sau này muốn phân xử** (khoảng 30 phút khi đã có `.data`):
+1. Tải `bge-m3-fp32.data` từ output Kaggle notebook 06, kiểm sha256 `303112e4…`.
+2. Chạy `ai-embed` với `EMBED_MODEL_PATH=artifacts/models/bge-m3-fp32.onnx EMBED_VARIANT=fp32`.
+3. Chạy `gieo_kho xoa` rồi `gieo_kho nap`.
+4. Chạy `danh_gia_truy_hoi chay` với bản sao `e3_*.yaml` đổi `nhung.version` thành `fp32-ff81fec3`.
+5. Chạy `so-sanh` với CSV INT8 cùng đường chạy.
 
 ## Số đo và cách tái lập
 

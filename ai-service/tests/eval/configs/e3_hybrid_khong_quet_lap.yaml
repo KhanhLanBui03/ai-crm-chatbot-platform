@@ -1,0 +1,15 @@
+# Đối chứng ngược cho phép so 1 ↔ 20 tenant: hybrid nhưng TẮT hnsw.iterative_scan. [R&D]
+# Ở kho 20 tenant, HNSW lọc tenant SAU khi quét nên làn vector hụt ứng viên — khoảng chênh với
+# e3-hybrid chính là phần iterative_scan cứu lại. Ở kho 1 tenant hai cấu hình phải cho cùng số.
+id: e3-hybrid-khong-quet-lap
+mo_ta: "Hybrid RRF k=60, TẮT iterative_scan — đối chứng ngược"
+bo_vang: ../golden_set.jsonl
+che_do: hybrid
+tenant: eeeeeeee-0000-0000-0000-000000000001
+k: 5
+ung_vien: 30
+ef_search: 100
+quet_lap: "off"
+nhung:
+  model: BAAI/bge-m3
+  version: int8-71e2aa91

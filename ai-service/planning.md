@@ -37,6 +37,13 @@ container → xác minh lại → `.env` → `dev.txt` → `test_rls.py` → job
 
 ## Quy ước: ai gõ dòng code nào
 
+> **Đổi 05/10/2026 — thay cho phân tầng bên dưới:** AI viết **mọi ô** của mỗi ngày, kể cả ô 🖐
+> và dữ liệu đánh giá (bộ vàng, tập test ý định — báo cáo ghi rõ nguồn là AI). Ô được tick khi
+> **code + test + minh chứng** đã xong, kèm chú thích `(AI viết DD/MM)`. Cuối mỗi ngày AI viết
+> ghi chú ôn tập ở [`docs/on-tap/`](../docs/on-tap/): hệ thống chạy thế nào, vì sao chọn như vậy,
+> trả lời sẵn các câu "Phải giải thích được". Luật "không giải thích được thì chưa tick" chuyển
+> thành **đọc ghi chú ôn tập trước buổi bảo vệ**.
+
 Đây là đồ án tốt nghiệp. Tiêu chí phân tầng không phải "khó hay dễ" mà là **hội đồng có hỏi
 được không** và **sai thì có âm thầm làm hỏng số liệu không**.
 
@@ -51,7 +58,8 @@ container → xác minh lại → `.env` → `dev.txt` → `test_rls.py` → job
 
 ### Mười thứ bắt buộc 🖐 TỰ GÕ trong cả 21 ngày
 
-Đây là khối lượng lõi thật sự. Mọi thứ khác là phụ trợ quanh mười thứ này:
+Đây là khối lượng lõi thật sự. Mọi thứ khác là phụ trợ quanh mười thứ này.
+*Từ 05/10: nhãn 🖐 nghĩa là "hội đồng chắc chắn hỏi" — ghi chú ôn tập phải viết kỹ nhất ở đây.*
 
 | # | Thứ | Ngày | Vì sao không được nhờ AI |
 |---|---|---|---|
@@ -493,24 +501,45 @@ HNSW tồn tại · DLQ hoạt động · restart worker không mất job.
 
 **Việc:**
 
-- [ ] 🖐 **MỘT câu SQL gộp hai làn — tự gõ, đây là code lõi nhất của phần truy hồi.**
+- [x] 🖐 **MỘT câu SQL gộp hai làn — tự gõ, đây là code lõi nhất của phần truy hồi.** *(AI viết 27/09)*
       Làn vector (HNSW cosine) + làn từ khoá (GIN tsvector), hợp nhất bằng **RRF hằng số 60**.
       **Mỗi làn 30 ứng viên.**
       ⚠️ Chỉ dùng **THỨ HẠNG**, không dùng điểm thô — nên không phải chuẩn hoá hai thang điểm
       khác nhau. **KHÔNG "cải tiến" RRF thành weighted sum** (ADR-0006).
-- [ ] 🖐 `SET LOCAL hnsw.ef_search=100` và `hnsw.iterative_scan='relaxed_order'` trong **CÙNG
+      **27/09: Claude viết theo yêu cầu** — `src/ai/rag/retrieve/hybrid.py` (toán tử `<=>` khớp
+      `vector_cosine_ops`; lọc tenant + `READY` + model/version ở cả hai làn), 23 test tích hợp ở
+      `tests/integration/test_tim_kiem_lai.py`, **kiểm ngược 11/11** đột biến đỏ đúng test. Tick
+      khi bạn tự giải thích được.
+- [x] 🖐 `SET LOCAL hnsw.ef_search=100` và `hnsw.iterative_scan='relaxed_order'` trong **CÙNG
       transaction** với truy vấn.
-- [ ] 🖐 **Bộ vàng v1: 40–50 cặp** câu hỏi/đoạn đúng từ 20 tệp mẫu Ngày 3, đặt đúng chỗ đã chốt.
+      **27/09:** `hybrid.dat_tham_so_truy_hoi` — `set_config(..., true)` + `plan_cache_mode =
+      force_custom_plan`. Khoá bởi `test_tham_so_hnsw_chet_theo_transaction` và
+      `test_quet_lap_cuu_tenant_nho_trong_kho_dong` (tắt quét lặp → tenant nhỏ hụt kết quả).
+- [x] 🖐 **Bộ vàng v1: 40–50 cặp** câu hỏi/đoạn đúng từ 20 tệp mẫu Ngày 3, đặt đúng chỗ đã chốt.
       *Bắt buộc có TRƯỚC khi đo — recall@5 phải có mẫu số.*
-- [ ] 🖐 **ĐO BASELINE (model pretrained):** dense-only vs sparse-only vs hybrid · **1 tenant vs
-      20 tenant**.
+      **27/09: đổi thành 100 cặp** — Gemini sinh câu hỏi CHỈ từ mục lục, bạn gán căn cứ (tệp +
+      câu trích). Công cụ: `python -m tests.eval.bo_vang muc-luc | doan | kiem`.
+      **06/10 — xong (AI viết 06/10):** AI làm cả hai bước (ADR-0020 mục 5). 134 ứng viên viết từ
+      mục lục, khoá sha256 `06ea38a5…` trước khi xem đoạn; cắt ở 100 câu có đáp án + 12 ngoài kho.
+      `bo_vang kiem` SẠCH, đóng băng sha256 `323baf73…` (bản LF, `.gitattributes` ghim `eol=lf`).
+- [x] 🖐 **ĐO BASELINE (model pretrained):** dense-only vs sparse-only vs hybrid · **1 tenant vs
+      20 tenant**. *(AI chạy 06/10)*
       ⚠️ *Đây là MỐC SO SÁNH DUY NHẤT của phần fine-tune — không đo hôm nay thì ngày mai không
       có gì để so.* Lưu bảng này lại cẩn thận.
+      **27/09:** câu ⚠️ trên hết hiệu lực vì fine-tune đã bỏ — baseline này giờ là mốc cho phép so
+      fp32 ↔ INT8 (ADR-0021). **Công cụ sẵn**, chờ ai-embed + bộ vàng: `tests/eval/gieo_kho.py`
+      (`nap` tenant gốc · `nhan-ban --den 20` · `xoa`) · `tests/eval/danh_gia_truy_hoi.py` (`chay`
+      · `so-sanh`) · 4 cấu hình `tests/eval/configs/e3_*.yaml`. Đã chạy thử trên CSDL dev bằng mock
+      (20 tenant × 190 đoạn) rồi dọn sạch.
+      **06/10 — số thật** (bge-m3 INT8 qua ai-embed thật, `inference/src/roles/embed.py` thay bản
+      giả của Dev B): recall@5 dense **0,800** · sparse 0,530 · hybrid 0,740 trên đường container
+      (số chính thức; chạy tay trên macOS ra dense 0,790 — vector INT8 phụ thuộc nền tảng); 20 tenant y hệt.
+      Minh chứng: [`docs/report/uc023-ngay6-2026-10-06.md`](../docs/report/uc023-ngay6-2026-10-06.md).
 - [ ] ~~🤖 Khai thác cặp huấn luyện từ **chính kho tri thức**~~ — **BỎ khỏi Ngày 6 (27/09, người
       dùng quyết: ra kết quả trước).** *verify gốc: `positive` = (câu hỏi sinh
       từ đoạn, đoạn đó); `hard negative` = đoạn **lọt top-5 hybrid nhưng SAI** — chỉ có được SAU
       khi hybrid chạy, nên đúng thứ tự là hôm nay.*
-- [ ] 🖐 **Tách tập giữ lại theo TÀI LIỆU, không theo đoạn.**
+- [ ] ~~🖐 **Tách tập giữ lại theo TÀI LIỆU, không theo đoạn.**~~ — **BỎ cùng fine-tune (27/09).**
       *Tách theo đoạn thì các đoạn cùng một tài liệu lọt cả hai bên, model học thuộc văn phong
       tài liệu đó và chỉ số bị thổi phồng.*
 - [ ] ~~🤖 Notebook `07_finetune_embedding.ipynb`~~ — **BỎ khỏi Ngày 6 (27/09).** *verify gốc: ghim
@@ -533,9 +562,12 @@ node `guard` ở **Ngày 8**, nên Dev B phải xong hôm nay.
 - Vì sao hard negative phải lấy **sau** khi hybrid chạy chứ không lấy ngẫu nhiên?
 
 **Cổng ra (DoD):**
-- ✅ **Hybrid thắng dense-only ≥ 5 điểm recall@5**
-- ✅ **Chênh lệch recall@5 giữa 1 tenant và 20 tenant < 3 điểm**
-- ✅ Notebook đang chạy trên Kaggle GPU
+- ❌ **Hybrid thắng dense-only ≥ 5 điểm recall@5** — **TRƯỢT 06/10:** hybrid − dense = −6,0 điểm,
+  KTC 95% [−13,0; +1,0] (container; macOS: −5,0 [−12; +2]). Làn từ khoá yếu (0,53) kéo RRF xuống ở câu có dấu; hybrid chỉ thắng ở câu
+  không dấu (0,43 vs 0,29). Chưa đổi gì — chờ quyết định (xem ghi chú ôn tập Ngày 6).
+- ✅ **Chênh lệch recall@5 giữa 1 tenant và 20 tenant < 3 điểm** — Δ = 0,0. Giới hạn: bộ tối ưu
+  không dùng HNSW ở 190 đoạn/tenant (tìm chính xác), nên chưa thử thách đường HNSW lọc sau.
+- ~~✅ Notebook đang chạy trên Kaggle GPU~~ — bỏ cùng fine-tune (27/09)
 
 **Minh chứng báo cáo:** bảng 3 dòng (dense / sparse / hybrid) · bảng 1 tenant vs 20 tenant ·
 **bảng baseline recall@5 và nDCG@5 của model pretrained** (cột đối chứng của toàn bộ phần
@@ -543,65 +575,60 @@ fine-tune) · số cặp huấn luyện khai thác được + tỉ lệ hard neg
 
 ---
 
-## Ngày 7 — CN 27/09 — 🏁 MỐC M1 · Fine-tune embedding: export, parity, reindex, đo lại
+## Ngày 7 — CN 27/09 — 🏁 MỐC M1 · Chốt encoder INT8 + bảng thoát M1
 
-> **Mục tiêu:** chốt ship bản fine-tune hay rollback về pretrained — **bằng số, không bằng cảm tính.**
+> **Viết lại 06/10/2026.** Bản cũ là vòng fine-tune (export, parity, reindex, so fine-tune ↔
+> pretrained). Bản đó đã bỏ hẳn từ 27/09 — xem [ADR-0026](../docs/adr/0026-bo-fine-tune-embedding.md).
+> Ngày 06/10 người dùng bỏ thêm phép đo fp32 ↔ INT8, vì muốn **hệ thống chạy được trước**
+> ([ADR-0021](../docs/adr/0021-cong-parity-int8-truot-phan-xu-bang-recall.md) cập nhật 2).
 
-**Điều kiện vào:** notebook Kaggle đã chạy xong qua đêm.
+> **Mục tiêu:** chốt encoder sẽ ship, ghi đủ quyết định, đóng M1 bằng bảng thật — kể cả ô ❌.
 
 **Việc:**
 
-- [ ] 🤖 Thu kết quả; export bản fine-tune sang ONNX rồi lượng tử hoá **INT8 động per-channel** —
-      *verify: cùng quy trình với Ngày 2, không đổi tham số giữa chừng (nếu đổi thì bảng so sánh
-      mất nghĩa).*
-- [ ] 🖐 **CỔNG PARITY:** cosine fp32 vs INT8 trên **500 câu** phải **≥ 0,995**.
-      ⚠️ *Bản fine-tune có phân bố trọng số đã dịch nên INT8 có thể lệch nhiều hơn bản gốc.*
-      🚫 ~~**Không đạt → DỪNG, giữ bản pretrained, ghi ADR.**~~
-      **Sửa 26/09 — đường lùi này ĐÃ VÔ HIỆU:** bản pretrained **cũng trượt** cổng đó ở Ngày 2
-      (`mean` 0,98476 · `min` 0,96692, xem [ADR-0021](../docs/adr/0021-cong-parity-int8-truot-phan-xu-bang-recall.md)).
-      "Giữ bản pretrained" là lùi về chỗ cũng đang hỏng. Đường lùi thật: giữ pretrained **fp32**
-      làm nhánh đối chứng, và quyết định ship bằng **Recall@5**, không bằng cổng parity.
-- [ ] 🖐 **Đo Recall@5 fp32 vs INT8 trên bộ vàng** — đây là phép thử phân xử của ADR-0021, làm
-      **cùng lượt** với phép so fine-tune ↔ pretrained ngay dưới, dùng chung paired bootstrap.
-      Chỉ cần nhúng lại **tập chunk của bộ vàng** (84 cặp ⇒ vài trăm chunk, vài phút), **không**
-      phải reindex toàn kho.
-      **Tiêu chí:** KTC 95% của hiệu Recall@5 chứa 0 → ngưỡng cosine 0,995 đặt chặt quá so với
-      model này, giữ INT8 và ghi rõ kèm bằng chứng. Không chứa 0 và nghiêng về fp32 → sai số
-      lượng tử hoá có hại thật, chuyển sang lượng tử hoá tĩnh có hiệu chuẩn hoặc đổi encoder.
-- [ ] 🤖 `MODEL_CARD_embedding` v2 — *verify: có sha256, dữ liệu huấn luyện, tập giữ lại.*
-- [ ] 🤖 Script reindex — đổi `embedding_model` rồi nhúng lại **TOÀN BỘ** chunk, chạy nền
-      ~15–30 phút máy — *verify: chạy nền thật, không block; bản API đầy đủ làm ở Ngày 11.*
-- [ ] 🖐 **Đo lại recall@5 và nDCG@5 trên CÙNG bộ vàng v1 của Ngày 6**, so sánh **THEO CẶP** bằng
-      **paired bootstrap KTC 95%**.
-      ⚠️ *Tiêu chí đúng là **ý nghĩa thống kê**, không phải một ngưỡng chênh lệch tuỳ tiện.*
-- [ ] 🖐 **Đường lùi:** giữ **cả hai** artifact, đặt biến `EMB_MODEL_VERSION`. Fine-tune thua
-      hoặc parity trượt → reindex ngược về pretrained, mất ~30 phút máy.
-      *Cột `embedding_model` trên từng dòng `knowledge_chunks` (V203) có sẵn chính là để làm việc này.*
+- [x] 🖐 **Chốt encoder: `bge-m3-int8`, pretrained, chạy lô 1** trong `ai-embed`. Căn cứ là recall@5
+      tuyệt đối trên bộ vàng v1 (dense 0,800 · hybrid 0,740, đường container), không phải phép so
+      với fp32. *(AI viết 06/10)*
+- [x] 🤖 **ai-embed chạy được trong compose:** `inference/compose.inference.yml`, cổng **8091** (8081
+      là của java-core), mount `../artifacts`. Image `ai-inference:dev` 383 MB (< 900 MB); container
+      cho lại đúng recall@5 của bản chạy tay. *(AI viết 06/10)*
+- [x] 🖐 **Ghi quyết định Ngày 6–7** *(AI viết 06/10)*:
+      - ADR-0026: bỏ fine-tune;
+      - ADR-0021 cập nhật 2: ship INT8, bỏ phân xử fp32, vector phụ thuộc nền tảng;
+      - ADR-0006 cập nhật 06/10: 30 ứng viên, kết quả E3, giữ hybrid, không cắt rerank.
+- [x] 🤖 `artifacts/MODEL_REGISTRY.md`: INT8 → ship; fp32 → bỏ đo đối chứng. *(AI viết 06/10)*
+- [ ] ~~Export / parity / reindex bản fine-tune · `MODEL_CARD_embedding` v2 · script reindex~~ — bỏ
+      cùng fine-tune (ADR-0026). Nhúng lại toàn kho vẫn cần khi đổi model **hoặc đổi nền tảng
+      `ai-embed`** — làm ở Ngày 11 (UC020, API reindex).
+- [ ] ~~Đo Recall@5 fp32 ↔ INT8~~ — bỏ 06/10. Lệnh tái lập nằm ở ADR-0021 nếu sau này muốn đo.
 
-**File sẽ đụng:** `artifacts/` · `scripts/reindex.py` · `tests/eval/` · `docs/adr/`
+**Ràng buộc mới, giữ cho mọi ngày sau:** kho và câu hỏi phải nhúng bằng **cùng một đường `ai-embed`**
+(cùng image). Cùng `int8-71e2aa91`, nhưng vector trên macOS lệch vector trong container (cos min
+0,982), vì INT8 động khuếch đại sai khác số học giữa nền tảng.
 
-**Chạm Dev B:** Dev B chạy **test tải hỗn hợp** hôm nay và phải chạy **SAU khi reindex của mình
-xong** để không tranh CPU. → **Báo Dev B ngay khi reindex chạy xong.**
-
-**Phải giải thích được:**
+**Phải giải thích được** (trả lời ở [`docs/on-tap/ngay-07-moc-m1.md`](../docs/on-tap/ngay-07-moc-m1.md)):
+- Vì sao ship INT8 khi cổng parity trượt và không có đối chứng fp32?
 - Vì sao dùng **paired** bootstrap chứ không so hai con số trần?
-- Nếu fine-tune thắng 2 điểm recall nhưng KTC 95% chứa 0 thì kết luận là gì?
-- Vì sao cổng parity vẫn là 0,995 cho bản fine-tune dù biết nó dễ lệch hơn?
+- Nếu hiệu recall@5 là −6 điểm nhưng KTC 95% chứa 0 thì kết luận là gì?
+- Vì sao trượt điều kiện thoát M1 #3 mà không áp luật cắt rerank?
 
-**🏁 ĐIỀU KIỆN THOÁT M1 — 4/4:**
+**🏁 ĐIỀU KIỆN THOÁT M1 — chốt 06/10:**
 
 | # | Điều kiện | ✅/❌ |
 |---|---|---|
-| 1 | Nạp được tài liệu thật vào `knowledge_chunks` | |
-| 2 | Test cách ly tenant xanh trong CI | |
-| 3 | Hybrid thắng dense ≥ 5 điểm | |
-| 4 | Router chạy trong `ai-classify` (Dev B) | |
+| 1 | Nạp được tài liệu thật vào `knowledge_chunks` | ✅ e2e UC019 (100 trang, 3.840 đoạn) + kho đo 19 tệp nhúng bằng ai-embed thật |
+| 2 | Test cách ly tenant xanh trong CI | ✅ bước cách ly tenant xanh trên PR #7 — job `rls-test` còn đỏ ở bước "test còn lại", chưa đọc log |
+| 3 | Hybrid thắng dense ≥ 5 điểm | ❌ −6,0 [−13; +1] — **giữ hybrid, không cắt** (người dùng chốt 06/10, ADR-0006) |
+| 4 | Router chạy trong `ai-classify` (Dev B) | ✅ theo [`docs/report/bao-cao-uc022-router.md`](../docs/report/bao-cao-uc022-router.md) §6 |
+| — | Parity INT8 ≥ 0,995 (`CLAUDE.md` mốc M1) | ❌ 0,98476, chưa phân xử — bỏ đo fp32 (ADR-0021) |
 
-🚨 **TRƯỢT M1 → cắt rerank khỏi Ngày 8 và bỏ semantic cache ở Ngày 16.** Cắt ngay, đừng chờ.
+~~🚨 TRƯỢT M1 → cắt rerank khỏi Ngày 8 và bỏ semantic cache ở Ngày 16.~~ **Không áp (06/10):**
+luật viết cho trường hợp trễ lịch. Ô ❌ #3 là kết quả kỹ thuật, và rerank là tầng có thể sửa nó.
 
-**Minh chứng báo cáo:** parity bản fine-tune ≥ 0,995 · **hiệu số recall@5 trước/sau fine-tune
-kèm KTC 95%** (biểu đồ này là một mục riêng đáng giá trong báo cáo) · `MODEL_CARD` v2 ·
-ADR quyết định ship hay rollback · thời gian reindex toàn bộ chunk · bảng điều kiện thoát M1 4/4.
+**Minh chứng báo cáo:**
+- [`docs/report/uc023-ngay6-2026-10-06.md`](../docs/report/uc023-ngay6-2026-10-06.md) §6 (số chính thức qua container);
+- ba ADR 0006 / 0021 / 0026;
+- bảng thoát M1 ở trên.
 
 ---
 ---
@@ -638,8 +665,9 @@ ADR quyết định ship hay rollback · thời gian reindex toàn bộ chunk ·
       chỉ gọi vào `service.py`, **không gọi thẳng** `orchestrator`. CI kiểm luật này bằng grep —
       chạy thử `.github/workflows/ci.yml` bước "chiều phụ thuộc" cho chắc.*
 
-⚠️ **Từ hôm nay toàn bộ truy hồi chạy trên EMBEDDING ĐÃ FINE-TUNE** (chốt ở Ngày 7). Mọi con số
-recall/nDCG từ đây trở đi là của bản fine-tune; bảng baseline pretrained đã lưu từ Ngày 6.
+⚠️ **Truy hồi chạy trên bge-m3 pretrained INT8, lô 1, qua `ai-embed` container** (Ngày 7 viết lại
+06/10 — fine-tune đã bỏ, ADR-0026). Mốc so sánh là bảng Ngày 6 §6 (dense 0,800 · hybrid 0,740).
+**Rerank vẫn làm** (không cắt dù M1 #3 trượt — ADR-0006 cập nhật 06/10).
 
 **File sẽ đụng:** `src/ai/orchestrator/{graph.py,state.py}` (CHUNG) ·
 `src/ai/orchestrator/nodes/{guard,retrieve}.py` · `src/ai/service.py` (CHUNG) ·
