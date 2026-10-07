@@ -68,7 +68,9 @@ function bocLoi(error: AxiosError<ApiResponse<unknown>>): ApiError {
     than?.message ??
     (status === 0 ? 'Không kết nối được máy chủ. Kiểm tra đường truyền rồi thử lại.' : error.message)
   const traceId = than?.traceId ?? (error.config?.headers?.['X-Trace-Id'] as string | undefined) ?? null
-  return new ApiError(message, status, traceId)
+  // `code` có ở ApiResponse của java-core từ UC018 nhưng hợp đồng chưa khai — đọc mềm
+  const code = (than as { code?: string | null } | undefined)?.code ?? null
+  return new ApiError(message, status, traceId, code, than?.data ?? null)
 }
 
 axiosClient.interceptors.response.use(

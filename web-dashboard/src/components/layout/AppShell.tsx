@@ -100,7 +100,8 @@ export function AppShell() {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
+      {/* min-w-0: nội dung rộng (bảng phễu 5 cột) không được đẩy cả trang tràn ngang dưới thanh bên */}
+      <SidebarInset className="min-w-0">
         <header className="flex h-14 shrink-0 items-center gap-2 sm:gap-3 border-b px-3 sm:px-6">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="h-4 hidden sm:block" />

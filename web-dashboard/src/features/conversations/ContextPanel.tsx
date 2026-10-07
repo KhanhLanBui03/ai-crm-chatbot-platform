@@ -1,4 +1,5 @@
-import { Ban, Check, Clock, FileText, Wrench } from 'lucide-react'
+import { Ban, Check, Clock, FileText, Target, Wrench } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -32,10 +33,14 @@ const NHAN_CHAN: Record<KetQuaKiemDuyet, { nhan: string; sacThai: SacThai }> = {
 export function ContextPanel({
   nguCanh,
   dangTai,
+  onTaoLead,
 }: {
   nguCanh: NguCanhHoiThoai | undefined
   dangTai: boolean
+  /** UC032 1a — tạo lead cho khách của hội thoại này. */
+  onTaoLead?: () => void
 }) {
+  const dieuHuong = useNavigate()
   if (dangTai || !nguCanh) {
     return (
       <div className="hidden xl:flex w-80 shrink-0 flex-col gap-4 border-l p-4">
@@ -81,12 +86,20 @@ export function ContextPanel({
       </div>
 
       <div className="flex gap-1.5">
-        <Button variant="outline" size="sm" className="flex-1">
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1"
+          onClick={() => dieuHuong(`/khach-hang/${contact.id}`)}
+        >
           Mở hồ sơ
         </Button>
-        <Button variant="outline" size="sm" className="flex-1">
-          Ghi chú
-        </Button>
+        {onTaoLead && (
+          <Button variant="outline" size="sm" className="flex-1" onClick={onTaoLead}>
+            <Target />
+            Tạo lead
+          </Button>
+        )}
       </div>
 
       {contact.tags && contact.tags.length > 0 && (

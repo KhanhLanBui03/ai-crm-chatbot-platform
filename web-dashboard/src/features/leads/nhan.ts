@@ -2,6 +2,8 @@ import type { SacThai } from '@/components/ui/status-chip'
 import type {
   KetQuaHoatDong,
   LoaiHoatDong,
+  LyDoLoaiLead,
+  LyDoThuaDeal,
   MucDo,
   TrangThaiDeal,
   TrangThaiLead,
@@ -12,9 +14,41 @@ import type {
 export const NHAN_TRANG_THAI_LEAD: Record<TrangThaiLead, { nhan: string; sacThai: SacThai }> = {
   NEW: { nhan: 'Mới', sacThai: 'info' },
   CONTACTED: { nhan: 'Đã liên hệ', sacThai: 'neutral' },
-  QUALIFIED: { nhan: 'Đủ điều kiện', sacThai: 'success' },
-  CONVERTED: { nhan: 'Đã chuyển đổi', sacThai: 'success' },
-  DISQUALIFIED: { nhan: 'Không phù hợp', sacThai: 'neutral' },
+  QUALIFIED: { nhan: 'Đủ tiềm năng', sacThai: 'success' },
+  CONVERTED: { nhan: 'Đã chuyển Deal', sacThai: 'success' },
+  DISQUALIFIED: { nhan: 'Đã loại', sacThai: 'neutral' },
+}
+
+/**
+ * UC032 — lý do loại lead. Danh sách cố định (khớp `LyDoLoaiLead`) vì đây là nhãn học của mô hình
+ * chấm điểm UC030: chữ tự do thì không đếm, không học được.
+ */
+export const NHAN_LY_DO_LOAI: Record<LyDoLoaiLead, string> = {
+  NO_BUDGET: 'Không có ngân sách',
+  NO_NEED: 'Không có nhu cầu thật',
+  BOUGHT_ELSEWHERE: 'Đã mua bên khác',
+  UNREACHABLE: 'Không liên lạc được',
+  SPAM: 'Thông tin sai / spam',
+  OTHER: 'Khác',
+}
+
+/** UC034 — lý do thua deal. Danh sách cố định (khớp `LyDoThuaDeal`) để UC037 đếm "thua vì gì". */
+export const NHAN_LY_DO_THUA: Record<LyDoThuaDeal, string> = {
+  PRICE: 'Giá cao hơn mong đợi',
+  COMPETITOR: 'Chọn đối thủ',
+  NO_BUDGET: 'Không có ngân sách',
+  NO_DECISION: 'Khách hoãn / không quyết',
+  UNREACHABLE: 'Mất liên lạc',
+  OTHER: 'Khác',
+}
+
+/** Nhãn nút chuyển trạng thái — nói hành động, không nói tên trạng thái. */
+export const NUT_CHUYEN_TRANG_THAI: Record<TrangThaiLead, string> = {
+  NEW: 'Mở lại',
+  CONTACTED: 'Đã liên hệ',
+  QUALIFIED: 'Đủ tiềm năng',
+  CONVERTED: 'Chuyển thành Deal',
+  DISQUALIFIED: 'Loại lead',
 }
 
 export const NHAN_TRANG_THAI_DEAL: Record<TrangThaiDeal, { nhan: string; sacThai: SacThai }> = {

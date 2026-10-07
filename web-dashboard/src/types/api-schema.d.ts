@@ -3787,6 +3787,20 @@ export interface paths {
                         };
                     };
                 };
+                403: components["responses"]["KhongDuQuyen"];
+                404: components["responses"]["KhongThay"];
+                /**
+                 * @description `LEAD_ALREADY_OPEN` — khách đã có một lead đang mở (Mới / Đã liên hệ / Đủ tiềm năng). Mỗi
+                 *     khách tối đa một lead mở (chỉ mục duy nhất V132). `data` là `LeadDangMo` để giao diện dẫn
+                 *     tới lead cũ.
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                422: components["responses"]["DuLieuKhongHopLe"];
             };
         };
         delete?: never;
@@ -3843,6 +3857,15 @@ export interface paths {
          * Cập nhật cơ hội tiềm năng
          * @description Chuyển sang `DISQUALIFIED` **bắt buộc** kèm `disqualifyReason` — nhãn này là phản hồi phục
          *     vụ cải tiến mô hình chấm điểm, bỏ trống là mất dữ liệu học.
+         *
+         *     UC032 — luật đã chốt:
+         *     - **Đi tới, được bỏ bước:** NEW → CONTACTED → QUALIFIED, không lùi. Loại được từ mọi trạng
+         *       thái mở; lead đã loại chỉ mở lại về NEW (xoá lý do loại). `CONVERTED` chỉ đặt qua
+         *       `/convert` (UC033) và khoá luôn. Chuyển sai → 422 `INVALID_TRANSITION`, `data` là
+         *       `LoiChuyenTrangThai`.
+         *     - **Quyền:** nhân viên sửa lead của mình hoặc lead chưa ai nhận (sửa lead chưa ai nhận = tự
+         *       nhận). Chỉ quản trị viên đổi `ownerUserId` sang người khác hoặc bỏ trống.
+         *     - Trường không gửi thì giữ nguyên; gửi `null` là xoá giá trị.
          */
         patch: {
             parameters: {
@@ -3869,6 +3892,18 @@ export interface paths {
                             data?: components["schemas"]["LeadChiTiet"];
                         };
                     };
+                };
+                403: components["responses"]["KhongDuQuyen"];
+                404: components["responses"]["KhongThay"];
+                /**
+                 * @description `LEAD_CONVERTED` (đã thành Deal, không sửa), `LEAD_DISQUALIFIED` (đã loại — mở lại trước
+                 *     khi sửa thông tin), `LEAD_ALREADY_OPEN` (mở lại khi khách đã có lead mở khác).
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
                 422: components["responses"]["DuLieuKhongHopLe"];
             };
@@ -3933,10 +3968,15 @@ export interface paths {
         /**
          * Chuyển cơ hội tiềm năng thành cơ hội bán hàng
          * @description UC033. Tạo `deals` với `source = AI_LEAD` nếu cơ hội tiềm năng do tác tử AI tạo, đặt
-         *     `leads.status = CONVERTED` và `converted_deal_id`.
-         *
+         *     `leads.status = CONVERTED` và `converted_at` (liên kết ngược là `deals.lead_id` UNIQUE).
          *     Khách hàng đã có cơ hội bán hàng đang mở thì vẫn cho tạo nhưng trả kèm cảnh báo trong
          *     `warnings` — chặn cứng sẽ sai với thực tế bán hàng.
+         *
+         *     Một transaction: tạo deal + dòng lịch sử đầu tiên + đóng lead. Lead đang mở (NEW /
+         *     CONTACTED / QUALIFIED) mới chuyển được; quyền như sửa lead (UC032). Bỏ trống
+         *     `pipelineId`/`stageId` thì deal vào giai đoạn mở đầu tiên của phễu mặc định; bỏ trống
+         *     `title` thì lấy "Tên khách – Sản phẩm quan tâm". Người phụ trách deal = người phụ trách lead
+         *     (lead chưa ai nhận thì là người bấm).
          */
         post: {
             parameters: {
@@ -3950,11 +3990,11 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
-                        title: string;
+                        title?: string | null;
                         /** Format: uuid */
-                        pipelineId: string;
+                        pipelineId?: string | null;
                         /** Format: uuid */
-                        stageId: string;
+                        stageId?: string | null;
                         amount?: number | null;
                         /** Format: date */
                         expectedCloseDate?: string | null;
@@ -3973,6 +4013,16 @@ export interface paths {
                         };
                     };
                 };
+                403: components["responses"]["KhongDuQuyen"];
+                404: components["responses"]["KhongThay"];
+                /** @description `LEAD_ALREADY_CONVERTED`, `LEAD_DISQUALIFIED` (mở lại trước), `NO_PIPELINE`. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                422: components["responses"]["DuLieuKhongHopLe"];
             };
         };
         delete?: never;
@@ -4036,7 +4086,8 @@ export interface paths {
          * SCR044 — cơ hội bán hàng, xếp theo phễu
          * @description Bảng Kanban gọi với `pipelineId` và nhận về đủ cơ hội của mọi giai đoạn, nhóm ở phía trình
          *     duyệt theo `stageId`. Cơ hội quá `expectedCloseDate` mà vẫn `OPEN` được đánh dấu nổi bật —
-         *     `isOverdue` tính sẵn ở máy chủ để mọi màn hình dùng chung một định nghĩa.
+         *     `isOverdue` tính sẵn ở máy chủ để mọi màn hình dùng chung một định nghĩa (theo ngày ở Việt
+         *     Nam). Mặc định `size = 200`, tối đa 500 — bảng Kanban lấy trọn một phễu trong một lần gọi.
          */
         get: {
             parameters: {
@@ -4072,7 +4123,12 @@ export interface paths {
             };
         };
         put?: never;
-        /** SCR046 — tạo cơ hội bán hàng */
+        /**
+         * SCR046 — tạo cơ hội bán hàng
+         * @description Tạo thủ công trên bảng phễu (`source = MANUAL`). Gửi `leadId` → 422: deal từ lead đi qua
+         *     `/leads/{id}/convert`. Bỏ trống `stageId` → giai đoạn mở đầu tiên của phễu mặc định; không
+         *     tạo thẳng vào Thắng/Thua. `ownerUserId` trống = người tạo; chỉ quản trị viên chọn người khác.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -4097,6 +4153,9 @@ export interface paths {
                         };
                     };
                 };
+                403: components["responses"]["KhongDuQuyen"];
+                404: components["responses"]["KhongThay"];
+                422: components["responses"]["DuLieuKhongHopLe"];
             };
         };
         delete?: never;
@@ -4148,7 +4207,13 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Cập nhật cơ hội bán hàng */
+        /**
+         * Cập nhật cơ hội bán hàng
+         * @description Trường không gửi thì giữ nguyên; gửi `null` là xoá. Quyền giống lead: nhân viên sửa deal của
+         *     mình hoặc chưa ai nhận (= tự nhận); chỉ quản trị viên đổi `ownerUserId` sang người khác.
+         *     Deal đã đóng chỉ đổi được người phụ trách (409 `DEAL_CLOSED`). Xoá trường mà giai đoạn hiện
+         *     tại đòi → 422 `MISSING_REQUIRED_FIELDS`.
+         */
         patch: {
             parameters: {
                 query?: never;
@@ -4160,7 +4225,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["LuuDealRequest"];
+                    "application/json": components["schemas"]["CapNhatDealRequest"];
                 };
             };
             responses: {
@@ -4198,6 +4263,11 @@ export interface paths {
          *
          *     Giai đoạn `isWon`/`isLost` bắt buộc kèm `closeReason` khi là thua — lý do thua là dữ liệu
          *     phân tích quan trọng nhất của phễu.
+         *
+         *     UC034 — luật đã chốt: kéo tự do giữa các giai đoạn mở (tới và lùi). Vào `isWon` → `WON`, vào
+         *     `isLost` → `LOST` (bắt buộc `closeReason` thuộc `LyDoThuaDeal`, 422 `LOST_REASON_REQUIRED`).
+         *     Kéo deal đã đóng về giai đoạn mở là mở lại (xoá `closeReason`, `closedAt`). Gửi lại chính
+         *     giai đoạn Thua với lý do khác chỉ đổi lý do, không sinh dòng lịch sử. Quyền giống PATCH.
          */
         post: {
             parameters: {
@@ -4213,7 +4283,7 @@ export interface paths {
                     "application/json": {
                         /** Format: uuid */
                         stageId: string;
-                        closeReason?: string | null;
+                        closeReason?: components["schemas"]["LyDoThuaDeal"] | null;
                     };
                 };
             };
@@ -6041,7 +6111,7 @@ export interface components {
         };
         LeadChiTiet: components["schemas"]["Lead"] & {
             latestScore?: components["schemas"]["DiemLead"] | null;
-            disqualifyReason?: string | null;
+            disqualifyReason?: components["schemas"]["LyDoLoaiLead"] | null;
             /** Format: uuid */
             convertedDealId?: string | null;
             /** Format: date-time */
@@ -6049,6 +6119,33 @@ export interface components {
             activityCount?: number;
             /** Format: date-time */
             closedAt?: string | null;
+            /**
+             * @description Trạng thái được phép đi tiếp (UC032 luồng 8.2). Giao diện chỉ hiện đúng các nút này,
+             *     không tự suy luật chuyển trạng thái lần thứ hai.
+             */
+            allowedNextStatuses: components["schemas"]["TrangThaiLead"][];
+        };
+        /**
+         * @description Danh sách cố định để làm nhãn học cho mô hình chấm điểm (UC030) — chữ tự do không học được.
+         *     Không có ngân sách · Không có nhu cầu thật · Đã mua bên khác · Không liên lạc được ·
+         *     Thông tin sai/spam · Khác.
+         * @enum {string}
+         */
+        LyDoLoaiLead: "NO_BUDGET" | "NO_NEED" | "BOUGHT_ELSEWHERE" | "UNREACHABLE" | "SPAM" | "OTHER";
+        /** @description Ngữ cảnh của 409 `LEAD_ALREADY_OPEN`. */
+        LeadDangMo: {
+            /** Format: uuid */
+            leadId: string;
+            status: components["schemas"]["TrangThaiLead"];
+            /** Format: uuid */
+            ownerUserId?: string | null;
+            ownerName?: string | null;
+        };
+        /** @description Ngữ cảnh của 422 `INVALID_TRANSITION`. */
+        LoiChuyenTrangThai: {
+            from: components["schemas"]["TrangThaiLead"];
+            to: components["schemas"]["TrangThaiLead"];
+            allowedNextStatuses: components["schemas"]["TrangThaiLead"][];
         };
         DiemLead: {
             score: number;
@@ -6081,10 +6178,18 @@ export interface components {
         /**
          * @description Không có `tenantId` — khớp `CreateLeadRequest` đã có trong mã java-core, nơi trường này
          *     được cố ý bỏ đi. `source` luôn là `MANUAL`; cơ hội do tác tử AI tạo đi qua `/internal/leads`.
+         *
+         *     `ownerUserId` để trống = người tạo phụ trách; chỉ quản trị viên chọn được người khác.
          */
         TaoLeadRequest: {
             /** Format: uuid */
             contactId: string;
+            /**
+             * Format: uuid
+             * @description Nút "Tạo lead" trong Hộp thư gửi kèm hội thoại đang mở. Hội thoại phải thuộc đúng khách
+             *     `contactId` — không thì 422 (ghi sai nguồn là truy ngược doanh thu về sai cuộc trò chuyện).
+             */
+            sourceConversationId?: string | null;
             interestedProduct?: string | null;
             budgetMin?: number | null;
             budgetMax?: number | null;
@@ -6100,8 +6205,8 @@ export interface components {
             urgency?: components["schemas"]["MucDo"];
             /** Format: uuid */
             ownerUserId?: string | null;
-            /** @description **Bắt buộc** khi `status = DISQUALIFIED` — nhãn này là dữ liệu học của mô hình chấm điểm. */
-            disqualifyReason?: string | null;
+            /** @description **Bắt buộc** khi `status = DISQUALIFIED` — nhãn này là dữ liệu học của mô hình chấm điểm. Gửi khi trạng thái khác → 422. */
+            disqualifyReason?: components["schemas"]["LyDoLoaiLead"] | null;
         };
         ChuyenDoiLeadResult: {
             deal: components["schemas"]["Deal"];
@@ -6165,7 +6270,7 @@ export interface components {
             createdAt?: string;
         };
         DealChiTiet: components["schemas"]["Deal"] & {
-            closeReason?: string | null;
+            closeReason?: components["schemas"]["LyDoThuaDeal"] | null;
             /** Format: date-time */
             closedAt?: string | null;
             stageHistory?: components["schemas"]["LichSuGiaiDoan"][];
@@ -6186,6 +6291,22 @@ export interface components {
             changedByName?: string | null;
             /** Format: date-time */
             changedAt: string;
+        };
+        /**
+         * @description Danh sách cố định để UC037 đếm được "thua vì gì nhiều nhất": Giá cao hơn mong đợi · Chọn đối
+         *     thủ · Không có ngân sách · Khách hoãn/không quyết · Mất liên lạc · Khác.
+         * @enum {string}
+         */
+        LyDoThuaDeal: "PRICE" | "COMPETITOR" | "NO_BUDGET" | "NO_DECISION" | "UNREACHABLE" | "OTHER";
+        CapNhatDealRequest: {
+            title?: string;
+            amount?: number | null;
+            /** @enum {string} */
+            currency?: "VND";
+            /** Format: date */
+            expectedCloseDate?: string | null;
+            /** Format: uuid */
+            ownerUserId?: string | null;
         };
         LuuDealRequest: {
             /** Format: uuid */

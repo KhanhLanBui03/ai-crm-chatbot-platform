@@ -11,6 +11,7 @@ import type {
   ThongKeChuDe,
   TongQuan,
   DiemHoiThoaiNgay,
+  TrangThaiLead,
 } from '@/types/schema'
 
 /**
@@ -88,6 +89,15 @@ export const danhSachLead: Lead[] = THO_LEAD.map((t, n) => ({
   createdAt: gio(t.ngay),
 }))
 
+/** Khớp luật UC032 ở máy chủ (LeadService.NEXT) — mock không tự đặt luật khác. */
+const BUOC_TIEP_LEAD: Record<TrangThaiLead, TrangThaiLead[]> = {
+  NEW: ['CONTACTED', 'QUALIFIED', 'DISQUALIFIED'],
+  CONTACTED: ['QUALIFIED', 'DISQUALIFIED'],
+  QUALIFIED: ['DISQUALIFIED'],
+  DISQUALIFIED: ['NEW'],
+  CONVERTED: [],
+}
+
 export const chiTietLead: Record<string, LeadChiTiet> = Object.fromEntries(
   danhSachLead.map((l, n) => [
     l.id,
@@ -113,11 +123,12 @@ export const chiTietLead: Record<string, LeadChiTiet> = Object.fromEntries(
                 { name: 'Chưa để lại thư công ty', contribution: -6, value: null },
               ],
             },
-      disqualifyReason: l.status === 'DISQUALIFIED' ? 'Khách hỏi sản phẩm bên mình không kinh doanh.' : null,
+      disqualifyReason: l.status === 'DISQUALIFIED' ? 'NO_NEED' : null,
       convertedDealId: l.status === 'CONVERTED' ? `dl-${String(n + 1).padStart(3, '0')}` : null,
       convertedAt: l.status === 'CONVERTED' ? gio(l.createdAt.slice(0, 10), '15:20') : null,
       activityCount: (n % 4) + 1,
       closedAt: ['CONVERTED', 'DISQUALIFIED'].includes(l.status) ? gio(l.createdAt.slice(0, 10), '15:20') : null,
+      allowedNextStatuses: BUOC_TIEP_LEAD[l.status],
     } satisfies LeadChiTiet,
   ]),
 )
@@ -197,7 +208,7 @@ export const chiTietDeal: Record<string, DealChiTiet> = Object.fromEntries(
     d.id,
     {
       ...d,
-      closeReason: d.status === 'LOST' ? 'Khách chốt bên khác vì giao nhanh hơn.' : null,
+      closeReason: d.status === 'LOST' ? 'COMPETITOR' : null,
       closedAt: d.status === 'OPEN' ? null : gio('2026-08-19', '16:30'),
       stageHistory: GIAI_DOAN.filter((g) => g.position <= (GIAI_DOAN.find((x) => x.id === d.stageId)?.position ?? 0)).map(
         (g, i, ds) => ({

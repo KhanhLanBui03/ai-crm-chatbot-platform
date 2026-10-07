@@ -1,6 +1,7 @@
 import { skipToken } from '@reduxjs/toolkit/query'
 import { AlertTriangle, Inbox } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { toast } from 'sonner'
 
@@ -22,6 +23,7 @@ import { useAppSelector } from '@/app/store/hooks'
 import { ContextPanel } from '@/features/conversations/ContextPanel'
 import { ConversationList } from '@/features/conversations/ConversationList'
 import { MessageThread } from '@/features/conversations/MessageThread'
+import { CreateLeadDialog } from '@/features/leads/CreateLeadDialog'
 import { HandoffDialog } from '@/features/conversations/HandoffDialog'
 import { useDangGo } from '@/features/conversations/useDangGo'
 
@@ -35,7 +37,11 @@ import { useDangGo } from '@/features/conversations/useDangGo'
 const CHU_KY_HOI_MS = 5000
 export function InboxPage() {
   const [boLoc, datBoLoc] = useState<BoLocHoiThoai>({ phamVi: 'all' })
-  const [idDangChon, datIdDangChon] = useState<string | null>(null)
+  // `?c=<id>` — mở thẳng một hội thoại (vd. "Hội thoại nguồn" ở trang Lead, UC032 bước 5)
+  const [thamSo] = useSearchParams()
+  const idTuLienKet = thamSo.get('c')
+  const [idDangChon, datIdDangChon] = useState<string | null>(idTuLienKet)
+  const [moTaoLead, datMoTaoLead] = useState(false)
 
   const danhSach = useDanhSachHoiThoaiQuery(boLoc, { pollingInterval: CHU_KY_HOI_MS })
   const chiTiet = useChiTietHoiThoaiQuery(idDangChon ?? skipToken, { pollingInterval: CHU_KY_HOI_MS })
@@ -55,7 +61,10 @@ export function InboxPage() {
 
   // `data` giữ kết quả của bộ lọc trước cho tới khi kết quả mới về — danh sách không nháy trắng
   const muc = danhSach.data?.items
-  const dangChon = muc?.find((c) => c.id === idDangChon) ?? null
+  // Hội thoại mở từ liên kết có thể không nằm trong trang danh sách hiện tại → lấy từ chi tiết
+  const dangChon =
+    muc?.find((c) => c.id === idDangChon) ??
+    (idDangChon && chiTiet.currentData?.id === idDangChon ? chiTiet.currentData : null)
 
   // UC012 bước 10 — đang mở hội thoại mà có tin chưa đọc thì đánh dấu đã đọc
   const chuaDoc = dangChon?.unreadCount ?? 0
@@ -76,11 +85,11 @@ export function InboxPage() {
   useEffect(() => {
     if (!muc) return
     if (muc.length === 0) {
-      datIdDangChon(null)
-    } else if (!idDangChon || !muc.some((c) => c.id === idDangChon)) {
+      if (idDangChon !== idTuLienKet) datIdDangChon(null)
+    } else if (!idDangChon || (!muc.some((c) => c.id === idDangChon) && idDangChon !== idTuLienKet)) {
       datIdDangChon(muc[0].id)
     }
-  }, [muc, idDangChon])
+  }, [muc, idDangChon, idTuLienKet])
 
   const canhBao = hangCho.data
     ? [
@@ -172,7 +181,22 @@ export function InboxPage() {
             onChuyenGiao={datHuongChuyenGiao}
             onQuayLai={() => datIdDangChon(null)}
           />
-          <ContextPanel nguCanh={nguCanh.currentData} dangTai={nguCanh.isFetching} />
+          <ContextPanel
+            nguCanh={nguCanh.currentData}
+            dangTai={nguCanh.isFetching}
+            onTaoLead={nguCanh.currentData?.contact ? () => datMoTaoLead(true) : undefined}
+          />
+          {nguCanh.currentData?.contact && (
+            <CreateLeadDialog
+              mo={moTaoLead}
+              onDoiMo={datMoTaoLead}
+              tuHoiThoai={{
+                contactId: nguCanh.currentData.contact.id,
+                contactName: nguCanh.currentData.contact.fullName ?? dangChon.contactName,
+                conversationId: idDangChon,
+              }}
+            />
+          )}
         </>
       ) : (
         <div className="hidden md:flex flex-1">
