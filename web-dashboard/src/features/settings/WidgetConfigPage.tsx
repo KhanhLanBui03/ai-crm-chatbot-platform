@@ -44,6 +44,7 @@ export function WidgetConfigPage() {
   const [luu, ketQua] = useLuuCauHinhWidgetMutation()
   const [sinhMa, ketQuaSinh] = useSinhMaNhungWidgetMutation()
   const laQuanTri = useAppSelector((s) => s.auth.nguoiDung?.roleCode === 'TENANT_ADMIN')
+  const tenDoanhNghiep = useAppSelector((s) => s.auth.nguoiDung?.tenantName)
   const [nhap, datNhap] = useState<CauHinhWidget | null>(null)
   const [daChep, datDaChep] = useState(false)
   // Giữ NGUYÊN văn bản ô tên miền: nếu dựng lại từ mảng đã lọc dòng trống thì vừa bấm Enter,
@@ -181,6 +182,20 @@ export function WidgetConfigPage() {
                 </Field>
 
                 <Field>
+                  <FieldLabel htmlFor="wg-ten">Tên hiển thị</FieldLabel>
+                  <Input
+                    id="wg-ten"
+                    maxLength={60}
+                    placeholder={tenDoanhNghiep ?? 'Tên doanh nghiệp'}
+                    value={nhap.displayName ?? ''}
+                    onChange={(e) => dat('displayName', e.target.value)}
+                  />
+                  <FieldDescription>
+                    Hiện trên đầu khung chat. Bỏ trống thì dùng tên doanh nghiệp.
+                  </FieldDescription>
+                </Field>
+
+                <Field>
                   <FieldLabel htmlFor="wg-chao">Lời chào</FieldLabel>
                   <Textarea
                     id="wg-chao"
@@ -195,7 +210,7 @@ export function WidgetConfigPage() {
                 </Field>
               </div>
 
-              <XemTruoc cauHinh={nhap} />
+              <XemTruoc cauHinh={nhap} tenMacDinh={tenDoanhNghiep} />
             </div>
           ),
         },
@@ -276,7 +291,7 @@ export function WidgetConfigPage() {
 }
 
 /** Ước lượng hình dáng widget bằng CSS của dashboard, không nhúng bản build thật. */
-function XemTruoc({ cauHinh }: { cauHinh: CauHinhWidget }) {
+function XemTruoc({ cauHinh, tenMacDinh }: { cauHinh: CauHinhWidget; tenMacDinh?: string | null }) {
   const mau = cauHinh.primaryColor ?? '#2a78d6'
   const trai = cauHinh.position === 'BOTTOM_LEFT'
 
@@ -298,7 +313,10 @@ function XemTruoc({ cauHinh }: { cauHinh: CauHinhWidget }) {
             style={{ backgroundColor: mau }}
           >
             <MessageCircle className="size-3.5" />
-            <span className="flex-1 text-xs font-medium">Cát Tường</span>
+            {/* Cùng quy tắc với widget thật: tên tự đặt, không có thì tên doanh nghiệp */}
+            <span className="flex-1 truncate text-xs font-medium">
+              {cauHinh.displayName?.trim() || tenMacDinh || 'Hỗ trợ trực tuyến'}
+            </span>
             <X className="size-3 opacity-70" />
           </div>
           <div className="bg-background flex flex-col gap-2 rounded-b-xl border border-t-0 p-2.5">

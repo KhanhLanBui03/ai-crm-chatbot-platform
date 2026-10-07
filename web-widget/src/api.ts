@@ -23,6 +23,8 @@ export interface GiaoDien {
   position: 'BOTTOM_RIGHT' | 'BOTTOM_LEFT'
   greetingMessage: string | null
   avatarUrl: string | null
+  /** Tên trên đầu khung chat — máy chủ đã thay bằng tên doanh nghiệp khi chưa đặt. */
+  displayName: string | null
 }
 
 export interface KetQuaPhien {

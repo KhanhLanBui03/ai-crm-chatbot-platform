@@ -5631,12 +5631,16 @@ export interface components {
             /** @description Danh sách trắng tên miền được nhúng widget */
             allowedDomains: string[];
             isActive: boolean;
+            /** @description Tên trên đầu khung chat. `null` = dùng tên doanh nghiệp. */
+            displayName?: string | null;
         };
         LuuCauHinhWidgetRequest: {
             primaryColor?: string | null;
             /** @enum {string} */
             position?: "BOTTOM_RIGHT" | "BOTTOM_LEFT";
             greetingMessage?: string | null;
+            /** @description Chuỗi rỗng = dùng tên doanh nghiệp */
+            displayName?: string | null;
             /** @description Chỉ nhận https:// */
             avatarUrl?: string | null;
             allowedDomains?: string[];

@@ -185,6 +185,26 @@ class WidgetConfigIntegrationTest extends EngagementIntegrationTestBase {
         mvc.perform(get("/api/v1/widget-config").with(as(TENANT_A))).andExpect(status().isNotFound());
     }
 
+    @Test
+    @Order(3)
+    void tenHienThi_macDinhTenDoanhNghiep_datDuoc_boTrongThiQuayLai() throws Exception {
+        String key = data(mvc.perform(get("/api/v1/widget-config/snippet").with(as(TENANT_B)))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8)).get("publicKey").asText();
+        String tenDn = "DN " + TENANT_B;
+        widgetSession(key, "https://shop-b.vn").andExpect(jsonPath("$.data.appearance.displayName").value(tenDn));
+
+        mvc.perform(put("/api/v1/widget-config").with(as(TENANT_B)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"displayName\":\"  Cát Tường  \"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.displayName").value("Cát Tường"));
+        widgetSession(key, "https://shop-b.vn").andExpect(jsonPath("$.data.appearance.displayName").value("Cát Tường"));
+
+        mvc.perform(put("/api/v1/widget-config").with(as(TENANT_B)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"displayName\":\"" + "x".repeat(61) + "\"}")).andExpect(status().isUnprocessableEntity());
+        mvc.perform(put("/api/v1/widget-config").with(as(TENANT_B)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"displayName\":\"\"}")).andExpect(status().isOk());
+        widgetSession(key, "https://shop-b.vn").andExpect(jsonPath("$.data.appearance.displayName").value(tenDn));
+    }
+
     private org.springframework.test.web.servlet.ResultActions widgetSession(String key, String origin) throws Exception {
         return mvc.perform(post("/api/v1/widget/session").header("Origin", origin)
                 .header("X-Forwarded-For", "10.9." + (int) (Math.random() * 250) + ".1")

@@ -20,7 +20,7 @@ public class WidgetRepository {
     public record ChannelRow(UUID channelId, UUID tenantId, String configJson, String status) {}
 
     public record TenantState(String status, boolean hasLiveSubscription, String timezone,
-                              String businessHoursJson) {}
+                              String businessHoursJson, String name) {}
 
     public record IdentityRow(UUID id, UUID contactId) {}
 
@@ -61,7 +61,7 @@ public class WidgetRepository {
     /** Trạng thái doanh nghiệp + có thuê bao còn hiệu lực không (UC009 11.1). */
     public Optional<TenantState> tenantState(UUID tenantId) {
         return jdbc.query("""
-                SELECT t.status, t.timezone, t.business_hours::text AS hours,
+                SELECT t.status, t.timezone, t.business_hours::text AS hours, t.name,
                        EXISTS (SELECT 1 FROM platform.tenant_subscriptions s
                                WHERE s.tenant_id = t.id
                                  AND s.status IN ('TRIALING','ACTIVE','PAST_DUE')) AS live
@@ -69,7 +69,7 @@ public class WidgetRepository {
                 """,
                 new MapSqlParameterSource("t", tenantId),
                 (rs, i) -> new TenantState(rs.getString("status"), rs.getBoolean("live"),
-                        rs.getString("timezone"), rs.getString("hours")))
+                        rs.getString("timezone"), rs.getString("hours"), rs.getString("name")))
                 .stream().findFirst();
     }
 
