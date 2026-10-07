@@ -35,11 +35,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class WidgetConfigService {
 
+    /** {@code displayName} null = widget dùng tên doanh nghiệp. */
     public record WidgetConfig(String publicKey, String primaryColor, String position, String greetingMessage,
-                               String avatarUrl, List<String> allowedDomains, boolean isActive) {}
+                               String avatarUrl, List<String> allowedDomains, boolean isActive, String displayName) {}
 
     public record SaveRequest(String primaryColor, String position, String greetingMessage, String avatarUrl,
-                              List<String> allowedDomains, Boolean isActive) {}
+                              List<String> allowedDomains, Boolean isActive, String displayName) {}
+
+    /** Tên trên đầu khung chat — ngắn để không tràn tiêu đề trên điện thoại. */
+    static final int MAX_DISPLAY_NAME = 60;
 
     public record Snippet(String publicKey, String snippet) {}
 
@@ -139,6 +143,13 @@ public class WidgetConfigService {
             }
             config.put("greetingMessage", g.isEmpty() ? null : g);
         }
+        if (req.displayName() != null) {
+            String n = req.displayName().strip();
+            if (n.codePointCount(0, n.length()) > MAX_DISPLAY_NAME) {
+                throw invalid("Tên hiển thị tối đa " + MAX_DISPLAY_NAME + " ký tự.");
+            }
+            config.put("displayName", n.isEmpty() ? null : n);   // bỏ trống = dùng tên doanh nghiệp
+        }
         if (req.avatarUrl() != null) {
             String a = req.avatarUrl().strip();
             if (!a.isEmpty() && !a.startsWith("https://")) {
@@ -223,7 +234,8 @@ public class WidgetConfigService {
         List<String> domains = new ArrayList<>();
         c.path("allowedDomains").forEach(d -> domains.add(d.asText()));
         return new WidgetConfig(row.key(), text(c, "primaryColor"), c.path("position").asText("BOTTOM_RIGHT"),
-                text(c, "greetingMessage"), text(c, "avatarUrl"), domains, "ACTIVE".equals(row.status()));
+                text(c, "greetingMessage"), text(c, "avatarUrl"), domains, "ACTIVE".equals(row.status()),
+                text(c, "displayName"));
     }
 
     /** Chuẩn hoá ("https://Shop.vn/" → "shop.vn"), bỏ trùng, kiểm dạng. */

@@ -119,7 +119,8 @@ public class WidgetService {
                     .map(c -> repo.messages(ch.tenantId(), c.id(), null, HISTORY_FOR_WIDGET).stream()
                             .map(this::toDto).toList())
                     .orElse(List.of());
-            return new SessionResponse("ACTIVE", tokens.issue(session), appearance(config),
+            String tenTenant = repo.tenantState(ch.tenantId()).map(TenantState::name).orElse(null);
+            return new SessionResponse("ACTIVE", tokens.issue(session), appearance(config, tenTenant),
                     conv.map(ConversationRow::status).orElse(null), history,
                     repo.visitorShared(ch.tenantId(), ch.channelId(), visitorId.toString()));
         });
@@ -458,9 +459,10 @@ public class WidgetService {
         return new MessageDto(m.id(), m.senderType(), m.content(), citations, m.sentAt());
     }
 
-    private static Appearance appearance(JsonNode c) {
+    private static Appearance appearance(JsonNode c, String tenantName) {
+        String ten = text(c, "displayName");
         return new Appearance(text(c, "primaryColor"), c.path("position").asText("BOTTOM_RIGHT"),
-                text(c, "greetingMessage"), text(c, "avatarUrl"));
+                text(c, "greetingMessage"), text(c, "avatarUrl"), ten != null ? ten : tenantName);
     }
 
     private static String text(JsonNode c, String field) {

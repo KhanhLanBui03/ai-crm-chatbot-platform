@@ -127,6 +127,7 @@ export class GiaoDienChat {
     const mau = g?.primaryColor && HEX.test(g.primaryColor) ? g.primaryColor : MAU_MAC_DINH
     this.goc.style.setProperty('--mau', mau)
     this.goc.className = g?.position === 'BOTTOM_LEFT' ? 'goc trai' : 'goc phai'
+    if (g?.displayName) this.tenEl.textContent = g.displayName
     if (g?.avatarUrl && /^https:\/\//.test(g.avatarUrl)) {
       this.anhEl.src = g.avatarUrl
       this.anhEl.hidden = false

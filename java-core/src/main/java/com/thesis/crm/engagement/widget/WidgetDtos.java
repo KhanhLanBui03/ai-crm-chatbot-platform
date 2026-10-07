@@ -17,7 +17,9 @@ public final class WidgetDtos {
     /** Độ dài kiểm ở service để thông báo đúng câu của đặc tả 4.2, không phải câu chung của Bean Validation. */
     public record SendMessageRequest(String content) {}
 
-    public record Appearance(String primaryColor, String position, String greetingMessage, String avatarUrl) {}
+    /** {@code displayName}: tên doanh nghiệp tự đặt, không đặt thì là tên doanh nghiệp. */
+    public record Appearance(String primaryColor, String position, String greetingMessage, String avatarUrl,
+                             String displayName) {}
 
     public record CitationDto(String documentId, String title, String snippet) {}
 

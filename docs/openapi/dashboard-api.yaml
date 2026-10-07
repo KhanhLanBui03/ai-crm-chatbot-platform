@@ -3837,6 +3837,9 @@ components:
           items: { type: string }
           description: Danh sách trắng tên miền được nhúng widget
         isActive: { type: boolean }
+        displayName:
+          type: [string, 'null']
+          description: Tên trên đầu khung chat. `null` = dùng tên doanh nghiệp.
 
     LuuCauHinhWidgetRequest:
       type: object
@@ -3846,6 +3849,7 @@ components:
           type: string
           enum: [BOTTOM_RIGHT, BOTTOM_LEFT]
         greetingMessage: { type: [string, 'null'], maxLength: 300 }
+        displayName: { type: [string, 'null'], maxLength: 60, description: 'Chuỗi rỗng = dùng tên doanh nghiệp' }
         avatarUrl: { type: [string, 'null'], description: 'Chỉ nhận https://' }
         allowedDomains:
           type: array
