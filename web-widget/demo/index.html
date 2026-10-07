@@ -3,33 +3,139 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Cửa hàng Demo</title>
-    <!-- [R&D] Trang giả website doanh nghiệp để chạy thử và quay video UC009/UC010.
-         KHÁC trang dev (web-widget/index.html): ở đây widget được nhúng ĐÚNG như doanh nghiệp làm —
-         một thẻ <script> trỏ tới widget.js đã build, không tham số ?key, không mã nguồn TypeScript.
-         Ba giá trị ${...} do container điền lúc khởi động (demo/40-dien-ma-nhung.sh). -->
+    <title>Điện Máy Cát Tường — Điện máy chính hãng</title>
+    <!-- [R&D] Trang giả website doanh nghiệp để chạy thử, quay video UC009/UC010 và chụp ảnh cho trang chủ.
+         Doanh nghiệp HƯ CẤU (giá, chính sách đều là của cửa hàng giả này — không phải tính năng của nền tảng).
+         KHÁC trang dev (web-widget/index.html): widget được nhúng ĐÚNG như doanh nghiệp làm — một thẻ <script>
+         trỏ tới widget.js đã build. Ba giá trị ${...} do container điền lúc khởi động (demo/40-dien-ma-nhung.sh).
+         Không tải ảnh/phông ngoài: hình sản phẩm vẽ bằng SVG ngay trong trang. -->
     <style>
-      body { margin: 0; font-family: system-ui, sans-serif; color: #1f2937; background: #fafaf9; }
-      header { background: #1f2937; color: #fff; padding: 18px 32px; display: flex; justify-content: space-between; }
-      header b { font-size: 20px; }
-      main { max-width: 960px; margin: 32px auto; padding: 0 24px; }
-      .luoi { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
-      .sp { background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 16px; }
-      .sp .gia { color: #b45309; font-weight: 600; margin-top: 8px; }
-      .ghi-chu { margin-top: 32px; font-size: 13px; color: #78716c; }
+      :root { --chu: #0f172a; --phu: #64748b; --vien: #e2e8f0; --nen: #f8fafc; --do: #dc2626; --xanh: #1d4ed8; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--chu); background: var(--nen); }
+      a { color: inherit; text-decoration: none; }
+      .khung { max-width: 1160px; margin: 0 auto; padding: 0 20px; }
+
+      .tren { background: var(--xanh); color: #dbeafe; font-size: 12.5px; }
+      .tren .khung { display: flex; justify-content: space-between; padding-top: 6px; padding-bottom: 6px; gap: 12px; }
+      header.dau { background: #fff; border-bottom: 1px solid var(--vien); position: sticky; top: 0; z-index: 5; }
+      header.dau .khung { display: flex; align-items: center; gap: 24px; height: 68px; }
+      .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; letter-spacing: -.3px; }
+      .logo i { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #1d4ed8, #f59e0b); display: grid; place-items: center; color: #fff; font-style: normal; font-size: 18px; }
+      .logo small { display: block; font-size: 11px; font-weight: 500; color: var(--phu); letter-spacing: 0; }
+      .tim { flex: 1; display: flex; align-items: center; gap: 8px; border: 1px solid var(--vien); border-radius: 999px; padding: 9px 16px; color: var(--phu); font-size: 14px; background: var(--nen); }
+      nav.menu { display: flex; gap: 20px; font-size: 14px; font-weight: 600; color: #334155; }
+      .goi { font-weight: 700; color: var(--do); white-space: nowrap; }
+
+      .banner { margin: 24px auto 0; border-radius: 20px; overflow: hidden; background: linear-gradient(120deg, #1e3a8a 0%, #1d4ed8 55%, #3b82f6 100%); color: #fff;
+        display: grid; grid-template-columns: 1.2fr 1fr; align-items: center; min-height: 260px; }
+      .banner .chu-bn { padding: 36px 40px; }
+      .banner .nhan { display: inline-block; background: #f59e0b; color: #1f2937; font-weight: 800; font-size: 12px; padding: 4px 10px; border-radius: 999px; }
+      .banner h1 { margin: 14px 0 8px; font-size: 34px; line-height: 1.15; letter-spacing: -.5px; }
+      .banner p { margin: 0 0 20px; color: #dbeafe; font-size: 15px; }
+      .banner .nut { display: inline-block; background: #fff; color: var(--xanh); font-weight: 700; padding: 11px 20px; border-radius: 10px; font-size: 14px; }
+      .banner .hinh-bn { display: flex; justify-content: center; align-items: flex-end; gap: 14px; padding: 24px; }
+
+      .dv { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 18px; }
+      .dv div { background: #fff; border: 1px solid var(--vien); border-radius: 14px; padding: 14px 16px; display: flex; gap: 12px; align-items: center; font-size: 13px; color: var(--phu); }
+      .dv b { display: block; color: var(--chu); font-size: 14px; }
+      .dv span.bt { width: 36px; height: 36px; border-radius: 10px; background: #eff6ff; color: var(--xanh); display: grid; place-items: center; flex-shrink: 0; }
+
+      h2 { font-size: 22px; margin: 36px 0 14px; letter-spacing: -.3px; display: flex; justify-content: space-between; align-items: baseline; }
+      h2 a { font-size: 13px; color: var(--xanh); font-weight: 600; }
+      .dm { display: flex; gap: 10px; flex-wrap: wrap; }
+      .dm a { background: #fff; border: 1px solid var(--vien); border-radius: 999px; padding: 8px 14px; font-size: 13.5px; font-weight: 600; color: #334155; }
+      .dm a.chon { background: var(--xanh); color: #fff; border-color: var(--xanh); }
+
+      .luoi { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 16px; }
+      .sp { background: #fff; border: 1px solid var(--vien); border-radius: 16px; padding: 14px; position: relative; display: flex; flex-direction: column; }
+      .sp .giam { position: absolute; top: 12px; left: 12px; background: var(--do); color: #fff; font-size: 11.5px; font-weight: 800; padding: 3px 8px; border-radius: 6px; }
+      .sp .anh { height: 150px; border-radius: 12px; background: linear-gradient(180deg, #f1f5f9, #e2e8f0); display: grid; place-items: center; margin-bottom: 12px; }
+      .sp .ten { font-size: 14px; font-weight: 600; line-height: 1.35; min-height: 38px; }
+      .sp .gia { margin-top: 8px; color: var(--do); font-weight: 800; font-size: 17px; }
+      .sp .cu { color: var(--phu); text-decoration: line-through; font-size: 12.5px; margin-left: 6px; font-weight: 500; }
+      .sp .tg { margin-top: 8px; font-size: 12px; color: #047857; background: #ecfdf5; border-radius: 6px; padding: 3px 8px; align-self: flex-start; font-weight: 600; }
+
+      footer { margin-top: 48px; background: #0f172a; color: #94a3b8; font-size: 13px; }
+      footer .khung { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 24px; padding-top: 32px; padding-bottom: 32px; }
+      footer b { color: #fff; display: block; margin-bottom: 8px; }
+      @media (max-width: 860px) {
+        nav.menu, .tim { display: none; }
+        .banner { grid-template-columns: 1fr; } .banner .hinh-bn { display: none; }
+        .dv, .luoi { grid-template-columns: repeat(2, 1fr); }
+        footer .khung { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
   <body>
-    <header><b>Cửa hàng Demo</b><span>Hotline 1900 0000</span></header>
-    <main>
-      <h1>Gói dịch vụ phần mềm bán hàng</h1>
-      <div class="luoi">
-        <div class="sp"><b>Gói Khởi đầu</b><div>5 người dùng, 2 kênh</div><div class="gia">490.000đ / tháng</div></div>
-        <div class="sp"><b>Gói Tăng trưởng</b><div>15 người dùng, 3 kênh</div><div class="gia">1.490.000đ / tháng</div></div>
-        <div class="sp"><b>Gói Chuyên nghiệp</b><div>50 người dùng, ưu tiên hỗ trợ</div><div class="gia">3.990.000đ / tháng</div></div>
+    <!-- Hình sản phẩm vẽ phẳng bằng SVG — dùng lại qua <use> -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <symbol id="tu-lanh" viewBox="0 0 80 120"><rect x="8" y="4" width="64" height="112" rx="8" fill="#cbd5e1"/><rect x="8" y="4" width="64" height="40" rx="8" fill="#94a3b8"/><rect x="14" y="14" width="4" height="20" rx="2" fill="#f8fafc"/><rect x="14" y="54" width="4" height="30" rx="2" fill="#f8fafc"/><rect x="8" y="44" width="64" height="3" fill="#64748b"/></symbol>
+        <symbol id="tivi" viewBox="0 0 140 100"><rect x="4" y="6" width="132" height="76" rx="6" fill="#1e293b"/><rect x="10" y="12" width="120" height="64" rx="3" fill="url(#mh)"/><rect x="58" y="82" width="24" height="8" fill="#334155"/><rect x="38" y="90" width="64" height="5" rx="2.5" fill="#475569"/><linearGradient id="mh" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#60a5fa"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></symbol>
+        <symbol id="may-giat" viewBox="0 0 100 110"><rect x="8" y="4" width="84" height="102" rx="10" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/><rect x="8" y="4" width="84" height="20" rx="10" fill="#cbd5e1"/><circle cx="72" cy="14" r="5" fill="#64748b"/><circle cx="50" cy="64" r="30" fill="#94a3b8"/><circle cx="50" cy="64" r="22" fill="#bfdbfe"/><path d="M34 70 Q50 58 66 70 L66 76 Q50 86 34 76Z" fill="#93c5fd"/></symbol>
+        <symbol id="may-lanh" viewBox="0 0 140 60"><rect x="4" y="6" width="132" height="44" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/><rect x="14" y="34" width="112" height="8" rx="4" fill="#cbd5e1"/><circle cx="118" cy="18" r="3" fill="#22c55e"/><path d="M30 54 q4 6 0 12 M50 54 q4 6 0 12 M70 54 q4 6 0 12" stroke="#93c5fd" stroke-width="3" fill="none"/></symbol>
+        <symbol id="noi-chien" viewBox="0 0 100 110"><path d="M18 30 Q18 6 50 6 Q82 6 82 30 L86 100 Q86 106 80 106 L20 106 Q14 106 14 100Z" fill="#1f2937"/><rect x="22" y="60" width="56" height="36" rx="8" fill="#374151"/><rect x="40" y="70" width="20" height="5" rx="2.5" fill="#9ca3af"/><circle cx="50" cy="38" r="9" fill="#f59e0b"/></symbol>
+        <symbol id="loc-nuoc" viewBox="0 0 80 120"><rect x="12" y="4" width="56" height="112" rx="10" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/><rect x="20" y="16" width="40" height="30" rx="6" fill="#bfdbfe"/><path d="M40 60 q-10 14 0 20 q10 -6 0 -20Z" fill="#3b82f6"/><rect x="34" y="92" width="12" height="6" rx="2" fill="#94a3b8"/></symbol>
+        <symbol id="am-dun" viewBox="0 0 100 100"><path d="M24 30 L76 30 L80 88 Q80 94 74 94 L26 94 Q20 94 20 88Z" fill="#e5e7eb" stroke="#9ca3af" stroke-width="2"/><path d="M76 40 Q94 44 90 64 Q88 74 78 74" stroke="#9ca3af" stroke-width="6" fill="none"/><rect x="30" y="20" width="40" height="12" rx="6" fill="#6b7280"/><rect x="26" y="84" width="48" height="10" rx="4" fill="#1f2937"/></symbol>
+        <symbol id="quat" viewBox="0 0 100 120"><circle cx="50" cy="42" r="36" fill="none" stroke="#94a3b8" stroke-width="4"/><path d="M50 42 q-20 -26 0 -32 q14 8 0 32 M50 42 q28 -6 30 14 q-14 8 -30 -14 M50 42 q-10 26 -28 16 q2 -16 28 -16" fill="#bfdbfe"/><circle cx="50" cy="42" r="6" fill="#1d4ed8"/><rect x="46" y="78" width="8" height="30" fill="#94a3b8"/><rect x="28" y="106" width="44" height="8" rx="4" fill="#64748b"/></symbol>
+      </defs>
+    </svg>
+
+    <div class="tren"><div class="khung"><span>Giao nhanh 2 giờ nội thành · Trả góp 0% qua thẻ tín dụng</span><span>Hệ thống 12 cửa hàng · 8:00–21:30 mỗi ngày</span></div></div>
+    <header class="dau">
+      <div class="khung">
+        <a class="logo" href="#"><i>⚡</i><span>Điện Máy Cát Tường<small>Điện máy chính hãng</small></span></a>
+        <div class="tim">🔍 Bạn tìm máy lọc nước, nồi chiên, tivi…</div>
+        <nav class="menu"><a href="#">Khuyến mãi</a><a href="#">Bảo hành</a><a href="#">Cửa hàng</a></nav>
+        <span class="goi">☎ 1900 1234</span>
       </div>
-      <p class="ghi-chu">Bấm bong bóng chat ở góc dưới để hỏi trợ lý AI.</p>
+    </header>
+
+    <main class="khung">
+      <section class="banner">
+        <div class="chu-bn">
+          <span class="nhan">TUẦN LỄ VÀNG · GIẢM ĐẾN 30%</span>
+          <h1>Điện máy chính hãng,<br />lắp đặt miễn phí tận nhà</h1>
+          <p>Thắc mắc về giá, bảo hành hay trả góp? Hỏi trợ lý ở góc phải màn hình — trả lời ngay cả ngoài giờ.</p>
+          <a class="nut" href="#san-pham">Xem ưu đãi hôm nay →</a>
+        </div>
+        <div class="hinh-bn">
+          <svg width="120" height="170"><use href="#tu-lanh" /></svg>
+          <svg width="180" height="130"><use href="#tivi" /></svg>
+        </div>
+      </section>
+
+      <section class="dv">
+        <div><span class="bt">🛡</span><span><b>Bảo hành 24 tháng</b>Chính hãng toàn quốc</span></div>
+        <div><span class="bt">↺</span><span><b>Đổi trả 30 ngày</b>Lỗi là đổi máy mới</span></div>
+        <div><span class="bt">🚚</span><span><b>Giao nhanh 2 giờ</b>Nội thành Hà Nội, TP.HCM</span></div>
+        <div><span class="bt">🔧</span><span><b>Lắp đặt miễn phí</b>Máy lạnh, máy lọc nước</span></div>
+      </section>
+
+      <h2 id="san-pham">Danh mục nổi bật</h2>
+      <div class="dm"><a class="chon" href="#">Tất cả</a><a href="#">Tủ lạnh</a><a href="#">Máy lạnh</a><a href="#">Tivi</a><a href="#">Máy giặt</a><a href="#">Gia dụng nhà bếp</a><a href="#">Máy lọc nước</a></div>
+
+      <h2>Bán chạy tuần này <a href="#">Xem tất cả →</a></h2>
+      <div class="luoi">
+        <div class="sp"><span class="giam">-18%</span><div class="anh"><svg width="80" height="120"><use href="#loc-nuoc" /></svg></div><div class="ten">Máy lọc nước RO nóng lạnh 10 lõi</div><div class="gia">7.490.000đ<span class="cu">9.190.000đ</span></div><span class="tg">Trả góp 0%</span></div>
+        <div class="sp"><span class="giam">-25%</span><div class="anh"><svg width="90" height="100"><use href="#noi-chien" /></svg></div><div class="ten">Nồi chiên không dầu 6.5 lít điện tử</div><div class="gia">1.590.000đ<span class="cu">2.120.000đ</span></div><span class="tg">Quà tặng kèm</span></div>
+        <div class="sp"><div class="anh"><svg width="150" height="70"><use href="#may-lanh" /></svg></div><div class="ten">Máy lạnh Inverter 1.5 HP tiết kiệm điện</div><div class="gia">10.990.000đ</div><span class="tg">Lắp đặt miễn phí</span></div>
+        <div class="sp"><span class="giam">-12%</span><div class="anh"><svg width="150" height="105"><use href="#tivi" /></svg></div><div class="ten">Smart Tivi 4K 55 inch</div><div class="gia">11.390.000đ<span class="cu">12.990.000đ</span></div><span class="tg">Trả góp 0%</span></div>
+        <div class="sp"><div class="anh"><svg width="80" height="120"><use href="#tu-lanh" /></svg></div><div class="ten">Tủ lạnh Inverter 2 cửa 326 lít</div><div class="gia">8.690.000đ</div><span class="tg">Giao nhanh 2 giờ</span></div>
+        <div class="sp"><span class="giam">-15%</span><div class="anh"><svg width="95" height="105"><use href="#may-giat" /></svg></div><div class="ten">Máy giặt cửa ngang 9 kg</div><div class="gia">7.990.000đ<span class="cu">9.400.000đ</span></div><span class="tg">Trả góp 0%</span></div>
+        <div class="sp"><div class="anh"><svg width="85" height="85"><use href="#am-dun" /></svg></div><div class="ten">Ấm siêu tốc inox 1.7 lít</div><div class="gia">390.000đ</div><span class="tg">Bán chạy</span></div>
+        <div class="sp"><span class="giam">-20%</span><div class="anh"><svg width="85" height="110"><use href="#quat" /></svg></div><div class="ten">Quạt đứng điều khiển từ xa</div><div class="gia">1.190.000đ<span class="cu">1.490.000đ</span></div><span class="tg">Giao nhanh 2 giờ</span></div>
+      </div>
     </main>
+
+    <footer>
+      <div class="khung">
+        <div><b>Điện Máy Cát Tường</b>Website giả lập để trình diễn khung chat AI — mọi sản phẩm, giá và chính sách trên trang đều là ví dụ.</div>
+        <div><b>Hỗ trợ</b>Tổng đài 1900 1234<br />Chính sách bảo hành<br />Đổi trả 30 ngày</div>
+        <div><b>Về chúng tôi</b>Hệ thống cửa hàng<br />Tuyển dụng<br />Liên hệ</div>
+      </div>
+    </footer>
 
     <!-- Mã nhúng lấy từ dashboard (Cài đặt → Web Widget → Chép mã) -->
     <script src="${WIDGET_SCRIPT_URL}" data-widget-key="${DEMO_WIDGET_KEY}" data-api-url="${WIDGET_PUBLIC_API_URL}" async></script>
