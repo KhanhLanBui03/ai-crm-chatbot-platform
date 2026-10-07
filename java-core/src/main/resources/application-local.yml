@@ -1,0 +1,31 @@
+# Profile `local` — chạy java-core TRÊN MÁY (mvn spring-boot:run), hạ tầng trong Docker Compose.
+#
+#   cd java-core && mvn spring-boot:run -Dspring-boot.run.profiles=local
+#
+# application.yml giữ mặc định cho container (postgres, kafka:9092, rustfs:9000, eureka-server…). File
+# này chỉ đặt lại những giá trị khác đi khi đứng ở máy chủ: tên máy thành localhost, cổng thành cổng
+# máy chủ mà docker-compose.yml mở ra. Docker, e2e (java -jar) và test không bật profile này.
+#
+# Các khoá viết HOA bên dưới chính là tên placeholder application.yml đang đọc (${DB_HOST:postgres}…),
+# nên không phải chép lại cấu trúc spring.datasource / spring.kafka. Biến môi trường thật vẫn thắng
+# giá trị ở đây — muốn đổi một lần thì export trước khi chạy.
+spring:
+  config:
+    # .env ở gốc repo (gitignored): SPRING_MAIL_*, DB_USERNAME/DB_PASSWORD, *_HOST_PORT. spring-boot:run
+    # chạy với thư mục làm việc java-core/ ⇒ ../.env; IDE chạy ở gốc repo ⇒ ./.env.
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:./.env[.properties]
+
+DB_HOST: localhost
+# Cổng máy chủ của Postgres lấy từ .env (máy nào đổi POSTGRES_HOST_PORT thì tự theo).
+DB_PORT: ${POSTGRES_HOST_PORT:5432}
+KAFKA_BOOTSTRAP: localhost:${KAFKA_HOST_PORT:29092}
+REDIS_HOST: localhost
+REDIS_PORT: ${REDIS_HOST_PORT:6379}
+S3_ENDPOINT: localhost:${S3_HOST_PORT:9010}
+# Tài khoản gốc của RustFS dev — cùng giá trị mặc định với docker-compose.yml, không phải bí mật.
+S3_ACCESS_KEY: kb-dev
+S3_SECRET_KEY: changeme-dev
+AI_SERVICE_URL: http://localhost:8000
+EUREKA_URL: http://localhost:8761/eureka

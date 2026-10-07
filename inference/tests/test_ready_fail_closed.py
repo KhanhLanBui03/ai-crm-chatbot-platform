@@ -27,6 +27,11 @@ def _get_create_app():
     return create_app
 
 
+_MODELS = Path(__file__).resolve().parents[2] / "artifacts" / "models"
+_CO_MODEL_NHUNG = (_MODELS / "bge-m3-int8.onnx").is_file() and (_MODELS / "tokenizer.json").is_file()
+
+
+@pytest.mark.skipif(not _CO_MODEL_NHUNG, reason="thiếu artifacts/models/bge-m3-int8.onnx + tokenizer.json")
 def test_embed_ready_normal(monkeypatch):
     monkeypatch.setenv("MODEL_ROLE", "embed")
     monkeypatch.setenv("OMP_NUM_THREADS", "4")
@@ -55,6 +60,24 @@ def test_embed_ready_normal(monkeypatch):
     embed_data = res_embed.json()
     assert len(embed_data["embedding"]) == 1024
     assert embed_data["dim"] == 1024
+    assert embed_data["model_version"].startswith("int8-")
+
+
+def test_embed_ready_fail_closed_khi_thieu_model(monkeypatch, tmp_path):
+    """FAIL-CLOSED: không nạp được model nhúng thì /ready 503 và /v1/embed 503 — không trả vector giả."""
+    monkeypatch.setenv("MODEL_ROLE", "embed")
+    monkeypatch.setenv("OMP_NUM_THREADS", "4")
+    monkeypatch.delenv("EXPECTED_MODEL_ID", raising=False)
+    monkeypatch.setenv("EMBED_MODEL_PATH", str(tmp_path / "khong-co.onnx"))
+
+    client = TestClient(_get_create_app()())
+
+    assert client.get("/health").status_code == 200
+    res_ready = client.get("/ready")
+    assert res_ready.status_code == 503
+    assert any("CHƯA NẠP ĐƯỢC MODEL NHÚNG" in v for v in res_ready.json()["violations"])
+    assert client.post("/v1/embed", json={"text": "xin chào"}).status_code == 503
+    assert client.get("/v1/model").json()["status"] == "NOT_READY"
 
 
 def test_embed_ready_fail_closed_on_model_mismatch(monkeypatch):

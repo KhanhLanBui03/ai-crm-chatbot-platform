@@ -1,0 +1,16 @@
+# Thí nghiệm E3 — chế độ truy hồi. Một file một cấu hình (rag-eval.md). [R&D]
+# Chạy: python -m tests.eval.danh_gia_truy_hoi chay tests/eval/configs/e3_dense.yaml \
+#         tests/eval/configs/e3_sparse.yaml tests/eval/configs/e3_hybrid.yaml --nhan 1-tenant
+id: e3-dense
+mo_ta: "Chỉ làn vector (HNSW cosine) — tắt làn từ khoá"
+bo_vang: ../golden_set.jsonl
+che_do: dense
+tenant: eeeeeeee-0000-0000-0000-000000000001   # tenant gốc của tests/eval/gieo_kho.py
+k: 5
+ung_vien: 30        # mỗi làn (ADR-0006)
+ef_search: 100
+quet_lap: relaxed_order
+# Danh tính do ai-embed trả về — gieo_kho.py in ra đúng hai giá trị này sau lệnh `nap`.
+nhung:
+  model: BAAI/bge-m3
+  version: int8-71e2aa91

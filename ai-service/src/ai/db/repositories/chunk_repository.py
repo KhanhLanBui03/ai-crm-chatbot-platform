@@ -29,7 +29,7 @@ _SQL_THEM_DOAN = text(
 )
 
 
-def _vector_sang_chuoi(vector: Sequence[float]) -> str:
+def vector_sang_chuoi(vector: Sequence[float]) -> str:
     """Dạng văn bản ``[x1,x2,…]`` mà kiểu ``vector`` của pgvector nhận qua CAST.
 
     Không dùng adapter ``pgvector.psycopg``: nó phải đăng ký trên TỪNG kết nối của pool, quên một
@@ -63,7 +63,7 @@ async def them_lo(
                 "chunk_index": doan.chunk_index,
                 "content": doan.content,
                 "token_count": doan.token_count,
-                "embedding": _vector_sang_chuoi(vector),
+                "embedding": vector_sang_chuoi(vector),
                 "embedding_model": embedding_model,
                 "embedding_version": embedding_version,
                 "page_number": doan.page_number,

@@ -1,0 +1,3 @@
+# Tệp dữ liệu đã đóng băng: sha256 trong artifacts/DATA_HASHES.txt tính trên bản LF.
+# Không ghim eol thì Git trên Windows (core.autocrlf=true) checkout ra CRLF và hash lệch.
+ai-service/tests/eval/golden_set.jsonl text eol=lf
