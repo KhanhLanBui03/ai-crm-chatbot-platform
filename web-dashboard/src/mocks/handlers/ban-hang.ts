@@ -16,7 +16,7 @@ import { chiTietKhachHang } from '@/mocks/du-lieu-khach-hang'
 import { danhSachNguoiDung } from '@/mocks/du-lieu-nen-tang'
 import { NGUOI_DUNG_MAU } from '@/mocks/handlers/xac-thuc'
 import { locTheo, loi, ok, trangHoa } from '@/mocks/tienIch'
-import type { Deal, HoatDong, Lead, Pheu } from '@/types/schema'
+import type { Deal, HoatDong, Lead, LyDoThuaDeal, Pheu } from '@/types/schema'
 
 let lead: Lead[] = [...danhSachLead]
 let deal: Deal[] = [...danhSachDeal]
@@ -183,8 +183,11 @@ export const banHangHandlers = [
     if (l.status === 'CONVERTED') {
       return HttpResponse.json(loi('Cơ hội này đã được chuyển đổi rồi.'), { status: 409 })
     }
-    const { pipelineId, stageId } = (await request.json()) as { pipelineId: string; stageId: string }
-    const gd = danhSachPheu[0].stages.find((g) => g.id === stageId)
+    // Khớp máy chủ thật: bỏ trống phễu/giai đoạn thì vào cột đầu của phễu mặc định
+    const than = (await request.json()) as { title?: string | null; amount?: number | null; expectedCloseDate?: string | null }
+    const pipelineId = danhSachPheu[0].id
+    const gd = danhSachPheu[0].stages[0]
+    const stageId = gd.id
     const moi: Deal = {
       id: crypto.randomUUID(),
       contactId: l.contactId,
@@ -193,10 +196,10 @@ export const banHangHandlers = [
       pipelineId,
       stageId,
       stageName: gd?.name ?? '',
-      title: l.interestedProduct ?? `Cơ hội của ${l.contactName}`,
-      amount: l.budgetMax ?? l.budgetMin ?? null,
+      title: than.title ?? l.interestedProduct ?? `Cơ hội của ${l.contactName}`,
+      amount: than.amount ?? null,
       currency: 'VND',
-      expectedCloseDate: null,
+      expectedCloseDate: than.expectedCloseDate ?? null,
       isOverdue: false,
       status: 'OPEN',
       source: 'AI_LEAD',
@@ -211,7 +214,7 @@ export const banHangHandlers = [
     l.convertedDealId = moi.id
     l.convertedAt = new Date().toISOString()
     lead = lead.map((x) => (x.id === id ? { ...x, status: 'CONVERTED' as const } : x))
-    return HttpResponse.json(ok(moi), { status: 201 })
+    return HttpResponse.json(ok({ deal: moi, lead: l, warnings: [] }), { status: 201 })
   }),
 
   // ── SCR044–SCR046 cơ hội bán hàng ─────────────────────────────────────────
@@ -278,7 +281,7 @@ export const banHangHandlers = [
     if (!d) return HttpResponse.json(loi('Không tìm thấy cơ hội bán hàng.'), { status: 404 })
     const { stageId, closeReason } = (await request.json()) as {
       stageId: string
-      closeReason?: string | null
+      closeReason?: LyDoThuaDeal | null
     }
     const gd = danhSachPheu[0].stages.find((g) => g.id === stageId)
     if (!gd) return HttpResponse.json(loi('Giai đoạn không thuộc phễu này.'), { status: 400 })

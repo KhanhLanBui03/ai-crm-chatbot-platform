@@ -1,6 +1,7 @@
 import { apiSlice } from '@/api/apiSlice'
 import type { Page } from '@/types/api'
 import type {
+  ChuyenDoiLeadResult,
   Deal,
   DealChiTiet,
   DiemLead,
@@ -9,6 +10,7 @@ import type {
   LeadChiTiet,
   LoaiHoatDong,
   LyDoLoaiLead,
+  LyDoThuaDeal,
   MucDo,
   NguonLead,
   Pheu,
@@ -49,6 +51,13 @@ export interface CapNhatLead {
   urgency?: MucDo | null
   ownerUserId?: string | null
   disqualifyReason?: LyDoLoaiLead | null
+}
+
+export interface CapNhatDeal {
+  title?: string
+  amount?: number | null
+  expectedCloseDate?: string | null
+  ownerUserId?: string | null
 }
 
 export interface LuuDeal {
@@ -107,14 +116,20 @@ export const salesApi = apiSlice.injectEndpoints({
       providesTags: (_kq, _loi, id) => [{ type: 'Lead', id }],
     }),
 
-    /** Chuyển cơ hội tiềm năng thành cơ hội bán hàng — sinh ra một `deal` mới. */
-    chuyenLeadThanhDeal: build.mutation<Deal, { id: string; pipelineId: string; stageId: string }>({
+    /**
+     * UC033 — chuyển lead thành deal. Bỏ trống phễu/giai đoạn thì máy chủ đặt vào giai đoạn mở đầu
+     * tiên của phễu mặc định.
+     */
+    chuyenLeadThanhDeal: build.mutation<
+      ChuyenDoiLeadResult,
+      { id: string; title?: string | null; amount?: number | null; expectedCloseDate?: string | null }
+    >({
       query: ({ id, ...than }) => ({
         url: `/api/v1/leads/${id}/convert`,
         method: 'POST',
         body: than,
       }),
-      invalidatesTags: (_kq, _loi, { id }) => [{ type: 'Lead', id }, CA_LEAD, CA_DEAL],
+      invalidatesTags: (_kq, _loi, { id }) => [{ type: 'Lead', id }, CA_LEAD, CA_DEAL, 'GiaiDoanDeal'],
     }),
 
     // ── SCR044 · SCR045 · SCR046 — cơ hội bán hàng ────────────────────────────
@@ -137,7 +152,8 @@ export const salesApi = apiSlice.injectEndpoints({
         params: {
           pipelineId: bo.pheuId,
           stageId: bo.giaiDoanId,
-          status: bo.trangThai ?? 'OPEN',
+          // Không mặc định OPEN: bảng phễu cần cả cột Thắng/Thua
+          status: bo.trangThai,
           ownerUserId: bo.chuSoHuu,
           size: 200,
         },
@@ -156,9 +172,15 @@ export const salesApi = apiSlice.injectEndpoints({
       invalidatesTags: [CA_DEAL, 'GiaiDoanDeal'],
     }),
 
+    /** PATCH — trường không gửi thì giữ nguyên, gửi `null` là xoá. */
+    capNhatDeal: build.mutation<DealChiTiet, { id: string; than: CapNhatDeal }>({
+      query: ({ id, than }) => ({ url: `/api/v1/deals/${id}`, method: 'PATCH', body: than }),
+      invalidatesTags: (_kq, _loi, { id }) => [{ type: 'Deal', id }, CA_DEAL, 'GiaiDoanDeal'],
+    }),
+
     keoDealSangGiaiDoan: build.mutation<
       DealChiTiet,
-      { id: string; stageId: string; closeReason?: string | null }
+      { id: string; stageId: string; closeReason?: LyDoThuaDeal | null }
     >({
       query: ({ id, ...than }) => ({
         url: `/api/v1/deals/${id}/stage`,
@@ -231,6 +253,7 @@ export const {
   useDanhSachDealQuery,
   useChiTietDealQuery,
   useTaoDealMutation,
+  useCapNhatDealMutation,
   useKeoDealSangGiaiDoanMutation,
   useDanhSachHoatDongQuery,
   useGhiNhanHoatDongMutation,

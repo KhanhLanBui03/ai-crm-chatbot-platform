@@ -3,6 +3,7 @@ import type {
   KetQuaHoatDong,
   LoaiHoatDong,
   LyDoLoaiLead,
+  LyDoThuaDeal,
   MucDo,
   TrangThaiDeal,
   TrangThaiLead,
@@ -28,6 +29,16 @@ export const NHAN_LY_DO_LOAI: Record<LyDoLoaiLead, string> = {
   BOUGHT_ELSEWHERE: 'Đã mua bên khác',
   UNREACHABLE: 'Không liên lạc được',
   SPAM: 'Thông tin sai / spam',
+  OTHER: 'Khác',
+}
+
+/** UC034 — lý do thua deal. Danh sách cố định (khớp `LyDoThuaDeal`) để UC037 đếm "thua vì gì". */
+export const NHAN_LY_DO_THUA: Record<LyDoThuaDeal, string> = {
+  PRICE: 'Giá cao hơn mong đợi',
+  COMPETITOR: 'Chọn đối thủ',
+  NO_BUDGET: 'Không có ngân sách',
+  NO_DECISION: 'Khách hoãn / không quyết',
+  UNREACHABLE: 'Mất liên lạc',
   OTHER: 'Khác',
 }
 

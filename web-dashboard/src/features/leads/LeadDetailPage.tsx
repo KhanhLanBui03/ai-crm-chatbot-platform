@@ -1,6 +1,7 @@
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { vi } from 'date-fns/locale'
 import {
+  ArrowRight,
   Ban,
   Calendar,
   Hand,
@@ -27,6 +28,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Progress } from '@/components/ui/progress'
 import { StatusChip } from '@/components/ui/status-chip'
+import { ChuyenDealDialog } from '@/features/leads/ChuyenDealDialog'
 import { DoiPhuTrachDialog, LoaiLeadDialog, SuaLeadDialog } from '@/features/leads/LeadDialogs'
 import {
   NHAN_LY_DO_LOAI,
@@ -46,8 +48,8 @@ import { cn } from '@/utils/cn'
  * "đi tới, được bỏ bước, không lùi" lần thứ hai. Quyền sửa giống máy chủ: lead của mình, lead chưa
  * ai nhận (sửa = tự nhận), hoặc quản trị viên.
  *
- * Chưa có: "Chuyển thành Deal" (UC033) và danh sách hoạt động (UC035) — ẩn đi thay vì để nút bấm
- * ra lỗi; làm UC nào bật phần đó.
+ * "Chuyển thành Deal" (UC033) là thao tác chính khi lead còn mở. Danh sách hoạt động (UC035) chưa có
+ * API — ẩn đi thay vì để nút bấm ra lỗi.
  */
 export function LeadDetailPage() {
   const { id = '' } = useParams()
@@ -56,6 +58,7 @@ export function LeadDetailPage() {
   const [moLoai, datMoLoai] = useState(false)
   const [moSua, datMoSua] = useState(false)
   const [moDoiChu, datMoDoiChu] = useState(false)
+  const [moChuyen, datMoChuyen] = useState(false)
   const toi = useAppSelector((s) => s.auth.nguoiDung)
   const laQuanTri = toi?.roleCode === 'TENANT_ADMIN'
 
@@ -137,6 +140,11 @@ export function LeadDetailPage() {
             </>
           )
         }
+        thaoTacChinh={
+          l && duocSua && !dongLai
+            ? { nhan: 'Chuyển thành Deal', BieuTuong: ArrowRight, onClick: () => datMoChuyen(true) }
+            : undefined
+        }
         thaoTacPhu={thaoTac.length > 0 ? thaoTac : undefined}
         tab={[
           {
@@ -155,6 +163,24 @@ export function LeadDetailPage() {
                     <User />
                     <AlertDescription>
                       Lead do <strong>{l.ownerName ?? 'người khác'}</strong> phụ trách — bạn chỉ xem được.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {l.status === 'CONVERTED' && l.convertedDealId && (
+                  <Alert>
+                    <ArrowRight />
+                    <AlertDescription>
+                      Đã chuyển thành deal
+                      {l.convertedAt && ` lúc ${format(new Date(l.convertedAt), 'dd/MM/yyyy HH:mm')}`} —{' '}
+                      <button
+                        type="button"
+                        className="underline underline-offset-2"
+                        onClick={() => dieuHuong(`/ban-hang/pheu/${l.convertedDealId}`)}
+                      >
+                        mở deal
+                      </button>
+                      .
                     </AlertDescription>
                   </Alert>
                 )}
@@ -306,6 +332,7 @@ export function LeadDetailPage() {
         }
       />
 
+      {l && <ChuyenDealDialog lead={l} mo={moChuyen} onDoiMo={datMoChuyen} />}
       {l && <LoaiLeadDialog lead={l} mo={moLoai} onDoiMo={datMoLoai} />}
       {l && <SuaLeadDialog lead={l} mo={moSua} onDoiMo={datMoSua} />}
       {l && laQuanTri && <DoiPhuTrachDialog lead={l} mo={moDoiChu} onDoiMo={datMoDoiChu} />}

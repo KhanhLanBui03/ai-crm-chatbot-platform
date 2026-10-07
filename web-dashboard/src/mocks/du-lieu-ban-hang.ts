@@ -208,7 +208,7 @@ export const chiTietDeal: Record<string, DealChiTiet> = Object.fromEntries(
     d.id,
     {
       ...d,
-      closeReason: d.status === 'LOST' ? 'Khách chốt bên khác vì giao nhanh hơn.' : null,
+      closeReason: d.status === 'LOST' ? 'COMPETITOR' : null,
       closedAt: d.status === 'OPEN' ? null : gio('2026-08-19', '16:30'),
       stageHistory: GIAI_DOAN.filter((g) => g.position <= (GIAI_DOAN.find((x) => x.id === d.stageId)?.position ?? 0)).map(
         (g, i, ds) => ({
