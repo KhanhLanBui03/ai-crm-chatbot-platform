@@ -20,6 +20,7 @@ kia trước, không tự sửa cho khớp code của mình."*
 |---|---|
 | [Thêm 3 cột `rule_score` · `outcome` · `outcome_at` vào `sales.lead_scores`](de-xuat-track-a-lead-scores-outcome.md) | Đã soạn **19/09/2026**, ⏳ **chưa gửi Track A**. Căn cứ ADR-0016. Ước lượng 2 giờ |
 | [Hợp đồng UC018 — tải lên tài liệu tri thức](uc018-tai-tai-lieu.md) | Soạn **27/09/2026**, code hai phía đã chạy theo (25/25 tệp mẫu + ca 409 đầu-cuối). ⏳ Chờ xác nhận rồi vá `ai-service-to-java-core.yaml`, `dashboard-api.yaml`, `crm.document.v1.json` — danh sách ở mục 9 của file. Căn cứ ADR-0020, ADR-0022 |
+| [Hợp đồng UC023 — `/v1/ai/chat` thêm `degraded` + `latency_breakdown`](uc023-chat-tra-loi.md) | Soạn **08/10/2026**, code đã chạy theo; trường thêm vào, `AiChatClient` không vỡ. ⏳ Chờ Dev B xác nhận rồi vá `ai-service-to-java-core.yaml`. Căn cứ ADR-0027, ADR-0028 |
 
 ## Đã chốt phía Track B
 

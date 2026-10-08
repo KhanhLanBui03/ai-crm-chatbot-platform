@@ -643,25 +643,35 @@ luật viết cho trường hợp trễ lịch. Ô ❌ #3 là kết quả kỹ t
 
 **Việc:**
 
-- [ ] 🤝 **NGỒI CÙNG DEV B chốt cấu trúc `AgentState`.** Đây là điểm hai đường gặp nhau — lệch ở
+> **08/10 — thay bằng ADR-0027:** lượt chat giữ pipeline tuần tự `run_turn` của Dev B, nhánh tri
+> thức cắm qua Protocol `KnowledgeAnswerer` (`src/ai/rag/answerer.py::RagAnswerer`). Không có
+> `AgentState` chung, không có `graph.py`. Ba ô đầu gạch theo đó; tám "node" thành tám bước (bảng
+> trong ADR-0027).
+
+- [x] ~~🤝 **NGỒI CÙNG DEV B chốt cấu trúc `AgentState`.**~~ Không cần — ADR-0027. Đây là điểm hai đường gặp nhau — lệch ở
       đây là conflict cả tuần.
       **Quy tắc:** mỗi người chỉ **ĐĂNG KÝ** node của mình vào registry, **KHÔNG sửa node của
       người kia**. Vi phạm quy tắc này là nguồn conflict số một.
-- [ ] 🤖 `StateGraph` 8 node (`guard`, `route`, `fastpath`, `retrieve`, `generate`, `postguard`,
+- [x] ~~🤖 `StateGraph` 8 node~~ (ADR-0027 — tám bước tuần tự) (`guard`, `route`, `fastpath`, `retrieve`, `generate`, `postguard`,
       `handoff`, `telemetry`) với cạnh điều kiện — *verify: file `graph.py` là file CHUNG, cần
       Dev B duyệt; mình chỉ thêm node của mình.*
-- [ ] 🤖 **Node `guard`** — normalize + injection + PII, **dùng lại** `guardrails` Dev B viết
+- [x] 🤖 **Node `guard`** — đã có sẵn ở `run_turn` bước 3 của Dev B; `RagAnswerer` dùng lại `mask_pii`, thêm `tim_pii` cùng bộ regex (AI viết 08/10) — normalize + injection + PII, **dùng lại** `guardrails` Dev B viết
       Ngày 6 — *verify: gọi lại hàm của Dev B, **không viết lại** logic phát hiện; viết lại là
       hai bộ luật lệch nhau.*
-- [ ] 🖐 **Node `retrieve` — tự gõ phần quyết định:**
+- [x] 🖐 **Node `retrieve` — tự gõ phần quyết định:** (AI viết 08/10 — `src/ai/rag/rerank/quyet_dinh.py`;
+      **gap đo trên COSINE, không phải RRF**: điểm RRF chỉ 0,016–0,033 nên "< 0,15" đúng với 100%
+      câu. `hybrid.py` thêm cột `do_tuong_dong`, E3 chạy lại ra đúng số cũ 0,800 / 0,740)
       `hybrid_search(pool=30)` → `needs_rerank()` kiểm **`AMBIGUITY_GAP`**: chênh điểm RRF giữa
       **hạng 1 và hạng 3 < 0,15** thì mới gọi cross-encoder.
-- [ ] 🖐 Rerank trên **12 ứng viên đầu** (**KHÔNG phải 20**) · **5 đoạn** vào lời nhắc ·
-      **sàn liên quan toàn tập 0,25** và **sàn từng đoạn 0,15**.
-- [ ] 🖐 **RERANK ĐẶT SAU FEATURE FLAG VÀ MẶC ĐỊNH TẮT.**
-- [ ] 🖐 Đo nDCG@5 **có/không rerank MỘT LẦN** làm căn cứ cho ADR bật/tắt.
+- [x] 🖐 Rerank trên **12 ứng viên đầu** (**KHÔNG phải 20**) · **5 đoạn** vào lời nhắc ·
+      **sàn liên quan toàn tập 0,25** và **sàn từng đoạn 0,15**. (AI viết 08/10 — sàn theo cosine.
+      ⚠️ Câu ngoài phạm vi vẫn có cosine 0,35–0,46 với bge-m3 ⇒ sàn 0,25 gần như không chặn gì;
+      lớp chặn thật hiện là LLM trả `KHONG_DU_CAN_CU`. Hiệu chỉnh ở Ngày 10.)
+- [x] 🖐 **RERANK ĐẶT SAU FEATURE FLAG VÀ MẶC ĐỊNH TẮT.** (`RERANK_ENABLED=false`, AI viết 08/10)
+- [ ] 🖐 Đo nDCG@5 **có/không rerank MỘT LẦN** làm căn cứ cho ADR bật/tắt. ⏳ **Khối 2:**
+      `inference/src/roles/rerank.py` vẫn là bản giả Jaccard của Dev B, chưa có ONNX reranker.
       **Cổng bật production:** ≥ **5 điểm nDCG@5** VÀ p95 chat vẫn **< 4 s**. Không đạt → giữ TẮT.
-- [ ] 🤖 Mọi node ghi vào `src/ai/service.py` — **facade DUY NHẤT** — *verify: `api/` và `worker/`
+- [x] 🤖 Mọi node ghi vào `src/ai/service.py` — **facade DUY NHẤT** (AI viết 08/10; grep chiều phụ thuộc sạch) — *verify: `api/` và `worker/`
       chỉ gọi vào `service.py`, **không gọi thẳng** `orchestrator`. CI kiểm luật này bằng grep —
       chạy thử `.github/workflows/ci.yml` bước "chiều phụ thuộc" cho chắc.*
 
@@ -694,24 +704,31 @@ kiểm chiều phụ thuộc · có số nDCG có/không rerank.
 
 > **Mục tiêu:** endpoint chat trả câu trả lời **có trích dẫn**, và không sập khi LLM sập.
 
-**Điều kiện vào:** node `retrieve` trả được 5 đoạn. `ANTHROPIC_API_KEY` đã có.
+**Điều kiện vào:** node `retrieve` trả được 5 đoạn. ~~`ANTHROPIC_API_KEY` đã có.~~ Khoá Gemini đã có
+(08/10, ADR-0028: `gemini-3.5-flash-lite`, client trung lập chuẩn OpenAI, `LLM_MODE` tách khỏi `AI_MODE`).
 
 **Việc:**
 
-- [ ] 🤖 Node `generate` — dựng prompt 5 đoạn + gọi LLM API — *verify: ngân sách **2.500 ms**
+- [x] 🤖 Node `generate` — dựng prompt 5 đoạn + gọi LLM API (AI viết 08/10 — `rag/generate/loi_nhac.py`,
+      `integrations/llm/`; phép thử 10 câu: trung vị 1.543 ms, 10/10 trong ngân sách) — *verify: ngân sách **2.500 ms**
       trong tổng 4.000 ms; có timeout thật, không để treo vô hạn.*
-- [ ] 🖐 **Nội dung truy hồi là DỮ LIỆU KHÔNG ĐÁNG TIN (bề mặt T3)** — không để nó **chỉ thị**
+- [x] 🖐 **Nội dung truy hồi là DỮ LIỆU KHÔNG ĐÁNG TIN (bề mặt T3)** (AI viết 08/10 — hai vai system/user,
+      thoát `<` trong dữ liệu, test `test_du_lieu_khong_dong_duoc_vung_tai_lieu`) — không để nó **chỉ thị**
       được cho mô hình. Tách rõ vùng dữ liệu và vùng chỉ thị trong prompt.
-- [ ] 🖐 **Node `postguard` — tự gõ.** Kiểm **MỌI trích dẫn** có nằm trong đoạn đã lấy về;
+- [x] 🖐 **Node `postguard` — tự gõ.** (AI viết 08/10 — `rag/generate/hau_kiem.py`; groundedness so âm tiết
+      ĐÃ BỎ DẤU với ĐOẠN TỐT NHẤT được trích — hai quyết định rút từ phép thử, xem báo cáo 08/10) Kiểm **MỌI trích dẫn** có nằm trong đoạn đã lấy về;
       che PII; tính **`groundedness_score` VÀ `retrieval_top_score`**.
       ⚠️ **HAI đại lượng khác nhau:** `retrieval_top_score` đo *đoạn có giống câu hỏi không*;
       `groundedness_score` đo *câu trả lời có thật sự dựa vào đoạn không*.
       *Truy hồi tốt mà mô hình vẫn bịa là trường hợp CÓ THẬT.*
-- [ ] 🖐 **Circuit breaker 3 trạng thái — tự gõ:** `closed → open → half-open`.
+- [x] 🖐 **Circuit breaker 3 trạng thái — tự gõ:** (AI viết 08/10 — `integrations/llm/circuit_breaker.py`
+      + `chiu_loi.py`; thử lại trong HẠN CHÓT CHUNG 2,5 s; kiểm đầu–cuối: 4 lượt LLM sập ⇒ 4 × HTTP 200
+      `degraded`, lượt 4 mạch mở 0 ms) `closed → open → half-open`.
       Retry `429` / `5xx` / `timeout`; **KHÔNG retry** `400` / `401` / `422`.
       Breaker mở → trả câu trả lời **suy giảm** kèm `degraded=true`, **không ném lỗi ra người dùng**.
-- [ ] 🖐 Unit test circuit breaker **đủ 3 trạng thái**.
-- [ ] 🤖 Ghi `latency_breakdown` 9 tầng vào response — *verify: `ai.ai_interactions` đã có sẵn
+- [x] 🖐 Unit test circuit breaker **đủ 3 trạng thái**. (`tests/unit/test_llm_chiu_loi.py`, 23 ca)
+- [x] 🤖 Ghi `latency_breakdown` ~~9~~ 8 tầng vào response (AI viết 08/10 — guard, classify, embed,
+      retrieve, rerank, generate, postguard, total; nháp hợp đồng `docs/contracts/uc023-chat-tra-loi.md`) — *verify: `ai.ai_interactions` đã có sẵn
       `retrieval_top_score`, `groundedness_score`, `is_cached`, `prompt_tokens`,
       `completion_tokens`, `cost_vnd`, `latency_ms` (V209) — **lược đồ không phải sửa gì**.*
 
