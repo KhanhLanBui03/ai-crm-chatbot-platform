@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from src.ai import service
 from src.ai.orchestrator.router import (
     Branch,
     Classification,
@@ -238,7 +239,11 @@ def test_chat_duong_nhanh_qua_http(client: TestClient):
     assert set(data) >= {"answer", "route", "refused", "handoff", "latency_ms"}
 
 
-def test_chat_rag_chua_noi_thi_tu_choi(client: TestClient):
+def test_chat_nhanh_rag_qua_http(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    # Từ UC023 (08/10) nhánh RAG mặc định là RagAnswerer — cần CSDL + ai-embed. Test này chỉ kiểm
+    # dây nối HTTP → facade → nhánh RAG, nên thay answerer bằng bản giả. RagAnswerer thật có test
+    # riêng: tests/unit/test_rag_answerer.py và tests/integration/test_rag_answerer.py.
+    monkeypatch.setattr(service, "_rag_answerer", lambda: _Answerer())
     resp = client.post(
         "/v1/ai/chat",
         # MockClassifyClient khớp chuỗi con: tránh "đặt", "giá", "hi"... để rơi vào KB_SEARCH
@@ -246,7 +251,9 @@ def test_chat_rag_chua_noi_thi_tu_choi(client: TestClient):
         headers={"X-Tenant-Id": "t-1"},
     )
     data = resp.json()
-    assert data["route"] == "RAG" and data["refused"] is True
+    assert data["route"] == "RAG" and data["answer"] == "Gói Pro 500k/tháng"
+    assert data["degraded"] is False
+    assert {"guard_ms", "classify_ms", "total_ms"} <= set(data["latency_breakdown"])
 
 
 def test_chat_message_rong_tra_422(client: TestClient):

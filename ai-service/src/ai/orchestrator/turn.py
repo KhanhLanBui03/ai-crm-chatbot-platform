@@ -49,6 +49,14 @@ class KnowledgeAnswer:
     model_name: str = TEMPLATE_MODEL_NAME
     llm_called: bool = False
     cost_vnd: float = 0.0
+    # LLM không phục vụ được (mạch mở, quá hạn) ⇒ câu trả lời trích nguyên văn, HTTP vẫn 200.
+    degraded: bool = False
+    # Cosine cao nhất câu hỏi ↔ đoạn — KHÁC groundedness_score (xem rag/generate/hau_kiem.py).
+    retrieval_top_score: float | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    # Thời gian từng chặng của nhánh trả lời (ms), gộp vào latency_breakdown của response.
+    latency_breakdown: dict[str, int] = field(default_factory=dict)
 
 
 class KnowledgeAnswerer(Protocol):
@@ -81,6 +89,13 @@ class TurnRecord:
     # Không phải cột V204 — dùng cho KPI ">= 55% lượt không gọi LLM" và log
     llm_called: bool
     route_reason: str
+    # Cột V209 — đã có sẵn trong ai.ai_interactions, lược đồ không phải sửa
+    retrieval_top_score: float | None = None
+    groundedness_score: float | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    # Không phải cột — tỉ lệ suy giảm là một trong bốn tín hiệu rẻ của UC027
+    degraded: bool = False
 
 
 class TurnRecorder(Protocol):
@@ -137,6 +152,7 @@ async def run_turn(
     injection = detect_injection(normalized)
     if injection.is_injected:
         logger.warning("Phát hiện tiêm chỉ thị nhóm %s", injection.matched_category)
+    guard_xong = time.perf_counter()
 
     # Bước 4 — phân loại. Gửi câu GỐC, không gửi câu đã chuẩn hoá: router học trên văn bản
     # thô, và đo trên 200 câu test người thật hai cách cho Macro-F1 gần như bằng nhau
@@ -144,6 +160,7 @@ async def run_turn(
     classification: Classification = await classify_with_retry(
         classifier, request.message, timeout_s=classify_timeout_s, retries=classify_retries
     )
+    classify_xong = time.perf_counter()
 
     # Bước 5 — so ngưỡng
     decision = decide_route(
@@ -193,6 +210,13 @@ async def run_turn(
         groundedness_score=result.groundedness_score,
         latency_ms=latency_ms,
         cost_vnd=result.cost_vnd,
+        degraded=result.degraded,
+        latency_breakdown={
+            "guard_ms": int((guard_xong - started) * 1000),
+            "classify_ms": int((classify_xong - guard_xong) * 1000),
+            **result.latency_breakdown,
+            "total_ms": latency_ms,
+        },
     )
 
 
@@ -239,4 +263,9 @@ def _build_record(
         safety_flag=safety_flag,
         llm_called=result.llm_called if result else False,
         route_reason=route_reason,
+        retrieval_top_score=result.retrieval_top_score if result else None,
+        groundedness_score=result.groundedness_score if result else None,
+        prompt_tokens=result.prompt_tokens if result else None,
+        completion_tokens=result.completion_tokens if result else None,
+        degraded=result.degraded if result else False,
     )

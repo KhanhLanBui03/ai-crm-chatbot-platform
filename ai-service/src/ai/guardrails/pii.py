@@ -141,3 +141,22 @@ def contains_pii(text: str) -> bool:
         or _PHONE_PATTERN.search(text)
         or _cmnd_matches(text)
     )
+
+
+def tim_pii(text: str) -> list[str]:
+    """Các chuỗi PII nguyên văn trong ``text`` — CÙNG bộ luật, CÙNG thứ tự với ``mask_pii``.
+
+    Dùng ở hậu kiểm câu trả lời (UC023): che PII mà mô hình bịa ra hoặc chép từ câu hỏi, nhưng GIỮ
+    PII có sẵn trong tài liệu doanh nghiệp (hotline, email chăm sóc khách hàng). Dò bằng đúng regex
+    ở trên chứ không viết bộ thứ hai — hai bộ luật là hai định nghĩa PII lệch nhau.
+    """
+    if not text:
+        return []
+    tim_thay: list[str] = []
+    con_lai = text
+    # Đoạn đã khớp được thay bằng khoảng trắng để bước sau không khớp lại (như mask_pii thay nhãn).
+    for pattern in (_EMAIL_PATTERN, _CCCD_PATTERN, _PHONE_PATTERN):
+        tim_thay += [m.group(0) for m in pattern.finditer(con_lai)]
+        con_lai = pattern.sub(" ", con_lai)
+    tim_thay += [m.group(0) for m in _cmnd_matches(con_lai)]
+    return tim_thay

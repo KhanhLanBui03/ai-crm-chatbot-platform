@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from src.ai import service
 from src.ai.config import get_settings
 from src.ai.inference.clients import aclose_http_clients
 from src.ai.telemetry.logging import setup_logging
@@ -35,6 +36,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
 
     await eureka.register(settings)
+    # UC023: dựng client nhúng + LLM ngay bây giờ — thiếu LLM_API_KEY ở LLM_MODE=remote thì pod
+    # không lên, thay vì nổ ở lượt chat đầu tiên.
+    await service.khoi_dong_tra_loi()
     # TODO: khởi động consumer Kafka (ingestion-cg) như một asyncio task nền.
     #       enable.auto.commit = False; xác nhận offset SAU KHI xử lý xong (mục 4.3).
     # TODO: nạp mô hình nhúng và mô hình xếp hạng lại — chậm, phải làm ở đây chứ không
@@ -45,6 +49,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         # TODO: dừng consumer Kafka, chờ xử lý nốt bản tin đang dở
+        await service.dong_tra_loi()
         await aclose_http_clients()
         await eureka.deregister()
         logger.info("ai-service đã tắt")

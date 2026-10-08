@@ -28,7 +28,7 @@ CHIỀU PHỤ THUỘC
     worker┘                  └──► db · events · telemetry · inference · integrations
 
 Các phương thức của facade — bám theo 10 endpoint §2.5 và hai topic §2.6:
-    answer_turn()      UC022/023/025/028   POST /v1/ai/chat     ĐÃ CÓ (UC022; RAG chưa nối)
+    answer_turn()      UC022/023/025/028   POST /v1/ai/chat     ĐÃ CÓ (UC022 + UC023 RAG)
     extract_signal()   UC029               POST /v1/ai/extract
     score_lead()       UC030               POST /v1/ai/lead-score
     index_document()   UC018/019           POST /v1/ai/kb/documents
@@ -82,21 +82,25 @@ from src.ai.inference.clients import (
     EmbedClient,
     KetQuaNhung,
     get_classify_client,
+    get_rerank_client,
+    tao_embed_client,
 )
 from src.ai.integrations import object_storage
+from src.ai.integrations.llm import tao_llm_chiu_loi
 from src.ai.orchestrator.turn import (
     KnowledgeAnswerer,
     LogTurnRecorder,
-    PendingKnowledgeAnswerer,
     TurnRecorder,
     run_turn,
 )
+from src.ai.rag.answerer import RagAnswerer
 from src.ai.rag.ingest import tien_do
 from src.ai.rag.ingest.chia_doan import Doan
 from src.ai.rag.ingest.duong_ong import chia_doan_tu_khoi, trich_khoi_tu_s3
 from src.ai.rag.ingest.luu_tru import kiem_uri_thuoc_tenant
 from src.ai.rag.ingest.mime import nhan_dien_tep
 from src.ai.rag.ingest.nhung import nhung_va_ghi_theo_lo
+from src.ai.rag.tsquery import build_tsquery
 from src.ai.schemas import (
     ChatRequest,
     ChatResponse,
@@ -107,6 +111,49 @@ from src.ai.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ── UC023 — nhánh trả lời từ tri thức ────────────────────────────────────────
+
+# MỘT RagAnswerer cho mỗi event loop, sống suốt vòng đời tiến trình. Không tạo mới mỗi lượt vì hai
+# lẽ: circuit breaker phải NHỚ được các lượt hỏng trước (tạo mới là mạch không bao giờ mở), và
+# httpx client giữ kết nối tới ai-embed + nhà cung cấp LLM (tạo mới tốn ~200 ms bắt tay TLS).
+# Gắn theo loop như ``inference/clients._http``: kết nối httpx không dùng được sang loop khác.
+_TRA_LOI: dict[int, RagAnswerer] = {}
+
+
+def _rag_answerer() -> RagAnswerer:
+    loop = id(asyncio.get_running_loop())
+    tra_loi = _TRA_LOI.get(loop)
+    if tra_loi is None:
+        settings = get_settings()
+        tra_loi = RagAnswerer(
+            embed=tao_embed_client(settings),
+            llm=tao_llm_chiu_loi(settings),
+            settings=settings,
+            rerank=get_rerank_client() if settings.rerank_enabled else None,
+        )
+        _TRA_LOI[loop] = tra_loi
+    return tra_loi
+
+
+async def khoi_dong_tra_loi() -> None:
+    """Gọi trong lifespan: dựng client ngay lúc khởi động để cấu hình sai (thiếu ``LLM_API_KEY``
+    khi ``LLM_MODE=remote``) làm pod không lên, thay vì nổ ở lượt chat đầu tiên.
+
+    Làm nóng bộ tách từ pyvi luôn: lần tách đầu tiên nạp mô hình CRF mất ~1,6 s (đo 08/10) — để
+    nguyên thì lượt chat đầu tiên sau mỗi lần khởi động pod chịu trọn khoản đó.
+    """
+    _rag_answerer()
+    await asyncio.to_thread(build_tsquery, "khởi động")
+
+
+async def dong_tra_loi() -> None:
+    """Gọi trong lifespan lúc tắt — đóng kết nối tới ai-embed và nhà cung cấp LLM."""
+    cac_tra_loi = list(_TRA_LOI.values())
+    _TRA_LOI.clear()
+    for tra_loi in cac_tra_loi:
+        await tra_loi.aclose()
 
 
 async def answer_turn(
@@ -127,7 +174,7 @@ async def answer_turn(
         tenant_id=tenant_id,
         request=request,
         classifier=classifier or get_classify_client(),
-        answerer=answerer or PendingKnowledgeAnswerer(),
+        answerer=answerer or _rag_answerer(),
         recorder=recorder or LogTurnRecorder(),
         fast_path_threshold=settings.fast_path_threshold,
         abstention_threshold=settings.router_abstention_threshold,

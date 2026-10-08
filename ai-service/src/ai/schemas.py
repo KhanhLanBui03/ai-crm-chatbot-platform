@@ -55,6 +55,12 @@ class ChatResponse(BaseModel):
     groundedness_score: float | None = None
     latency_ms: int
     cost_vnd: float | None = None
+    # LLM không phục vụ được (circuit breaker mở, quá hạn) ⇒ câu trả lời trích nguyên văn đoạn
+    # liên quan nhất. HTTP vẫn 200 — suy giảm không phải lỗi của người gọi (UC023, Ngày 9).
+    degraded: bool = False
+    # Thời gian từng chặng (ms): guard, classify, embed, retrieve, rerank, generate, postguard,
+    # total. Chặng không chạy thì không có khoá.
+    latency_breakdown: dict[str, int] = Field(default_factory=dict)
 
 
 # ── Kho tri thức — UC018 ─────────────────────────────────────────────────────

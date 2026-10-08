@@ -50,12 +50,38 @@ class Settings(BaseSettings):
     mcp_spec_version: str = "2025-06-18"
 
     # ── Mô hình ngôn ngữ ─────────────────────────────────────────────────
+    # Ba trường anthropic_* KHÔNG còn được đọc: từ 08/10 LLM đi qua client trung lập bên dưới
+    # (ADR-0028). Giữ lại để .env cũ không vỡ và để lịch sử quyết định nhìn thấy được.
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
     # Mô hình rẻ cho nhánh định tuyến — thí nghiệm E10
     anthropic_router_model: str = "claude-haiku-4-5-20251001"
     # Bắt buộc bằng 0 để tái lập thí nghiệm (kế hoạch mục 8.1)
     llm_temperature: float = 0.0
+
+    # Client LLM theo chuẩn OpenAI chat completions (src/ai/integrations/llm/). Đổi nhà cung cấp
+    # là đổi bốn dòng .env, không sửa code.
+    # LLM_MODE TÁCH KHỎI AI_MODE: AI_MODE=mock làm vector câu hỏi thành mock-hash-1024, mà truy hồi
+    # lọc theo embedding_model ⇒ kho thật trả rỗng. Muốn nhúng thật + LLM giả (giữ hạn mức 20
+    # lượt/ngày của bậc miễn phí) thì phải có hai công tắc. Mặc định mock ⇒ CI không đốt lượt nào.
+    llm_mode: Literal["remote", "mock"] = "mock"
+    llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    llm_api_key: str = ""
+    llm_model: str = "gemini-3.5-flash-lite"
+    # Mức suy luận thấp nhất nhà cung cấp cho phép — suy luận dài là độ trễ dài. Rỗng = không gửi.
+    # Phép thử 08/10: 3.5 Flash-Lite + "minimal" trung vị 1.543 ms, 10/10 câu trong ngân sách
+    # (ADR-0028). 3.8 Flash không nhận "minimal"; Flash-Lite không nhận "none".
+    llm_reasoning_effort: str = "minimal"
+    llm_max_tokens: int = Field(default=1024, gt=0)
+    # Ngân sách chặng sinh: 2.500 ms trong tổng 4.000 ms của p95 /v1/ai/chat (§5.3). Là HẠN CHÓT
+    # cho cả các lần thử lại, không phải hạn của từng lần.
+    llm_timeout_s: float = Field(default=2.5, gt=0)
+    # Circuit breaker: hỏng liên tiếp chừng này lượt thì mở mạch; mở chừng này giây thì thử lại.
+    llm_breaker_nguong_hong: int = Field(default=3, ge=1)
+    llm_breaker_thoi_gian_mo_s: float = Field(default=30.0, gt=0)
+    # Giá theo 1 triệu token (VND). Bậc miễn phí = 0; bật thanh toán thì điền để cost_vnd nói thật.
+    llm_gia_vao_vnd_trieu_token: float = Field(default=0.0, ge=0)
+    llm_gia_ra_vnd_trieu_token: float = Field(default=0.0, ge=0)
 
     # ── Định tuyến ý định (UC022) ────────────────────────────────────────
     # Đường nhanh: confidence >= ngưỡng VÀ ý định thuộc nhóm đi nhanh — trả mẫu câu, 0 LLM.
@@ -75,6 +101,15 @@ class Settings(BaseSettings):
     rerank_top_k: int = 5
     rrf_k: int = 60
     refusal_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    # Sàn liên quan theo COSINE (kế hoạch Ngày 8). Toàn tập: không đoạn nào đạt ⇒ từ chối
+    # NOT_COVERED mà không gọi LLM. Từng đoạn: đoạn dưới sàn không vào lời nhắc. Hai con số
+    # tạm theo kế hoạch — hiệu chỉnh ở Ngày 10 bằng 12 câu ngoài kho của bộ vàng.
+    rag_san_toan_tap: float = Field(default=0.25, ge=0.0, le=1.0)
+    rag_san_tung_doan: float = Field(default=0.15, ge=0.0, le=1.0)
+    # Số đoạn đưa vào lời nhắc.
+    rag_so_doan_loi_nhac: int = Field(default=5, ge=1)
+    # Xếp hạng lại — MẶC ĐỊNH TẮT (rag-eval.md). Bật khi nDCG@5 tăng ≥ 5 điểm VÀ p95 < 4 s.
+    rerank_enabled: bool = False
 
     # ── Kho tệp S3 — UC018 (ADR-0022) ────────────────────────────────────
     # java-core GHI tệp gốc vào bucket, ai-service chỉ ĐỌC. Key có dạng {tenant_id}/… — cô lập
