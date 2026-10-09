@@ -28,16 +28,24 @@ CHIỀU PHỤ THUỘC
     worker┘                  └──► db · events · telemetry · inference · integrations
 
 Các phương thức của facade — bám theo 10 endpoint §2.5 và hai topic §2.6:
-    answer_turn()      UC022/023/025/028   POST /v1/ai/chat     ĐÃ CÓ (UC022; RAG chưa nối)
+    answer_turn()      UC022/023/025/028   POST /v1/ai/chat     ĐÃ CÓ (UC022 + UC023 + UC025)
     extract_signal()   UC029               POST /v1/ai/extract
     score_lead()       UC030               POST /v1/ai/lead-score
     index_document()   UC018/019           POST /v1/ai/kb/documents
     nap_tai_lieu()     UC019               (bất đồng bộ, từ crm.kb.document.uploaded) — Ngày 4–5
     quet_job_ket()     UC019               (bộ quét trong worker, ADR-0024) — Ngày 5
     tien_do_nap()      UC019               GET /v1/ai/kb/ingestion-jobs/{job_id} — Ngày 5
-    delete_document()  UC020               DELETE /v1/ai/kb/documents/{id}
-    reindex_tenant()   UC020               POST /v1/ai/kb/reindex
-    record_feedback()  UC027               POST /v1/ai/feedback
+    list_documents()   UC020               GET /v1/documents — Ngày 11
+    get_document()     UC020               GET /v1/documents/{id} — Ngày 11
+    list_chunks()      UC020               GET /v1/documents/{id}/chunks — Ngày 11
+    update_document_metadata()  UC020      PATCH /v1/documents/{id} — Ngày 11
+    reindex_document() UC020               POST /v1/documents/{id}/reindex — Ngày 11 (ADR-0031)
+    delete_document()  UC020               DELETE /v1/documents/{id} · /v1/ai/kb/documents/{id}
+    reindex_tenant()   UC020               POST /v1/ai/kb/reindex — Ngày 11
+    record_feedback()  UC027               POST /v1/ai/feedback — Ngày 10
+    knowledge_gaps()   UC025               GET /v1/knowledge-gaps — Ngày 10
+    quality_summary()  UC027               GET /v1/ai/quality — Ngày 10
+    cham_tu_dong_lo()  UC027               (bộ chấm tự động trong worker, mẫu 5%) — Ngày 10
     set_mcp_config()   UC021               PUT /v1/ai/mcp/config
     forget_contact()   UC041               DELETE /v1/ai/privacy/contacts/{id}
     usage_summary()    UC006/039           GET /v1/ai/usage
@@ -49,29 +57,41 @@ import logging
 import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.ai.config import get_settings
 from src.ai.db.repositories import (
     chunk_repository,
     document_repository,
+    feedback_repository,
+    interaction_repository,
     processed_event_repository,
 )
 from src.ai.db.session import get_system_session, get_tenant_session
 from src.ai.exceptions import (
     AiServiceError,
+    DocumentArchivedError,
+    DocumentBusyError,
     DocumentNotFoundError,
+    DocumentNotReadyError,
     EmbeddingModelMismatchError,
     EmbeddingRejectedError,
+    FeedbackInteractionMissingError,
+    FeedbackReasonRequiredError,
     FileTooLargeError,
     ForbiddenFileUriError,
     IngestOwnershipLostError,
     IngestRetryExhaustedError,
     IngestStalledError,
+    InteractionNotFoundError,
+    InvalidMetadataError,
+    InvalidRaterError,
     NoTextExtractedError,
     ParseFailedError,
     ParseTimeoutError,
@@ -82,31 +102,106 @@ from src.ai.inference.clients import (
     EmbedClient,
     KetQuaNhung,
     get_classify_client,
+    get_rerank_client,
+    tao_embed_client,
 )
 from src.ai.integrations import object_storage
+from src.ai.integrations.llm import (
+    CircuitBreaker,
+    LLMChiuLoi,
+    tao_llm_chiu_loi,
+    tao_llm_client,
+)
+from src.ai.orchestrator.ghi_luot import DbTurnRecorder
 from src.ai.orchestrator.turn import (
     KnowledgeAnswerer,
-    LogTurnRecorder,
-    PendingKnowledgeAnswerer,
     TurnRecorder,
     run_turn,
 )
+from src.ai.rag.answerer import RagAnswerer
+from src.ai.rag.chuan_hoa import normalize_vi
+from src.ai.rag.danh_gia.cham_tu_dong import cham
 from src.ai.rag.ingest import tien_do
 from src.ai.rag.ingest.chia_doan import Doan
 from src.ai.rag.ingest.duong_ong import chia_doan_tu_khoi, trich_khoi_tu_s3
 from src.ai.rag.ingest.luu_tru import kiem_uri_thuoc_tenant
 from src.ai.rag.ingest.mime import nhan_dien_tep
 from src.ai.rag.ingest.nhung import nhung_va_ghi_theo_lo
+from src.ai.rag.tsquery import build_tsquery
 from src.ai.schemas import (
     ChatRequest,
     ChatResponse,
+    ChunkItem,
+    ChunkPage,
+    DanhGiaPhia,
+    DocumentDeleted,
+    DocumentDetail,
+    DocumentMetadataUpdate,
+    DocumentPage,
+    FeedbackRecorded,
+    FeedbackRequest,
     IngestionJobProgress,
     IngestionStep,
     KbDocumentAccepted,
     KbDocumentCreate,
+    KnowledgeGapItem,
+    KnowledgeGapPage,
+    QualitySummary,
+    ReindexAccepted,
+    ReindexTenantAccepted,
+    TyLe,
 )
+from src.ai.telemetry.metrics import auto_eval
 
 logger = logging.getLogger(__name__)
+
+
+# ── UC023 — nhánh trả lời từ tri thức ────────────────────────────────────────
+
+# MỘT RagAnswerer cho mỗi event loop, sống suốt vòng đời tiến trình. Không tạo mới mỗi lượt vì hai
+# lẽ: circuit breaker phải NHỚ được các lượt hỏng trước (tạo mới là mạch không bao giờ mở), và
+# httpx client giữ kết nối tới ai-embed + nhà cung cấp LLM (tạo mới tốn ~200 ms bắt tay TLS).
+# Gắn theo loop như ``inference/clients._http``: kết nối httpx không dùng được sang loop khác.
+_TRA_LOI: dict[int, RagAnswerer] = {}
+
+
+def _rag_answerer() -> RagAnswerer:
+    loop = id(asyncio.get_running_loop())
+    tra_loi = _TRA_LOI.get(loop)
+    if tra_loi is None:
+        settings = get_settings()
+        tra_loi = RagAnswerer(
+            embed=tao_embed_client(settings),
+            llm=tao_llm_chiu_loi(settings),
+            settings=settings,
+            rerank=get_rerank_client() if settings.rerank_enabled else None,
+        )
+        _TRA_LOI[loop] = tra_loi
+    return tra_loi
+
+
+async def khoi_dong_tra_loi() -> None:
+    """Gọi trong lifespan: dựng client ngay lúc khởi động để cấu hình sai (thiếu ``LLM_API_KEY``
+    khi ``LLM_MODE=remote``) làm pod không lên, thay vì nổ ở lượt chat đầu tiên.
+
+    Làm nóng bộ tách từ pyvi luôn: lần tách đầu tiên nạp mô hình CRF mất ~1,6 s (đo 08/10) — để
+    nguyên thì lượt chat đầu tiên sau mỗi lần khởi động pod chịu trọn khoản đó.
+    """
+    _rag_answerer()
+    await asyncio.to_thread(build_tsquery, "khởi động")
+
+
+async def dong_tra_loi() -> None:
+    """Gọi trong lifespan lúc tắt — đóng kết nối tới ai-embed và nhà cung cấp LLM."""
+    cac_tra_loi = list(_TRA_LOI.values())
+    _TRA_LOI.clear()
+    for tra_loi in cac_tra_loi:
+        await tra_loi.aclose()
+
+
+def _ghi_luot() -> TurnRecorder:
+    """Recorder mặc định — ghi ``ai.ai_interactions`` (Ngày 10). Test HTTP thay bằng bản giả."""
+    return DbTurnRecorder()
 
 
 async def answer_turn(
@@ -127,8 +222,8 @@ async def answer_turn(
         tenant_id=tenant_id,
         request=request,
         classifier=classifier or get_classify_client(),
-        answerer=answerer or PendingKnowledgeAnswerer(),
-        recorder=recorder or LogTurnRecorder(),
+        answerer=answerer or _rag_answerer(),
+        recorder=recorder or _ghi_luot(),
         fast_path_threshold=settings.fast_path_threshold,
         abstention_threshold=settings.router_abstention_threshold,
         classify_timeout_s=settings.classify_timeout_s,
@@ -508,3 +603,369 @@ async def tien_do_nap(session: AsyncSession, job_id: UUID) -> IngestionJobProgre
         created_at=td.created_at,
         updated_at=td.updated_at,
     )
+
+
+# ── UC027 — đánh giá chất lượng ──────────────────────────────────────────────
+
+_DANH_GIA = {1: "POSITIVE", -1: "NEGATIVE"}
+
+
+async def record_feedback(
+    session: AsyncSession, yeu_cau: FeedbackRequest, interaction_id: UUID | None = None
+) -> FeedbackRecorded:
+    """Ghi (hoặc cập nhật) đánh giá của một phía cho một lượt — UC027 bước 5.
+
+    ``interaction_id`` từ đường dẫn (``/v1/ai-interactions/{id}/feedback``) hoặc từ body
+    (``/v1/ai/feedback``). Có cả hai mà khác nhau thì từ chối — không đoán bên nào đúng.
+
+    Thứ tự kiểm: ràng buộc chéo trường (rẻ, không chạm CSDL) → ghi. Ràng buộc "lượt thuộc tenant"
+    nằm TRONG câu ghi (``feedback_repository``) — không ``SELECT`` trước rồi ``INSERT`` sau.
+    """
+    ma_luot = interaction_id or yeu_cau.interaction_id
+    if ma_luot is None or (
+        interaction_id and yeu_cau.interaction_id and interaction_id != yeu_cau.interaction_id
+    ):
+        raise FeedbackInteractionMissingError("Cần đúng một interaction_id cho đánh giá")
+    danh_gia = _DANH_GIA[yeu_cau.rating]
+    if danh_gia == "NEGATIVE" and yeu_cau.reason_code is None:
+        raise FeedbackReasonRequiredError("Đánh giá tiêu cực phải chọn một trong bốn lý do")
+    if danh_gia == "POSITIVE" and yeu_cau.reason_code is not None:
+        raise FeedbackInteractionMissingError("Đánh giá tích cực không kèm lý do chê")
+    if yeu_cau.rater_type == "AGENT" and yeu_cau.rater_user_id is None:
+        raise InvalidRaterError("Đánh giá của nhân viên phải có rater_user_id")
+    if yeu_cau.rater_type == "CUSTOMER" and (
+        yeu_cau.rater_user_id is not None or yeu_cau.corrected_answer is not None
+    ):
+        raise InvalidRaterError("Đánh giá của khách không kèm rater_user_id hay câu trả lời sửa")
+
+    ket_qua = await feedback_repository.ghi_danh_gia(
+        session,
+        interaction_id=ma_luot,
+        rater_type=yeu_cau.rater_type,
+        rater_user_id=yeu_cau.rater_user_id,
+        rating=danh_gia,
+        reason_code=yeu_cau.reason_code,
+        comment=yeu_cau.comment,
+        correction_text=yeu_cau.corrected_answer,
+    )
+    if ket_qua is None:
+        raise InteractionNotFoundError(f"Không có lượt xử lý {ma_luot}")
+    return FeedbackRecorded(
+        message="Đã ghi nhận đánh giá" if ket_qua.tao_moi else "Đã cập nhật đánh giá",
+        feedback_id=ket_qua.feedback_id,
+        created=ket_qua.tao_moi,
+    )
+
+
+def _ty_le(tu_so: int, mau_so: int) -> TyLe:
+    return TyLe(tu_so=tu_so, mau_so=mau_so, gia_tri=round(tu_so / mau_so, 4) if mau_so else None)
+
+
+async def quality_summary(session: AsyncSession, tu: datetime, den: datetime) -> QualitySummary:
+    """Bảy tín hiệu chất lượng trong ``[tu, den)`` — UC027 bước 7, nguồn cho UC039.
+
+    Mỗi tỉ lệ trả kèm tử số và mẫu số. Tỉ lệ đánh giá tích cực chia cho SỐ LƯỢT CÓ ĐÁNH GIÁ từ
+    phía đó, không chia cho tổng số lượt: chia cho tổng lượt thì con số bị kéo về 0 theo tỉ lệ
+    người chịu bấm nút — thứ đó đo mức sẵn lòng bấm của khách, không đo chất lượng câu trả lời.
+    """
+    t = await interaction_repository.tin_hieu_luot(session, tu, den)
+    phia = await interaction_repository.danh_gia_theo_phia(session, tu, den)
+    return QualitySummary(
+        tu=tu,
+        den=den,
+        so_luot=t.so_luot,
+        so_luot_loi=t.so_loi,
+        ty_le_tu_choi=_ty_le(t.so_tu_choi, t.so_luot),
+        ty_le_suy_giam=_ty_le(t.so_suy_giam, t.so_luot),
+        ty_le_chuyen_giao=_ty_le(t.so_chuyen_giao, t.so_luot),
+        do_phu_trich_dan=_ty_le(t.so_rag_co_trich_dan, t.so_rag_tra_loi),
+        ty_le_khong_goi_llm=_ty_le(t.so_khong_goi_llm, t.so_luot),
+        groundedness_trung_binh=t.groundedness_tb,
+        tu_choi_theo_ly_do=t.tu_choi_theo_ly_do,
+        danh_gia=[
+            DanhGiaPhia(
+                rater_type=p.rater_type,
+                ty_le_tich_cuc=_ty_le(p.so_tich_cuc, p.so_danh_gia),
+                che_theo_ly_do=p.che_theo_ly_do,
+            )
+            for p in phia
+        ],
+    )
+
+
+# ── UC025 — khoảng trống tri thức ────────────────────────────────────────────
+
+
+async def knowledge_gaps(
+    session: AsyncSession,
+    tenant_id: str,
+    *,
+    gap_type: str | None = None,
+    page: int = 0,
+    size: int = 20,
+    so_ngay: int = 30,
+) -> KnowledgeGapPage:
+    """Danh sách khoảng trống — UC025 bước 8. Truy vấn gộp, không bảng riêng (đặc tả UC025).
+
+    ``tenant_id`` chỉ để dựng ``id`` tất định; việc lọc theo tenant là của RLS trong ``session``.
+    """
+    cac_dong, tong = await interaction_repository.khoang_trong_tri_thuc(
+        session, so_ngay=so_ngay, gap_type=gap_type, gioi_han=size, bo_qua=page * size
+    )
+    return KnowledgeGapPage(
+        items=[
+            KnowledgeGapItem(
+                id=uuid5(NAMESPACE_URL, f"knowledge-gap:{tenant_id}:{d.gap_type}:{d.khoa}"),
+                query_text=d.query_text,
+                gap_type=d.gap_type,
+                unanswered_count=d.unanswered_count,
+                distinct_conversation_count=d.distinct_conversation_count,
+                first_occurred_at=d.first_occurred_at,
+                last_occurred_at=d.last_occurred_at,
+            )
+            for d in cac_dong
+        ],
+        total=tong,
+        page=page,
+        size=size,
+    )
+
+
+# ── UC027 — bộ chấm tự động (worker) ─────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class KetQuaChamLo:
+    so_ung_vien: int
+    so_ghi: int
+    so_khong_chac: int
+    so_bo_qua: int
+    # Mốc ``tu`` cho lần quét sau — xem ``cham_tu_dong_lo``.
+    moc_tiep: datetime
+
+
+def tao_giam_khao() -> LLMChiuLoi:
+    """LLM giám khảo — mạch RIÊNG với LLM trả lời khách: giám khảo làm mở mạch thì khách không
+    phải nhận câu suy giảm vì nó. Hạn chót rộng — chạy nền, không ai chờ."""
+    s = get_settings()
+    return LLMChiuLoi(
+        tao_llm_client(s),
+        CircuitBreaker(
+            nguong_hong=s.llm_breaker_nguong_hong, thoi_gian_mo_s=s.llm_breaker_thoi_gian_mo_s
+        ),
+        han_chot_s=s.cham_tu_dong_han_chot_s,
+    )
+
+
+async def cham_tu_dong_lo(
+    giam_khao: LLMChiuLoi, *, tu: datetime, factory: SessionFactory = None
+) -> KetQuaChamLo:
+    """Chấm mẫu 5% các lượt RAG đã trả lời từ ``tu`` tới nay — UC027 bước 6.
+
+    Trả ``moc_tiep`` để worker dùng làm ``tu`` lần sau, nên mỗi lượt chỉ được XÉT một lần — lượt
+    giám khảo không chắc (không ghi gì) không bị chấm lại mỗi chu kỳ và đốt hạn mức LLM:
+
+    - lô CHƯA đầy ⇒ đã xét hết tới lúc quét ⇒ mốc = giờ CSDL lúc quét;
+    - lô ĐẦY (đủ ``cham_tu_dong_toi_da``) ⇒ còn ứng viên phía sau ⇒ mốc = ``created_at`` của lượt
+      cuối trong lô. Dời thẳng tới "bây giờ" là bỏ rơi vĩnh viễn phần vượt trần.
+    """
+    s = get_settings()
+    async with get_system_session(factory) as phien:
+        cac_luot, luc_quet = await interaction_repository.tim_luot_can_cham(
+            phien, tu, s.cham_tu_dong_ty_le, s.cham_tu_dong_toi_da
+        )
+    moc_tiep = cac_luot[-1].created_at if len(cac_luot) >= s.cham_tu_dong_toi_da else luc_quet
+    so_ghi = so_khong_chac = so_bo_qua = 0
+    for luot in cac_luot:
+        tenant = str(luot.tenant_id)
+        async with get_tenant_session(tenant, factory) as phien:
+            noi_dung = await interaction_repository.doc_luot_de_cham(phien, luot.interaction_id)
+        if noi_dung is None:
+            so_bo_qua += 1
+            auto_eval.labels(outcome="BO_QUA").inc()
+            continue
+        ket_qua = await cham(giam_khao, noi_dung)
+        if ket_qua is None or ket_qua.do_chac < s.cham_tu_dong_nguong_chac:
+            so_khong_chac += 1
+            auto_eval.labels(outcome="KHONG_CHAC").inc()
+            continue
+        async with get_tenant_session(tenant, factory) as phien:
+            await feedback_repository.ghi_danh_gia(
+                phien,
+                interaction_id=luot.interaction_id,
+                rater_type="AUTO_EVAL",
+                rater_user_id=None,
+                rating=ket_qua.rating,
+                reason_code=ket_qua.reason_code,
+                comment=f"[{ket_qua.model} · chắc {ket_qua.do_chac:.2f}] {ket_qua.giai_thich}",
+                correction_text=None,
+            )
+        so_ghi += 1
+        auto_eval.labels(outcome="GHI").inc()
+    if cac_luot:
+        logger.info(
+            "Bộ chấm tự động: %d ứng viên — ghi %d, không chắc %d, bỏ qua %d",
+            len(cac_luot), so_ghi, so_khong_chac, so_bo_qua,
+        )
+    return KetQuaChamLo(len(cac_luot), so_ghi, so_khong_chac, so_bo_qua, moc_tiep)
+
+
+def bay_gio() -> datetime:
+    """Đồng hồ của worker — một chỗ để test thay."""
+    return datetime.now(UTC)
+
+
+# ── UC020 — quản lý kho tri thức (ADR-0031) ──────────────────────────────────
+#
+# Mọi thao tác ghi khoá dòng tài liệu (``FOR UPDATE``) rồi mới kiểm trạng thái, trong CÙNG
+# transaction của request (``SessionDep``): một lượt nạp không chen được vào giữa lúc kiểm "không
+# bận" và lúc ghi. Ba thao tác ghi để lại một dòng log ``kiem_toan_kho`` — nhật ký kiểm toán thật
+# (``platform.audit_logs``, đặc tả UC020 bước 8) là của java-core: ai-service không ghi schema của
+# Track A.
+
+_DANG_NAP = ("PENDING", "PROCESSING")
+
+
+def _tai_lieu_ra(t: document_repository.TaiLieu) -> DocumentDetail:
+    return DocumentDetail(
+        id=t.id, title=t.title, status=t.status, source_type=t.source_type,
+        uploaded_by=t.uploaded_by, chunk_count=t.chunk_count, created_at=t.created_at,
+        description=t.description, language=t.language, file_name=t.file_name,
+        mime_type=t.mime_type, file_size_bytes=t.file_size_bytes, version=t.version,
+        error_message=t.error_message, indexed_at=t.indexed_at, updated_at=t.updated_at,
+        replaces_document_id=t.replaces_document_id, reindex_document_id=t.reindex_document_id,
+    )
+
+
+async def _lay_hoac_404(
+    session: AsyncSession, document_id: UUID, *, khoa: bool = False
+) -> document_repository.TaiLieu:
+    t = await document_repository.lay_tai_lieu(session, document_id, khoa=khoa)
+    if t is None:
+        raise DocumentNotFoundError(f"Không có tài liệu {document_id}")
+    return t
+
+
+def _kiem_toan(thao_tac: str, document_id: UUID, **chi_tiet) -> None:
+    logger.info(
+        "kiem_toan_kho thao_tac=%s tai_lieu=%s %s",
+        thao_tac, document_id, " ".join(f"{k}={v}" for k, v in chi_tiet.items()),
+    )
+
+
+async def list_documents(
+    session: AsyncSession,
+    *,
+    keyword: str | None,
+    status: str | None,
+    source_type: str | None,
+    page: int,
+    size: int,
+) -> DocumentPage:
+    """SCR030. Từ khoá qua ``normalize_vi`` — CÙNG hàm chuẩn hoá lúc nạp (kế hoạch Ngày 11: dùng
+    lại, không viết hàm thứ hai); bỏ dấu + viết thường do ``knowledge.f_unaccent`` làm trong SQL."""
+    tu_khoa = normalize_vi(keyword).strip() if keyword else None
+    cac, tong = await document_repository.danh_sach(
+        session, tu_khoa=tu_khoa or None, status=status, source_type=source_type,
+        gioi_han=size, bo_qua=page * size,
+    )
+    return DocumentPage(items=[_tai_lieu_ra(t) for t in cac], total=tong, page=page, size=size)
+
+
+async def get_document(session: AsyncSession, document_id: UUID) -> DocumentDetail:
+    return _tai_lieu_ra(await _lay_hoac_404(session, document_id))
+
+
+async def list_chunks(
+    session: AsyncSession, document_id: UUID, *, page: int, size: int
+) -> ChunkPage:
+    await _lay_hoac_404(session, document_id)
+    cac, tong = await chunk_repository.danh_sach_doan(session, document_id, size, page * size)
+    return ChunkPage(
+        items=[
+            ChunkItem(
+                chunk_id=d.id, chunk_index=d.chunk_index, content=d.content, heading=d.heading,
+                page_number=d.page_number, token_count=d.token_count,
+                embedding_model=d.embedding_model, embedding_version=d.embedding_version,
+                has_vector=d.co_vector,
+            )
+            for d in cac
+        ],
+        total=tong, page=page, size=size,
+    )
+
+
+async def update_document_metadata(
+    session: AsyncSession, document_id: UUID, yeu_cau: DocumentMetadataUpdate
+) -> DocumentDetail:
+    """Sửa ``title``/``description``. KHÔNG đụng ``knowledge_chunks`` — chỉ mục vector giữ nguyên.
+
+    Chặn khi đang có lượt nạp lại: bản bóng đã chép tiêu đề cũ, sửa bản cũ lúc này thì tới khi đổi
+    bản, tiêu đề mới biến mất mà không ai biết vì sao.
+    """
+    t = await _lay_hoac_404(session, document_id, khoa=True)
+    if t.status == "ARCHIVED":
+        raise DocumentArchivedError(f"Tài liệu {document_id} đã gỡ khỏi chỉ mục")
+    if t.reindex_document_id is not None:
+        raise DocumentBusyError(f"Tài liệu {document_id} đang được nạp lại")
+    thay_doi = {c: getattr(yeu_cau, c) for c in yeu_cau.model_fields_set}
+    try:
+        await document_repository.cap_nhat_sieu_du_lieu(session, document_id, thay_doi)
+    except IntegrityError as loi:
+        if "uq_doc_title_version" in str(loi.orig):
+            raise InvalidMetadataError(
+                f"Đã có tài liệu khác tên '{thay_doi.get('title')}' ở version {t.version}"
+            ) from None
+        raise
+    _kiem_toan("SUA", document_id, truong=",".join(sorted(thay_doi)))
+    return _tai_lieu_ra(await _lay_hoac_404(session, document_id))
+
+
+async def reindex_document(session: AsyncSession, document_id: UUID) -> ReindexAccepted:
+    """Nạp lại một tài liệu bằng bản bóng (ADR-0031). Bộ quét nhặt bản bóng trong ≤ 1 chu kỳ."""
+    t = await _lay_hoac_404(session, document_id, khoa=True)
+    if t.status in _DANG_NAP or t.reindex_document_id is not None:
+        raise DocumentBusyError(f"Tài liệu {document_id} đang được nạp")
+    if t.status != "READY":
+        raise DocumentNotReadyError(
+            f"Chỉ nạp lại tài liệu READY; tài liệu đang {t.status} — hãy tải lên lại"
+        )
+    try:
+        moi, version = await document_repository.tao_ban_bong(session, t)
+    except IntegrityError as loi:
+        if "uq_doc_mot_luot_nap_lai" in str(loi.orig):
+            raise DocumentBusyError(f"Tài liệu {document_id} đang được nạp lại") from None
+        raise
+    _kiem_toan("NAP_LAI", document_id, ban_bong=moi, version=version)
+    return ReindexAccepted(
+        message="Đã xếp hàng nạp lại — bản cũ vẫn phục vụ tới khi bản mới nạp xong",
+        document_id=document_id, job_id=moi, version=version,
+    )
+
+
+async def reindex_tenant(session: AsyncSession, tenant_id: str) -> ReindexTenantAccepted:
+    """Nạp lại toàn kho của tenant (đổi mô hình nhúng — UC020 luồng phụ 6.1): một bản bóng cho mỗi
+    tài liệu ``READY`` chưa có lượt nạp lại đang chạy. Worker xử lý lần lượt, một job đồng thời.
+
+    ⚠️ Đổi mô hình nhúng: đổi ``EMBED_URL`` của WORKER trước, chạy lệnh này, đợi xong rồi mới đổi
+    ``EMBED_URL`` của API — truy hồi lọc đoạn theo mô hình của chính vector câu hỏi (ADR-0031).
+    """
+    cac = await document_repository.tai_lieu_can_nap_lai(session)
+    for t in cac:
+        await document_repository.tao_ban_bong(session, t)
+    logger.info("kiem_toan_kho thao_tac=NAP_LAI_TOAN_KHO so_tai_lieu=%d", len(cac))
+    return ReindexTenantAccepted(tenant_id=UUID(tenant_id), total_documents=len(cac))
+
+
+async def delete_document(session: AsyncSession, document_id: UUID) -> DocumentDeleted:
+    """Gỡ khỏi chỉ mục: xoá đoạn TRƯỚC rồi ``ARCHIVED``, cùng transaction — hỏng giữa chừng thì
+    rollback, trạng thái giữ nguyên (đặc tả UC020 luồng phụ 7.2). Gỡ lại tài liệu đã gỡ: luỹ
+    đẳng."""
+    t = await _lay_hoac_404(session, document_id, khoa=True)
+    if t.status == "ARCHIVED":
+        return DocumentDeleted(message="Tài liệu đã được gỡ trước đó", chunks_deleted=0)
+    if t.status in _DANG_NAP or t.reindex_document_id is not None:
+        raise DocumentBusyError(f"Tài liệu {document_id} đang được nạp — thử lại sau")
+    so = await document_repository.xoa_khoi_chi_muc(session, document_id)
+    _kiem_toan("GO", document_id, so_doan=so)
+    return DocumentDeleted(message="Đã gỡ tài liệu khỏi kho tri thức", chunks_deleted=so)

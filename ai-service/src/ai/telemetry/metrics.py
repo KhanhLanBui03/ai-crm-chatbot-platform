@@ -39,3 +39,24 @@ kafka_consume_latency = Histogram(
     "Độ trễ từ lúc sự kiện được phát tới lúc xử lý xong",
     labelnames=("topic",),
 )
+
+# UC022 bước 9 (Ngày 10): ghi ai.ai_interactions hỏng thì lượt chat vẫn trả lời — số này là
+# cách DUY NHẤT biết telemetry đang mất dòng. Khác 0 nghĩa là báo cáo UC039/UC027 thiếu số liệu.
+turn_record_failures = Counter(
+    "ai_turn_record_failures_total",
+    "Số lượt chat không ghi được vào ai.ai_interactions",
+)
+
+# UC025 — số lượt từ chối theo lý do (4 giá trị V204). Nhãn hữu hạn, không có tenant.
+refusals = Counter(
+    "ai_refusals_total",
+    "Số lượt nhánh tri thức từ chối trả lời",
+    labelnames=("reason",),
+)
+
+# UC027 — bộ chấm tự động: chấm xong / bỏ vì không chắc / hỏng.
+auto_eval = Counter(
+    "ai_auto_eval_total",
+    "Số lượt bộ chấm tự động đã xử lý",
+    labelnames=("outcome",),  # GHI | KHONG_CHAC | BO_QUA | LOI
+)

@@ -193,3 +193,63 @@ class EventUnsupportedError(AiServiceError):
     """
 
     code = "EVENT_UNSUPPORTED"
+
+
+# ── Đánh giá chất lượng — UC027 (Ngày 10) ────────────────────────────────────
+
+
+class InteractionNotFoundError(AiServiceError):
+    """Lượt không tồn tại hoặc thuộc tenant khác — RLS che, không phân biệt hai trường hợp (như
+    ``DocumentNotFoundError``): 403 là xác nhận cho kẻ dò rằng id đó có thật ở tenant khác."""
+
+    code = "INTERACTION_NOT_FOUND"
+
+
+class FeedbackReasonRequiredError(AiServiceError):
+    """Chê mà không chọn lý do — đặc tả UC027 ``422 REASON_REQUIRED``. CSDL cũng chặn
+    (``ck_feedback_reason``, V204); kiểm ở ứng dụng trước để trả mã có nghĩa thay vì 500."""
+
+    code = "REASON_REQUIRED"
+
+
+class InvalidRaterError(AiServiceError):
+    """Nhân viên thiếu mã người dùng, khách kèm mã người dùng, hoặc khách gửi câu sửa
+    (``ck_feedback_rater`` của V204; câu sửa là quyền của nhân viên — đặc tả UC027 bước 4)."""
+
+    code = "INVALID_RATER"
+
+
+class FeedbackInteractionMissingError(AiServiceError):
+    """Thiếu ``interaction_id``, hai nguồn (đường dẫn, body) mâu thuẫn, hoặc khen mà kèm lý do
+    chê."""
+
+    code = "INVALID_FEEDBACK"
+
+
+# ── Quản lý kho tri thức — UC020 (Ngày 11) ───────────────────────────────────
+
+
+class DocumentBusyError(AiServiceError):
+    """Tài liệu đang nạp (``PENDING``/``PROCESSING``) hoặc đang có lượt nạp lại — đặc tả UC020
+    luồng phụ 5.1. Gỡ giữa chừng là để lại đoạn mồ côi; nạp lại chồng là hai bản bóng tranh nhau."""
+
+    code = "DOCUMENT_BUSY"
+
+
+class DocumentNotReadyError(AiServiceError):
+    """Nạp lại chỉ cho tài liệu ``READY`` (ADR-0031). Tài liệu lỗi thì tải lên lại (UC018)."""
+
+    code = "DOCUMENT_NOT_READY"
+
+
+class DocumentArchivedError(AiServiceError):
+    """Tài liệu đã gỡ khỏi chỉ mục — chỉ còn để đọc."""
+
+    code = "DOCUMENT_ARCHIVED"
+
+
+class InvalidMetadataError(AiServiceError):
+    """Tiêu đề mới trùng một tài liệu khác cùng version (``uq_doc_title_version``) — đặc tả UC020
+    ``422 INVALID_METADATA``; cùng mã với lỗi validate của UC018."""
+
+    code = "INVALID_METADATA"

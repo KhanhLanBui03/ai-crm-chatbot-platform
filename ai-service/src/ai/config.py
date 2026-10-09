@@ -50,12 +50,38 @@ class Settings(BaseSettings):
     mcp_spec_version: str = "2025-06-18"
 
     # ── Mô hình ngôn ngữ ─────────────────────────────────────────────────
+    # Ba trường anthropic_* KHÔNG còn được đọc: từ 08/10 LLM đi qua client trung lập bên dưới
+    # (ADR-0028). Giữ lại để .env cũ không vỡ và để lịch sử quyết định nhìn thấy được.
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
     # Mô hình rẻ cho nhánh định tuyến — thí nghiệm E10
     anthropic_router_model: str = "claude-haiku-4-5-20251001"
     # Bắt buộc bằng 0 để tái lập thí nghiệm (kế hoạch mục 8.1)
     llm_temperature: float = 0.0
+
+    # Client LLM theo chuẩn OpenAI chat completions (src/ai/integrations/llm/). Đổi nhà cung cấp
+    # là đổi bốn dòng .env, không sửa code.
+    # LLM_MODE TÁCH KHỎI AI_MODE: AI_MODE=mock làm vector câu hỏi thành mock-hash-1024, mà truy hồi
+    # lọc theo embedding_model ⇒ kho thật trả rỗng. Muốn nhúng thật + LLM giả (giữ hạn mức 20
+    # lượt/ngày của bậc miễn phí) thì phải có hai công tắc. Mặc định mock ⇒ CI không đốt lượt nào.
+    llm_mode: Literal["remote", "mock"] = "mock"
+    llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    llm_api_key: str = ""
+    llm_model: str = "gemini-3.5-flash-lite"
+    # Mức suy luận thấp nhất nhà cung cấp cho phép — suy luận dài là độ trễ dài. Rỗng = không gửi.
+    # Phép thử 08/10: 3.5 Flash-Lite + "minimal" trung vị 1.543 ms, 10/10 câu trong ngân sách
+    # (ADR-0028). 3.8 Flash không nhận "minimal"; Flash-Lite không nhận "none".
+    llm_reasoning_effort: str = "minimal"
+    llm_max_tokens: int = Field(default=1024, gt=0)
+    # Ngân sách chặng sinh: 2.500 ms trong tổng 4.000 ms của p95 /v1/ai/chat (§5.3). Là HẠN CHÓT
+    # cho cả các lần thử lại, không phải hạn của từng lần.
+    llm_timeout_s: float = Field(default=2.5, gt=0)
+    # Circuit breaker: hỏng liên tiếp chừng này lượt thì mở mạch; mở chừng này giây thì thử lại.
+    llm_breaker_nguong_hong: int = Field(default=3, ge=1)
+    llm_breaker_thoi_gian_mo_s: float = Field(default=30.0, gt=0)
+    # Giá theo 1 triệu token (VND). Bậc miễn phí = 0; bật thanh toán thì điền để cost_vnd nói thật.
+    llm_gia_vao_vnd_trieu_token: float = Field(default=0.0, ge=0)
+    llm_gia_ra_vnd_trieu_token: float = Field(default=0.0, ge=0)
 
     # ── Định tuyến ý định (UC022) ────────────────────────────────────────
     # Đường nhanh: confidence >= ngưỡng VÀ ý định thuộc nhóm đi nhanh — trả mẫu câu, 0 LLM.
@@ -75,6 +101,38 @@ class Settings(BaseSettings):
     rerank_top_k: int = 5
     rrf_k: int = 60
     refusal_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    # Sàn liên quan theo COSINE (kế hoạch Ngày 8). Toàn tập: không đoạn nào đạt ⇒ từ chối
+    # NOT_COVERED mà không gọi LLM. Từng đoạn: đoạn dưới sàn không vào lời nhắc.
+    # Hiệu chỉnh 09/10 (ADR-0029): với bge-m3 trên kho đo, cosine câu có đáp án thấp nhất 0,421
+    # còn câu ngoài kho cao nhất 0,650 — hai phân bố chồng nhau, mọi sàn 0–0,42 cho cùng kết quả,
+    # sàn cao hơn chỉ làm mất câu đúng. Luật chọn định trước lấy số nhỏ nhất ⇒ 0. Sàn từng đoạn
+    # 0,15 vẫn chặn đoạn quá xa — cơ chế còn đó cho mô hình nhúng / kho khác.
+    rag_san_toan_tap: float = Field(default=0.0, ge=0.0, le=1.0)
+    rag_san_tung_doan: float = Field(default=0.15, ge=0.0, le=1.0)
+    # UC025 — cổng bám nguồn sau sinh: groundedness_score dưới ngưỡng ⇒ HUỶ câu trả lời, từ chối
+    # LOW_CONFIDENCE. 0 = tắt cổng. Hiệu chỉnh 09/10 (ADR-0029): mọi ngưỡng > 0 làm mất 4 câu
+    # trả lời đúng trên bộ vàng (groundedness là phép đo từ vựng, chấm oan câu diễn đạt lại) mà
+    # không thêm câu từ chối đúng nào ⇒ TẮT. Điểm vẫn được đo và ghi cho 100% lượt.
+    rag_nguong_bam_nguon: float = Field(default=0.0, ge=0.0, le=1.0)
+    # UC025 luồng phụ 3.3 — lượt từ chối thứ N liên tiếp trong một hội thoại thì chuyển nhân viên.
+    rag_tu_choi_lap_lai_chuyen_giao: int = Field(default=2, ge=1)
+    # Số đoạn đưa vào lời nhắc.
+    rag_so_doan_loi_nhac: int = Field(default=5, ge=1)
+    # Xếp hạng lại — MẶC ĐỊNH TẮT (rag-eval.md). Bật khi nDCG@5 tăng ≥ 5 điểm VÀ p95 < 4 s.
+    rerank_enabled: bool = False
+
+    # ── Bộ chấm tự động — UC027 bước 6, chạy nền trong worker ─────────────
+    # Chỉ chạy khi LLM_MODE=remote: giám khảo giả cho nhãn giả, làm bẩn đúng tỉ lệ cần đo.
+    cham_tu_dong_bat: bool = True
+    cham_tu_dong_ty_le: float = Field(default=0.05, gt=0.0, le=1.0)
+    cham_tu_dong_chu_ky_s: float = Field(default=900.0, gt=0)
+    cham_tu_dong_toi_da: int = Field(default=50, ge=1, le=200)
+    # Giám khảo tự khai độ chắc dưới ngưỡng ⇒ không ghi (UC027 luồng phụ 6.1).
+    cham_tu_dong_nguong_chac: float = Field(default=0.7, ge=0.0, le=1.0)
+    # Chạy nền, không có khách chờ — hạn chót rộng hơn hẳn 2,5 s của lượt chat.
+    cham_tu_dong_han_chot_s: float = Field(default=15.0, gt=0)
+    # Lần quét đầu sau khi worker khởi động nhìn lại bao xa.
+    cham_tu_dong_nhin_lai_s: float = Field(default=86400.0, gt=0)
 
     # ── Kho tệp S3 — UC018 (ADR-0022) ────────────────────────────────────
     # java-core GHI tệp gốc vào bucket, ai-service chỉ ĐỌC. Key có dạng {tenant_id}/… — cô lập

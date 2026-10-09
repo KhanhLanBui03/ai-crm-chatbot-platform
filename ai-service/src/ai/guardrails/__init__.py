@@ -37,7 +37,7 @@ from src.ai.guardrails.injection import (
     detect_injection,
 )
 from src.ai.guardrails.normalize import normalize_vietnamese_text
-from src.ai.guardrails.pii import contains_pii, mask_pii
+from src.ai.guardrails.pii import contains_pii, mask_pii, tim_pii
 
 __all__ = [
     "normalize_vietnamese_text",
@@ -46,5 +46,6 @@ __all__ = [
     "SAFETY_FLAG_INJECTION",
     "mask_pii",
     "contains_pii",
+    "tim_pii",
 ]
 

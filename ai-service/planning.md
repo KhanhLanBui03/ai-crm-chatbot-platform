@@ -643,25 +643,35 @@ luật viết cho trường hợp trễ lịch. Ô ❌ #3 là kết quả kỹ t
 
 **Việc:**
 
-- [ ] 🤝 **NGỒI CÙNG DEV B chốt cấu trúc `AgentState`.** Đây là điểm hai đường gặp nhau — lệch ở
+> **08/10 — thay bằng ADR-0027:** lượt chat giữ pipeline tuần tự `run_turn` của Dev B, nhánh tri
+> thức cắm qua Protocol `KnowledgeAnswerer` (`src/ai/rag/answerer.py::RagAnswerer`). Không có
+> `AgentState` chung, không có `graph.py`. Ba ô đầu gạch theo đó; tám "node" thành tám bước (bảng
+> trong ADR-0027).
+
+- [x] ~~🤝 **NGỒI CÙNG DEV B chốt cấu trúc `AgentState`.**~~ Không cần — ADR-0027. Đây là điểm hai đường gặp nhau — lệch ở
       đây là conflict cả tuần.
       **Quy tắc:** mỗi người chỉ **ĐĂNG KÝ** node của mình vào registry, **KHÔNG sửa node của
       người kia**. Vi phạm quy tắc này là nguồn conflict số một.
-- [ ] 🤖 `StateGraph` 8 node (`guard`, `route`, `fastpath`, `retrieve`, `generate`, `postguard`,
+- [x] ~~🤖 `StateGraph` 8 node~~ (ADR-0027 — tám bước tuần tự) (`guard`, `route`, `fastpath`, `retrieve`, `generate`, `postguard`,
       `handoff`, `telemetry`) với cạnh điều kiện — *verify: file `graph.py` là file CHUNG, cần
       Dev B duyệt; mình chỉ thêm node của mình.*
-- [ ] 🤖 **Node `guard`** — normalize + injection + PII, **dùng lại** `guardrails` Dev B viết
+- [x] 🤖 **Node `guard`** — đã có sẵn ở `run_turn` bước 3 của Dev B; `RagAnswerer` dùng lại `mask_pii`, thêm `tim_pii` cùng bộ regex (AI viết 08/10) — normalize + injection + PII, **dùng lại** `guardrails` Dev B viết
       Ngày 6 — *verify: gọi lại hàm của Dev B, **không viết lại** logic phát hiện; viết lại là
       hai bộ luật lệch nhau.*
-- [ ] 🖐 **Node `retrieve` — tự gõ phần quyết định:**
+- [x] 🖐 **Node `retrieve` — tự gõ phần quyết định:** (AI viết 08/10 — `src/ai/rag/rerank/quyet_dinh.py`;
+      **gap đo trên COSINE, không phải RRF**: điểm RRF chỉ 0,016–0,033 nên "< 0,15" đúng với 100%
+      câu. `hybrid.py` thêm cột `do_tuong_dong`, E3 chạy lại ra đúng số cũ 0,800 / 0,740)
       `hybrid_search(pool=30)` → `needs_rerank()` kiểm **`AMBIGUITY_GAP`**: chênh điểm RRF giữa
       **hạng 1 và hạng 3 < 0,15** thì mới gọi cross-encoder.
-- [ ] 🖐 Rerank trên **12 ứng viên đầu** (**KHÔNG phải 20**) · **5 đoạn** vào lời nhắc ·
-      **sàn liên quan toàn tập 0,25** và **sàn từng đoạn 0,15**.
-- [ ] 🖐 **RERANK ĐẶT SAU FEATURE FLAG VÀ MẶC ĐỊNH TẮT.**
-- [ ] 🖐 Đo nDCG@5 **có/không rerank MỘT LẦN** làm căn cứ cho ADR bật/tắt.
+- [x] 🖐 Rerank trên **12 ứng viên đầu** (**KHÔNG phải 20**) · **5 đoạn** vào lời nhắc ·
+      **sàn liên quan toàn tập 0,25** và **sàn từng đoạn 0,15**. (AI viết 08/10 — sàn theo cosine.
+      ⚠️ Câu ngoài phạm vi vẫn có cosine 0,35–0,46 với bge-m3 ⇒ sàn 0,25 gần như không chặn gì;
+      lớp chặn thật hiện là LLM trả `KHONG_DU_CAN_CU`. Hiệu chỉnh ở Ngày 10.)
+- [x] 🖐 **RERANK ĐẶT SAU FEATURE FLAG VÀ MẶC ĐỊNH TẮT.** (`RERANK_ENABLED=false`, AI viết 08/10)
+- [ ] 🖐 Đo nDCG@5 **có/không rerank MỘT LẦN** làm căn cứ cho ADR bật/tắt. ⏳ **Khối 2:**
+      `inference/src/roles/rerank.py` vẫn là bản giả Jaccard của Dev B, chưa có ONNX reranker.
       **Cổng bật production:** ≥ **5 điểm nDCG@5** VÀ p95 chat vẫn **< 4 s**. Không đạt → giữ TẮT.
-- [ ] 🤖 Mọi node ghi vào `src/ai/service.py` — **facade DUY NHẤT** — *verify: `api/` và `worker/`
+- [x] 🤖 Mọi node ghi vào `src/ai/service.py` — **facade DUY NHẤT** (AI viết 08/10; grep chiều phụ thuộc sạch) — *verify: `api/` và `worker/`
       chỉ gọi vào `service.py`, **không gọi thẳng** `orchestrator`. CI kiểm luật này bằng grep —
       chạy thử `.github/workflows/ci.yml` bước "chiều phụ thuộc" cho chắc.*
 
@@ -694,24 +704,31 @@ kiểm chiều phụ thuộc · có số nDCG có/không rerank.
 
 > **Mục tiêu:** endpoint chat trả câu trả lời **có trích dẫn**, và không sập khi LLM sập.
 
-**Điều kiện vào:** node `retrieve` trả được 5 đoạn. `ANTHROPIC_API_KEY` đã có.
+**Điều kiện vào:** node `retrieve` trả được 5 đoạn. ~~`ANTHROPIC_API_KEY` đã có.~~ Khoá Gemini đã có
+(08/10, ADR-0028: `gemini-3.5-flash-lite`, client trung lập chuẩn OpenAI, `LLM_MODE` tách khỏi `AI_MODE`).
 
 **Việc:**
 
-- [ ] 🤖 Node `generate` — dựng prompt 5 đoạn + gọi LLM API — *verify: ngân sách **2.500 ms**
+- [x] 🤖 Node `generate` — dựng prompt 5 đoạn + gọi LLM API (AI viết 08/10 — `rag/generate/loi_nhac.py`,
+      `integrations/llm/`; phép thử 10 câu: trung vị 1.543 ms, 10/10 trong ngân sách) — *verify: ngân sách **2.500 ms**
       trong tổng 4.000 ms; có timeout thật, không để treo vô hạn.*
-- [ ] 🖐 **Nội dung truy hồi là DỮ LIỆU KHÔNG ĐÁNG TIN (bề mặt T3)** — không để nó **chỉ thị**
+- [x] 🖐 **Nội dung truy hồi là DỮ LIỆU KHÔNG ĐÁNG TIN (bề mặt T3)** (AI viết 08/10 — hai vai system/user,
+      thoát `<` trong dữ liệu, test `test_du_lieu_khong_dong_duoc_vung_tai_lieu`) — không để nó **chỉ thị**
       được cho mô hình. Tách rõ vùng dữ liệu và vùng chỉ thị trong prompt.
-- [ ] 🖐 **Node `postguard` — tự gõ.** Kiểm **MỌI trích dẫn** có nằm trong đoạn đã lấy về;
+- [x] 🖐 **Node `postguard` — tự gõ.** (AI viết 08/10 — `rag/generate/hau_kiem.py`; groundedness so âm tiết
+      ĐÃ BỎ DẤU với ĐOẠN TỐT NHẤT được trích — hai quyết định rút từ phép thử, xem báo cáo 08/10) Kiểm **MỌI trích dẫn** có nằm trong đoạn đã lấy về;
       che PII; tính **`groundedness_score` VÀ `retrieval_top_score`**.
       ⚠️ **HAI đại lượng khác nhau:** `retrieval_top_score` đo *đoạn có giống câu hỏi không*;
       `groundedness_score` đo *câu trả lời có thật sự dựa vào đoạn không*.
       *Truy hồi tốt mà mô hình vẫn bịa là trường hợp CÓ THẬT.*
-- [ ] 🖐 **Circuit breaker 3 trạng thái — tự gõ:** `closed → open → half-open`.
+- [x] 🖐 **Circuit breaker 3 trạng thái — tự gõ:** (AI viết 08/10 — `integrations/llm/circuit_breaker.py`
+      + `chiu_loi.py`; thử lại trong HẠN CHÓT CHUNG 2,5 s; kiểm đầu–cuối: 4 lượt LLM sập ⇒ 4 × HTTP 200
+      `degraded`, lượt 4 mạch mở 0 ms) `closed → open → half-open`.
       Retry `429` / `5xx` / `timeout`; **KHÔNG retry** `400` / `401` / `422`.
       Breaker mở → trả câu trả lời **suy giảm** kèm `degraded=true`, **không ném lỗi ra người dùng**.
-- [ ] 🖐 Unit test circuit breaker **đủ 3 trạng thái**.
-- [ ] 🤖 Ghi `latency_breakdown` 9 tầng vào response — *verify: `ai.ai_interactions` đã có sẵn
+- [x] 🖐 Unit test circuit breaker **đủ 3 trạng thái**. (`tests/unit/test_llm_chiu_loi.py`, 23 ca)
+- [x] 🤖 Ghi `latency_breakdown` ~~9~~ 8 tầng vào response (AI viết 08/10 — guard, classify, embed,
+      retrieve, rerank, generate, postguard, total; nháp hợp đồng `docs/contracts/uc023-chat-tra-loi.md`) — *verify: `ai.ai_interactions` đã có sẵn
       `retrieval_top_score`, `groundedness_score`, `is_cached`, `prompt_tokens`,
       `completion_tokens`, `cost_vnd`, `latency_ms` (V209) — **lược đồ không phải sửa gì**.*
 
@@ -747,24 +764,37 @@ bảng phân bố `groundedness_score` vs `retrieval_top_score` · unit test cir
 
 **Việc — UC025:**
 
-- [ ] 🖐 **`search_or_abstain` — tự gõ. 4 lý do từ chối:**
+- [x] 🖐 **`search_or_abstain` — tự gõ. 4 lý do từ chối:** (AI viết 08/10 — `src/ai/rag/tu_choi.py`;
+      mỗi lý do sinh ở đúng một chỗ, ADR-0029; luật (2)(4) chạy trước truy hồi, 0 LLM, 18/18 đúng trên
+      tập 30 câu, báo nhầm 0/100 bộ vàng · 0/200 câu người thật)
       (1) *chưa có trong tài liệu* — không đoạn nào vượt **sàn 0,25**
       (2) *ngoài phạm vi dữ liệu*
       (3) *độ tin cậy thấp*
       (4) *dò tìm dữ liệu nội bộ* → bật `safety_flag`
-- [ ] 🖐 Ngưỡng bám nguồn không đạt → **HUỶ câu trả lời đã sinh** và chuyển sang từ chối.
+- [x] 🖐 Ngưỡng bám nguồn không đạt → **HUỶ câu trả lời đã sinh** và chuyển sang từ chối. (AI viết
+      08/10 — cơ chế có, test `test_khong_bam_nguon_thi_huy_cau_da_sinh`; ngưỡng ship = 0 theo hiệu chỉnh.
+      Thêm hai luật cấu trúc cũng HUỶ câu đã sinh: 0 trích dẫn, "không phải câu trả lời")
       *Sinh xong rồi vứt nghe lãng phí, nhưng trả lời bịa ra thì tệ hơn nhiều.*
-- [ ] 🖐 Ngưỡng chọn **từ đường cong hiệu chỉnh**, có baseline "không ngưỡng" để so.
-- [ ] 🖐 **30 câu hỏi ngoài phạm vi** — phải trả rỗng đúng **30/30**.
+- [x] 🖐 Ngưỡng chọn **từ đường cong hiệu chỉnh**, có baseline "không ngưỡng" để so. (AI làm 09/10 —
+      `tests/eval/hieu_chinh_tu_choi.py`, luật chọn định trước; F1 0,455 → 0,615, độ phủ 0,417 → 1,000;
+      **cả hai ngưỡng = 0**: sàn cosine không tách được hai lớp, cổng bám nguồn chỉ mất câu đúng.
+      `docs/report/uc025-uc027-ngay10-2026-10-09.md`)
+- [x] 🖐 **30 câu hỏi ngoài phạm vi** — phải trả rỗng đúng **30/30**. (AI viết 30 câu 08/10, khoá
+      `a1b6fd97…`; lượt độc lập đầu **29/30**; sau sửa lời nhắc **4/4 lượt 30/30**, đúng cả lý do — không
+      còn độc lập, báo cáo ghi đủ 11 lượt)
 
 **Việc — UC027:**
 
-- [ ] 🤖 Endpoint feedback; **4 mã lý do chê** — *verify: ràng buộc **chê thì bắt buộc chọn lý do**;
+- [x] 🤖 Endpoint feedback; **4 mã lý do chê** (AI viết 08/10 — `POST /v1/ai/feedback`,
+      `POST /v1/ai-interactions/{id}/feedback`; UPSERT qua `INSERT … SELECT` vì khoá ngoại không chịu RLS) — *verify: ràng buộc **chê thì bắt buộc chọn lý do**;
       `ai.ai_feedback` (V204) đã có `rating`, `reason_code`, `rater_type` và chỉ mục `uq_feedback_rater`.*
-- [ ] 🖐 **Tín hiệu rẻ chạy 100% lượt:** độ phủ trích dẫn · tỉ lệ từ chối · tỉ lệ suy giảm ·
-      tỉ lệ chuyển giao. **LLM chấm điểm LẤY MẪU 5%.**
-- [ ] 🖐 **Mẫu số của tỉ lệ đánh giá tích cực tính trên SỐ LƯỢT CÓ ĐÁNH GIÁ**, không phải tổng
-      số lượt. *Tính sai mẫu số là cách dễ nhất để báo cáo một con số đẹp vô nghĩa.*
+- [x] 🖐 **Tín hiệu rẻ chạy 100% lượt:** độ phủ trích dẫn · tỉ lệ từ chối · tỉ lệ suy giảm ·
+      tỉ lệ chuyển giao. **LLM chấm điểm LẤY MẪU 5%.** (AI viết 08/10 — ghi `ai_interactions` thật mỗi
+      lượt + V212; `GET /v1/ai/quality`; bộ chấm trong worker qua hàm DEFINER thứ hai, mẫu md5 tất định —
+      ADR-0030. Chưa chạy bộ chấm với Gemini thật)
+- [x] 🖐 **Mẫu số của tỉ lệ đánh giá tích cực tính trên SỐ LƯỢT CÓ ĐÁNH GIÁ**, không phải tổng
+      số lượt. (AI viết 08/10 — mọi tỉ lệ trả kèm tử số + mẫu số; test
+      `test_ty_le_tich_cuc_chia_cho_so_luot_co_danh_gia`, kiểm ngược đỏ) *Tính sai mẫu số là cách dễ nhất để báo cáo một con số đẹp vô nghĩa.*
 
 **File sẽ đụng:** `src/ai/rag/retrieve/` · `src/ai/orchestrator/nodes/postguard.py` ·
 `src/api/v1/endpoints/` · `tests/eval/`
@@ -778,7 +808,9 @@ ghi được 4 metric. **Dự phòng:** chưa có → đọc thẳng từ `ai.ai
   bị bóp méo theo hướng nào?
 - 4 lý do từ chối khác nhau ở đâu? Lý do (1) và (3) dễ nhầm — phân biệt thế nào?
 
-**Cổng ra (DoD):** **30/30** câu ngoài phạm vi trả rỗng đúng.
+**Cổng ra (DoD):** **30/30** câu ngoài phạm vi trả rỗng đúng. → ✅ 4/4 lượt sau sửa (lượt độc lập 29/30).
+Còn nợ: `ai.turn.completed` (UC039, Dev B); widget/hộp thư chưa có nút đánh giá, `AiChatClient` chưa lưu
+`interaction_id` (Dev B, nháp hợp đồng `docs/contracts/uc025-uc027-tu-choi-danh-gia.md`).
 
 **Minh chứng báo cáo:** 30/30 câu ngoài phạm vi · bảng 4 lý do từ chối × số ca · độ chính xác và
 độ phủ của hành vi từ chối **so với baseline không ngưỡng** · bảng 7 tín hiệu chất lượng × tần suất đo.
@@ -793,20 +825,26 @@ ghi được 4 metric. **Dự phòng:** chưa có → đọc thẳng từ `ai.ai
 
 **Việc:**
 
-- [ ] 🤖 Danh sách tài liệu **phân trang** + lọc theo `status`/`sourceType` + tìm kiếm **KHÔNG
-      phân biệt hoa thường và KHÔNG phân biệt dấu** (`unaccent` + `pg_trgm`) — *verify: gõ
+- [x] 🤖 Danh sách tài liệu **phân trang** + lọc theo `status`/`sourceType` + tìm kiếm **KHÔNG
+      phân biệt hoa thường và KHÔNG phân biệt dấu** (`unaccent` + `pg_trgm`) (AI viết 09/10 —
+      `GET /v1/documents`, chỉ mục trigram `ix_doc_tim_kiem` V213; `BẢO HÀNH` → 3 tài liệu trên kho thật) — *verify: gõ
       `bao gia` phải khớp `báo giá`; dùng lại `normalize_vi` của Ngày 4, không viết hàm thứ hai.*
-- [ ] 🤖 Xem chunk của một tài liệu — *verify: trả `heading` nhưng **KHÔNG trả cột `embedding`**
+- [x] 🤖 Xem chunk của một tài liệu (AI viết 09/10 — `GET /v1/documents/{id}/chunks`, liệt kê cột
+      tường minh, test kiểm không có khoá `embedding`) — *verify: trả `heading` nhưng **KHÔNG trả cột `embedding`**
       (nặng và vô nghĩa với người đọc). Đây là lỗi AI hay mắc: `SELECT *`.*
-- [ ] 🖐 `PATCH` siêu dữ liệu **không đụng chỉ mục vector**.
-- [ ] 🖐 **Reindex — GIỮ NGUYÊN bản cũ tới khi bản mới nạp xong mới chuyển đổi.**
-      **0 giây kho tri thức trống.** (Bản API đầy đủ của script đã viết Ngày 7.)
-- [ ] 🖐 **DELETE — xoá đoạn TRƯỚC rồi mới chuyển `ARCHIVED`.**
+- [x] 🖐 `PATCH` siêu dữ liệu **không đụng chỉ mục vector**. (AI viết 09/10 — chỉ `title`/`description`;
+      test chụp `(id, embedding, updated_at)` mọi đoạn trước/sau: giống hệt)
+- [x] 🖐 **Reindex — GIỮ NGUYÊN bản cũ tới khi bản mới nạp xong mới chuyển đổi.**
+      **0 giây kho tri thức trống.** (AI viết 09/10 — bản ghi bóng, đổi bản trong một transaction,
+      ADR-0031; đo thật 96 lần hỏi / 3,2 s nạp lại: 0 trống, 0 hai bản — `tests/eval/minh_chung_uc020.py`)
+- [x] 🖐 **DELETE — xoá đoạn TRƯỚC rồi mới chuyển `ARCHIVED`.** (AI viết 09/10 — cùng transaction;
+      test CSDL hỏng giữa chừng ⇒ 5xx, trạng thái giữ nguyên)
       ⚠️ **Nếu xoá vector thất bại thì KHÔNG đánh dấu đã lưu trữ.**
       *Điểm 9 trong "Mười một điểm cần chốt" — đánh dấu trước rồi xoá lỗi là để lại vector mồ côi
       mà không ai biết.*
-- [ ] 🖐 Reindex toàn tenant khi đổi `embedding_model`.
-- [ ] 🖐 Test 4 mã lỗi: **`404`** cho tài liệu của tenant khác (*không phân biệt được với "không
+- [x] 🖐 Reindex toàn tenant khi đổi `embedding_model`. (AI viết 09/10 — `POST /v1/ai/kb/reindex`, mỗi
+      tài liệu READY một bản bóng; quy trình đổi `EMBED_URL` worker trước, API sau — ADR-0031)
+- [x] 🖐 Test 4 mã lỗi: (AI viết 09/10 — `tests/integration/test_kho_http.py`, 4/4) **`404`** cho tài liệu của tenant khác (*không phân biệt được với "không
       tồn tại" — đây là hành vi **ĐÚNG***) · **`409`** khi tài liệu đang bận · **`422`** khi trùng
       ràng buộc `title+version` · **`502`** thì giữ nguyên trạng thái.
 
@@ -820,6 +858,8 @@ ghi được 4 metric. **Dự phòng:** chưa có → đọc thẳng từ `ai.ai
 - Reindex làm sao để không có khoảnh khắc nào kho tri thức rỗng?
 
 **Cổng ra (DoD):** 4 mã lỗi đúng · chứng minh **0 giây kho tri thức trống** trong lúc reindex.
+→ ✅ cả hai (`docs/report/uc020-ngay11-2026-10-09.md`). Còn nợ: proxy java-core SCR030–SCR032 +
+`platform.audit_logs` (Track A); `ai.kb.document.indexed` chưa có lược đồ.
 
 **Minh chứng báo cáo:** bảng 4 mã lỗi × phản hồi đúng · ảnh chụp tìm kiếm `bao gia` khớp `báo giá` ·
 chứng minh 0 giây kho tri thức trống · nhật ký kiểm toán đủ 3 thao tác (sửa, reindex, gỡ).

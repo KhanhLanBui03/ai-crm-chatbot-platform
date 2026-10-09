@@ -19,6 +19,7 @@ import logging
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Protocol
+from uuid import UUID, uuid4
 
 from src.ai.guardrails import detect_injection, mask_pii, normalize_vietnamese_text
 from src.ai.inference.clients import ClassifyClient
@@ -49,6 +50,20 @@ class KnowledgeAnswer:
     model_name: str = TEMPLATE_MODEL_NAME
     llm_called: bool = False
     cost_vnd: float = 0.0
+    # LLM không phục vụ được (mạch mở, quá hạn) ⇒ câu trả lời trích nguyên văn, HTTP vẫn 200.
+    degraded: bool = False
+    # Cosine cao nhất câu hỏi ↔ đoạn — KHÁC groundedness_score (xem rag/generate/hau_kiem.py).
+    retrieval_top_score: float | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    # Thời gian từng chặng của nhánh trả lời (ms), gộp vào latency_breakdown của response.
+    latency_breakdown: dict[str, int] = field(default_factory=dict)
+    # UC025 (Ngày 10) — nhánh tri thức tự phát hiện dò tìm dữ liệu (CROSS_TENANT_PROBE,
+    # INTERNAL_DATA_PROBE). Có thì thay cờ PROMPT_INJECTION_INPUT của bước 3: cụ thể hơn.
+    safety_flag: str | None = None
+    # UC025 — nhánh tri thức đề nghị chuyển nhân viên: câu cần dữ liệu nghiệp vụ, hoặc từ chối lặp
+    # lại trong cùng hội thoại. java-core chuyển giao với lý do NO_GROUNDING khi kèm refused.
+    handoff: bool = False
 
 
 class KnowledgeAnswerer(Protocol):
@@ -61,6 +76,9 @@ class KnowledgeAnswerer(Protocol):
 class TurnRecord:
     """Một dòng ai.ai_interactions (V204 + V208). ``user_query`` đã che PII ở tầng ghi."""
 
+    # Khoá chính — sinh ở run_turn, trả cho java-core trong ChatResponse.interaction_id để gắn
+    # đánh giá UC027 vào đúng lượt (Ngày 10).
+    interaction_id: UUID
     tenant_id: str
     conversation_id: str
     branch: str
@@ -81,6 +99,14 @@ class TurnRecord:
     # Không phải cột V204 — dùng cho KPI ">= 55% lượt không gọi LLM" và log
     llm_called: bool
     route_reason: str
+    # Cột V209 — đã có sẵn trong ai.ai_interactions, lược đồ không phải sửa
+    retrieval_top_score: float | None = None
+    groundedness_score: float | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    # Cột V212 — tỉ lệ suy giảm và tỉ lệ chuyển giao là hai trong bốn tín hiệu rẻ của UC027
+    degraded: bool = False
+    handoff: bool = False
 
 
 class TurnRecorder(Protocol):
@@ -115,7 +141,7 @@ class LogTurnRecorder:
 
     async def record(self, rec: TurnRecord) -> None:
         chat_turns.labels(branch=rec.branch, llm_called=str(rec.llm_called).lower()).inc()
-        logger.info("ai_turn %s", json.dumps(asdict(rec), ensure_ascii=False))
+        logger.info("ai_turn %s", json.dumps(asdict(rec), ensure_ascii=False, default=str))
 
 
 async def run_turn(
@@ -131,12 +157,14 @@ async def run_turn(
     classify_retries: int,
 ) -> ChatResponse:
     started = time.perf_counter()
+    interaction_id = uuid4()
 
     # Bước 3 — guardrails. Phát hiện tiêm chỉ thị KHÔNG dừng luồng (luồng phụ 5.2).
     normalized = normalize_vietnamese_text(request.message)
     injection = detect_injection(normalized)
     if injection.is_injected:
         logger.warning("Phát hiện tiêm chỉ thị nhóm %s", injection.matched_category)
+    guard_xong = time.perf_counter()
 
     # Bước 4 — phân loại. Gửi câu GỐC, không gửi câu đã chuẩn hoá: router học trên văn bản
     # thô, và đo trên 200 câu test người thật hai cách cho Macro-F1 gần như bằng nhau
@@ -144,6 +172,7 @@ async def run_turn(
     classification: Classification = await classify_with_retry(
         classifier, request.message, timeout_s=classify_timeout_s, retries=classify_retries
     )
+    classify_xong = time.perf_counter()
 
     # Bước 5 — so ngưỡng
     decision = decide_route(
@@ -154,6 +183,7 @@ async def run_turn(
 
     result: KnowledgeAnswer | None = None
     status, error_message = "SUCCESS", None
+    nhanh_chuyen_giao = decision.branch in (Branch.HANDOFF, Branch.TOOL_CALL)
     try:
         # Bước 6 — mẫu câu (đường nhanh, hỏi lại, chuyển giao): 0 LLM
         reply = template_reply(decision.branch, request.message)
@@ -171,6 +201,7 @@ async def run_turn(
         latency_ms = int((time.perf_counter() - started) * 1000)
         await recorder.record(
             _build_record(
+                interaction_id=interaction_id,
                 tenant_id=tenant_id,
                 request=request,
                 branch=decision.branch,
@@ -181,23 +212,34 @@ async def run_turn(
                 status=status,
                 error_message=error_message,
                 safety_flag=injection.safety_flag,
+                nhanh_chuyen_giao=nhanh_chuyen_giao,
             )
         )
 
     return ChatResponse(
+        interaction_id=interaction_id,
         answer=result.answer,
         citations=result.citations,
         route=decision.route,
         refused=result.refused,
-        handoff=decision.branch in (Branch.HANDOFF, Branch.TOOL_CALL),
+        refusal_reason=result.refusal_reason if result.refused else None,
+        handoff=nhanh_chuyen_giao or result.handoff,
         groundedness_score=result.groundedness_score,
         latency_ms=latency_ms,
         cost_vnd=result.cost_vnd,
+        degraded=result.degraded,
+        latency_breakdown={
+            "guard_ms": int((guard_xong - started) * 1000),
+            "classify_ms": int((classify_xong - guard_xong) * 1000),
+            **result.latency_breakdown,
+            "total_ms": latency_ms,
+        },
     )
 
 
 def _build_record(
     *,
+    interaction_id: UUID,
     tenant_id: str,
     request: ChatRequest,
     branch: Branch,
@@ -208,6 +250,7 @@ def _build_record(
     status: str,
     error_message: str | None,
     safety_flag: str | None,
+    nhanh_chuyen_giao: bool,
 ) -> TurnRecord:
     # Che PII ở TẦNG GHI (UC040, NĐ 13/2023) — redact, không partial.
     masked_query, _ = mask_pii(request.message, mode="redact")
@@ -218,6 +261,7 @@ def _build_record(
         refusal_reason = "LOW_CONFIDENCE"
     is_answered = result is not None and not refused
     return TurnRecord(
+        interaction_id=interaction_id,
         tenant_id=tenant_id,
         conversation_id=str(request.conversation_id),
         branch=branch.value,
@@ -236,7 +280,13 @@ def _build_record(
         latency_ms=latency_ms,
         status=status,
         error_message=error_message,
-        safety_flag=safety_flag,
+        safety_flag=(result.safety_flag if result else None) or safety_flag,
         llm_called=result.llm_called if result else False,
         route_reason=route_reason,
+        retrieval_top_score=result.retrieval_top_score if result else None,
+        groundedness_score=result.groundedness_score if result else None,
+        prompt_tokens=result.prompt_tokens if result else None,
+        completion_tokens=result.completion_tokens if result else None,
+        degraded=result.degraded if result else False,
+        handoff=nhanh_chuyen_giao or (result.handoff if result else False),
     )

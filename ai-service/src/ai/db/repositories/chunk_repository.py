@@ -9,6 +9,7 @@ vào kho của tenant B (cùng lý do như ``document_repository.them_tai_lieu_p
 """
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import text
@@ -94,3 +95,44 @@ async def dem_doan_co_vector(session: AsyncSession, document_id: UUID) -> tuple[
     )
     tong, co_vector = ket_qua.one()
     return tong, co_vector
+
+
+# ── UC020 — xem đoạn của một tài liệu (SCR031/SCR032) ────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class DoanXem:
+    """Một đoạn cho người đọc — KHÔNG có ``embedding`` (1024 số thực, nặng và vô nghĩa với người
+    đọc) và không ``content_segmented``. Đặc tả UC020 bước 4: hiện mô hình nhúng của TỪNG đoạn."""
+
+    id: UUID
+    chunk_index: int
+    content: str
+    heading: str | None
+    page_number: int | None
+    token_count: int
+    embedding_model: str
+    embedding_version: str
+    co_vector: bool
+
+
+async def danh_sach_doan(
+    session: AsyncSession, document_id: UUID, gioi_han: int, bo_qua: int
+) -> tuple[list[DoanXem], int]:
+    """Đoạn theo thứ tự trong tài liệu. Liệt kê cột tường minh — KHÔNG ``SELECT *``."""
+    ket_qua = await session.execute(
+        text(
+            """
+            SELECT id, chunk_index, content, heading, page_number, token_count,
+                   embedding_model, embedding_version, embedding IS NOT NULL,
+                   count(*) OVER ()
+              FROM knowledge.knowledge_chunks
+             WHERE document_id = :id
+             ORDER BY chunk_index
+             LIMIT :gioi_han OFFSET :bo_qua
+            """
+        ),
+        {"id": document_id, "gioi_han": gioi_han, "bo_qua": bo_qua},
+    )
+    dong = ket_qua.all()
+    return [DoanXem(*d[:-1]) for d in dong], (dong[0][-1] if dong else 0)

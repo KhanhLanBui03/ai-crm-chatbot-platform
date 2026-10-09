@@ -20,6 +20,9 @@ kia trước, không tự sửa cho khớp code của mình."*
 |---|---|
 | [Thêm 3 cột `rule_score` · `outcome` · `outcome_at` vào `sales.lead_scores`](de-xuat-track-a-lead-scores-outcome.md) | Đã soạn **19/09/2026**, ⏳ **chưa gửi Track A**. Căn cứ ADR-0016. Ước lượng 2 giờ |
 | [Hợp đồng UC018 — tải lên tài liệu tri thức](uc018-tai-tai-lieu.md) | Soạn **27/09/2026**, code hai phía đã chạy theo (25/25 tệp mẫu + ca 409 đầu-cuối). ⏳ Chờ xác nhận rồi vá `ai-service-to-java-core.yaml`, `dashboard-api.yaml`, `crm.document.v1.json` — danh sách ở mục 9 của file. Căn cứ ADR-0020, ADR-0022 |
+| [Hợp đồng UC023 — `/v1/ai/chat` thêm `degraded` + `latency_breakdown`](uc023-chat-tra-loi.md) | Soạn **08/10/2026**, code đã chạy theo; trường thêm vào, `AiChatClient` không vỡ. ⏳ Chờ Dev B xác nhận rồi vá `ai-service-to-java-core.yaml`. Căn cứ ADR-0027, ADR-0028 |
+| [Hợp đồng UC025 + UC027 — từ chối có lý do, đánh giá, khoảng trống tri thức](uc025-uc027-tu-choi-danh-gia.md) | Soạn **08/10/2026**, code ai-service đã chạy theo: `ChatResponse` thêm `interaction_id` + `refusal_reason`; `FeedbackRequest` thêm 3 trường; `GET /v1/knowledge-gaps` trả trang; `GET /v1/ai/quality` mới. ⏳ Chờ Dev B trả lời 4 câu ở mục 6 (quan trọng nhất: `AiChatClient` lưu `interaction_id`). Căn cứ ADR-0029, ADR-0030 |
+| [Hợp đồng UC020 — quản lý kho tri thức](uc020-quan-ly-kho.md) | Soạn **09/10/2026**, code ai-service đã chạy theo: đường dẫn có sẵn trong hợp đồng + thêm `PATCH /v1/documents/{id}` và các trường giao diện cần. ⏳ Chờ Dev B: vá hợp đồng, proxy java-core SCR030–SCR032 + `audit_logs`. Căn cứ ADR-0031 |
 
 ## Đã chốt phía Track B
 

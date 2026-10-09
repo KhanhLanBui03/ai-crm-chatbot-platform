@@ -47,6 +47,33 @@ Báo cáo ghi đúng nguồn là AI, không gọi là "người gõ tay".
 Các trường `expected_route` / `expected_behavior` / `reference_answer` của kế hoạch cũ (150 câu)
 chưa dùng ở Ngày 6 — thêm khi đo định tuyến và độ bám nguồn.
 
+## `ngoai_pham_vi.jsonl` — 30 câu ngoài phạm vi, nghiệm thu UC025
+
+Viết 08/10 (AI), **khoá sha256 lúc 23:19 trước khi viết dòng luật từ chối nào**:
+`a1b6fd97cfd125a4a343b98702c626951c12fd85d0f2d2930e7728dfd8bdf394`. Không trùng 12 câu ngoài kho của
+bộ vàng — tập này để NGHIỆM THU, bộ vàng để CHỌN NGƯỠNG (ADR-0029).
+
+| `ly_do` | Số câu | Nhóm |
+|---|---|---|
+| `NOT_COVERED` | 12 | 6 gần lĩnh vực (máy rửa bát, bếp từ, xe đạp điện…) + 6 ngoài lĩnh vực (thời tiết, tỉ giá…) — không có luật nào, sàn cosine và LLM quyết |
+| `OUT_OF_SCOPE_DATA` | 9 | một đơn / phiếu / tài khoản / lịch hẹn / tồn kho CỤ THỂ |
+| `SAFETY_PROBE` | 9 | dữ liệu khách khác, số liệu nội bộ, mật khẩu quản trị, tài liệu doanh nghiệp khác |
+
+Cổng ra Ngày 10: **30/30 trả rỗng đúng** (`refused` và `citations` rỗng). Kết quả 09/10: lượt độc lập
+đầu **29/30**; sau sửa lời nhắc **4/4 lượt 30/30** (không còn độc lập) — `docs/report/uc025-uc027-ngay10-2026-10-09.md`.
+
+| Lệnh | Việc |
+|---|---|
+| `python -m tests.eval.hieu_chinh_tu_choi chay --han-chot-s 60` | baseline không ngưỡng, LLM thật, 142 câu → JSONL điểm thô |
+| `python -m tests.eval.hieu_chinh_tu_choi quet <jsonl>` | quét lưới (sàn × bám nguồn) offline → bảng MD, CSV, PNG |
+| `python -m tests.eval.hieu_chinh_tu_choi kiem-30 --san … --bam-nguon …` | nghiệm thu thật 30 câu |
+
+## `minh_chung_uc020.py` — nạp lại bằng bản bóng trên hạ tầng thật (Ngày 11)
+
+`python -m tests.eval.minh_chung_uc020` (API đang chạy, ai-embed + RustFS bật): tải lên qua UC018, nạp, nạp
+lại, hỏi kho liên tục trong lúc nạp lại — in số lần kho trống (phải 0) và số lần thấy hai bản (phải 0).
+Tenant riêng `dddddddd-…-d020`, không đụng kho đo. ADR-0031.
+
 ## `adversarial.jsonl` — 60–80 kịch bản tấn công
 
 Dùng cho **E9**. Chạy trên môi trường **cô lập, dữ liệu giả** (mục 8.1).

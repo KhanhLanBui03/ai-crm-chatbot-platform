@@ -115,7 +115,8 @@ _SQL_TIM_LAI = text(
           FULL OUTER JOIN hang_tu_khoa t ON t.id = v.id
     )
     SELECT h.id, c.document_id, d.title, d.file_name, d.version, c.chunk_index, c.heading,
-           c.page_number, c.content, h.diem_rrf, h.hang_vector, h.hang_tu_khoa
+           c.page_number, c.content, h.diem_rrf, h.hang_vector, h.hang_tu_khoa,
+           1 - (c.embedding <=> CAST(:vector AS vector)) AS do_tuong_dong
       FROM hop_nhat h
       JOIN knowledge.knowledge_chunks c ON c.id = h.id
       JOIN knowledge.knowledge_documents d ON d.id = c.document_id
@@ -142,6 +143,10 @@ class DoanTimDuoc:
     diem_rrf: float
     hang_vector: int | None
     hang_tu_khoa: int | None
+    # Cosine với vector câu hỏi — thang TUYỆT ĐỐI để áp sàn liên quan (điểm RRF chỉ phản ánh thứ
+    # hạng, ~0,016–0,033 với mọi câu). Tính ở SELECT cuối cho đúng k dòng, nên đoạn chỉ làn từ
+    # khoá tìm thấy cũng có. ``None`` khi chạy không có vector (chế độ sparse).
+    do_tuong_dong: float | None = None
 
 
 def tham_so_cau_lenh(
@@ -217,6 +222,7 @@ async def tim_kiem_lai(
             diem_rrf=float(r.diem_rrf),
             hang_vector=r.hang_vector,
             hang_tu_khoa=r.hang_tu_khoa,
+            do_tuong_dong=None if r.do_tuong_dong is None else float(r.do_tuong_dong),
         )
         for r in ket_qua
     ]

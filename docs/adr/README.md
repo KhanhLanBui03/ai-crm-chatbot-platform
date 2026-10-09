@@ -41,5 +41,10 @@ Mỗi quyết định kiến trúc một file. Nguồn trực tiếp cho **chư�
 | 0024 | Nạp tài liệu commit theo chặng; chống trùng ở `ai.processed_events`; bộ quét job kẹt qua hàm `SECURITY DEFINER`; DLQ chỉ cho sự kiện chưa thành trạng thái | Thiết kế UC019 Ngày 5 |
 | 0025 | _(để dành — chưa viết)_ Làn từ khoá theo âm tiết | Thiết kế UC019 Ngày 4 |
 | 0026 | Bỏ fine-tune embedding — ship bge-m3 pretrained INT8 | Quyết định phạm vi 27/09 |
+| 0027 | Lượt chat chạy bằng pipeline tuần tự `run_turn`, không dùng LangGraph 8 node | Thiết kế UC023 Ngày 8 |
+| 0028 | LLM sinh câu trả lời: Gemini 3.5 Flash-Lite (`minimal`) qua client trung lập chuẩn OpenAI | Phép thử 10 câu 08/10 |
+| 0029 | Từ chối UC025: bốn lý do sinh ở bốn chỗ cố định, luật "0 trích dẫn ⇒ NOT_COVERED", ngưỡng chọn từ đường cong trên bộ vàng | Thiết kế UC025 Ngày 10 |
+| 0030 | Ghi `ai_interactions` đồng bộ mỗi lượt; bộ chấm tự động mẫu 5% qua hàm `SECURITY DEFINER` thứ hai | Thiết kế UC027 Ngày 10 |
+| 0031 | Nạp lại tài liệu bằng bản ghi bóng — đổi bản trong một transaction, 0 giây kho trống | Thiết kế UC020 Ngày 11 |
 
 `KH` = tài liệu `Ke-hoach-do-an-Chatbot-AI-CRM-v2-nhom-2-nguoi.docx`.
