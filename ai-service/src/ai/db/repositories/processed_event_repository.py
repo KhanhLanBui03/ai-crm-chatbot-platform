@@ -11,6 +11,24 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+async def da_xu_ly(session: AsyncSession, consumer_group: str, event_id: int) -> bool:
+    """Sự kiện đã được ghi nhận xong chưa — phép kiểm SỚM, chỉ để khỏi tốn một lượt LLM.
+
+    KHÔNG thay được ``ghi_nhan``: hai bản sao cùng tới thì cả hai thấy "chưa". UC026 dùng nó vì
+    tác động chính (PATCH sang java-core) không nằm chung transaction với bảng này được — xem
+    ``service.summarize``. Bản sao lọt qua phép kiểm này chỉ làm tóm tắt + PATCH thêm một lần
+    (luỹ đẳng), rồi ``ghi_nhan`` vẫn chỉ cho đúng một dòng.
+    """
+    ket_qua = await session.execute(
+        text(
+            "SELECT 1 FROM ai.processed_events"
+            " WHERE consumer_group = :nhom AND event_id = :event_id"
+        ),
+        {"nhom": consumer_group, "event_id": event_id},
+    )
+    return ket_qua.first() is not None
+
+
 async def ghi_nhan(
     session: AsyncSession, consumer_group: str, event_id: int, aggregate_id: UUID | None
 ) -> bool:

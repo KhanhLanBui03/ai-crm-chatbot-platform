@@ -328,6 +328,8 @@ class DocumentDetail(BaseModel):
     replaces_document_id: UUID | None
     # Bản bóng ĐANG nạp lại tài liệu này — job_id để xem tiến độ.
     reindex_document_id: UUID | None
+    # Khách hàng mà tài liệu mang dữ liệu cá nhân của họ (V214) — UC041 xoá theo khoá này.
+    contact_id: UUID | None = None
 
 
 class DocumentPage(BaseModel):
@@ -359,7 +361,12 @@ class ChunkPage(BaseModel):
 
 
 class DocumentMetadataUpdate(BaseModel):
-    """``PATCH`` siêu dữ liệu — chỉ ``title`` và ``description``, KHÔNG đụng chỉ mục vector.
+    """``PATCH`` siêu dữ liệu — ``title``, ``description``, ``contact_id``; KHÔNG đụng chỉ mục
+    vector.
+
+    ``contact_id`` (Ngày 12, V214): gắn tài liệu với khách hàng mà nó chứa dữ liệu cá nhân (hợp
+    đồng, báo giá riêng) để UC041 xoá được; ``null`` thì gỡ liên kết. Chỉ là định danh — tenant vẫn
+    lấy từ ``X-Tenant-Id``, và java-core là bên biết ``contact_id`` nào thuộc tenant nào.
 
     ``language`` không sửa được: nó quyết định cách tách từ lúc nạp, đổi nó là nạp lại. Trường vắng
     mặt thì giữ nguyên; ``description: null`` thì xoá mô tả (phân biệt bằng ``model_fields_set``).
@@ -370,6 +377,7 @@ class DocumentMetadataUpdate(BaseModel):
 
     title: str | None = Field(default=None, min_length=3, max_length=255)
     description: str | None = Field(default=None, max_length=500)
+    contact_id: UUID | None = None
 
     @field_validator("title", "description", mode="before")
     @classmethod
@@ -409,3 +417,74 @@ class DocumentDeleted(BaseModel):
     success: Literal[True] = True
     message: str
     chunks_deleted: int
+
+
+
+# ── Tóm tắt hội thoại — UC026 (Ngày 12) ──────────────────────────────────────
+# ``POST /v1/ai/summarize`` — đã có trong docs/openapi/ai-service-to-java-core.yaml. Nháp sửa
+# (trigger theo enum V114, thêm generatedAt) ở docs/contracts/uc026-uc041-tom-tat-va-xoa-du-lieu.md.
+
+SummaryTrigger = Literal["HANDOFF", "CLOSING", "TURN_THRESHOLD", "MANUAL"]
+
+
+class SummarizeMessage(BaseModel):
+    # sender theo engagement.messages.sender_type (V107).
+    sender: Literal["CUSTOMER", "BOT", "AGENT", "SYSTEM"]
+    text: str = Field(max_length=20_000)
+    created_at: datetime | None = None
+
+
+class SummarizeRequest(BaseModel):
+    """java-core gửi kèm lịch sử — đường đồng bộ cho nút "tóm tắt lại" (trigger ``MANUAL``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    conversation_id: UUID
+    trigger: SummaryTrigger = "MANUAL"
+    messages: list[SummarizeMessage] = Field(min_length=1, max_length=2_000)
+
+
+class SummarizeResponse(BaseModel):
+    """Bốn phần + ảnh chụp phiên bản model. java-core ghi nguyên vào
+    ``engagement.conversations``."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    trigger: SummaryTrigger
+    main_need: str = Field(alias="mainNeed")
+    provided_info: str = Field(alias="providedInfo")
+    unresolved_issues: str = Field(alias="unresolvedIssues")
+    next_steps: str = Field(alias="nextSteps")
+    model_version: str = Field(alias="modelVersion")
+    summary_text: str = Field(alias="summaryText")
+    generated_at: datetime = Field(alias="generatedAt")
+    interaction_id: UUID | None = Field(default=None, alias="interactionId")
+
+
+# ── Xoá dữ liệu cá nhân — UC041 (Ngày 12) ────────────────────────────────────
+# Hình dạng mục bám ``MucXoa`` của dashboard-api.yaml (SCR055/SCR057) để java-core chép thẳng vào
+# tiến độ ``platform.data_erasure_requests.progress`` mà không phải dịch.
+
+
+class ErasureItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    target_schema: str = Field(alias="targetSchema")
+    target_table: str = Field(alias="targetTable")
+    action: Literal["DELETE", "ANONYMIZE", "KEEP_AGGREGATE"]
+    status: Literal["DONE", "FAILED"]
+    affected_rows: int = Field(alias="affectedRows")
+    error_code: str | None = Field(default=None, alias="errorCode")
+
+
+class ErasureResult(BaseModel):
+    """``COMPLETED`` chỉ khi MỌI mục ``DONE``. ``PARTIALLY_FAILED`` thì java-core gọi lại — endpoint
+    luỹ đẳng: phần đã xoá trả 0 dòng, phần hỏng được làm lại (đặc tả UC041 luồng phụ 8.1)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    contact_id: UUID = Field(alias="contactId")
+    status: Literal["COMPLETED", "PARTIALLY_FAILED"]
+    items: list[ErasureItem]
+    # Giới hạn PHẢI hiện cho người duyệt (đặc tả UC041 bước 6) — java-core hiển thị nguyên văn.
+    note: str

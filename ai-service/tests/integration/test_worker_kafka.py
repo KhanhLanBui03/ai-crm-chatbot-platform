@@ -4,13 +4,15 @@ Kafka chạy ĐÚNG image của ``docker-compose.yml`` (``confluentinc/cp-kafka:
 ZooKeeper — ADR-0009) bằng testcontainers; Postgres và RustFS như các test tích hợp khác. Mỗi test
 dùng topic và consumer group riêng để offset của test này không lẫn sang test kia.
 
-Ba kịch bản:
+Bốn kịch bản:
 1. Bản tin hỏng lược đồ → ``ai.dlq`` nguyên byte + header ``dlq.*``, offset được xác nhận, worker
    đi tiếp sang bản tin sau.
 2. SIGTERM giữa lúc đang nạp → worker nạp NỐT tài liệu, xác nhận offset, rồi mới thoát (luật 4).
 3. Worker CHẾT CỨNG giữa lúc đang nạp (không kịp dọn gì) → offset chưa xác nhận, tài liệu kẹt
    PROCESSING → worker mới nhận lại bản tin (TRUNG, vì bước nhận việc đã ghi processed_events) →
    bộ quét trả tài liệu về hàng đợi → nạp lại tới READY, không mất, không đoạn trùng.
+4. (Ngày 12, UC026) Kênh thứ hai: ``crm.conversation.closed`` → tóm tắt → PATCH sang java-core
+   (giả) đúng một lần → offset của ``summarizer-cg`` được xác nhận, độc lập với ``ingestion-cg``.
 """
 
 import asyncio
@@ -25,6 +27,7 @@ from testcontainers.community.kafka import KafkaContainer
 
 from src.ai.events.dlq import doc_header
 from src.ai.inference.clients import MockEmbedClient
+from src.ai.integrations.java_core import MockJavaCoreClient, TinNhanHoiThoai
 from src.worker.main import Worker
 from tests.integration.nap_chung import cac_doan, tai_lieu_pending, trang_thai
 
@@ -42,11 +45,14 @@ async def kenh(kafka_bootstrap, doi_cau_hinh):
     """Topic nguồn + DLQ + group riêng cho một test; cấu hình worker trỏ vào đó."""
     hau_to = uuid4().hex[:8]
     topic, dlq, nhom = f"kb-uploaded-{hau_to}", f"ai-dlq-{hau_to}", f"ingestion-cg-{hau_to}"
+    topic_dong, nhom_tom_tat = f"conv-closed-{hau_to}", f"summarizer-cg-{hau_to}"
     admin = AIOKafkaAdminClient(bootstrap_servers=kafka_bootstrap)
     await admin.start()
     try:
         # MỘT partition: thứ tự bản tin trong test là thứ tự xử lý, offset đọc được bằng mắt.
-        await admin.create_topics([NewTopic(topic, 1, 1), NewTopic(dlq, 1, 1)])
+        await admin.create_topics(
+            [NewTopic(topic, 1, 1), NewTopic(dlq, 1, 1), NewTopic(topic_dong, 1, 1)]
+        )
     finally:
         await admin.close()
     # Bộ quét TẮT trên thực tế (chu kỳ 1 giờ): CSDL test dùng chung cả lượt chạy, còn tài liệu kẹt
@@ -57,6 +63,8 @@ async def kenh(kafka_bootstrap, doi_cau_hinh):
         kafka_topic_tai_lieu=topic,
         kafka_topic_dlq=dlq,
         kafka_consumer_group=nhom,
+        kafka_topic_hoi_thoai_dong=topic_dong,
+        kafka_consumer_group_tom_tat=nhom_tom_tat,
         kb_chu_ky_quet_s=3600.0,
     )
     return cau_hinh
@@ -83,14 +91,14 @@ async def _phat(cau_hinh, *ban_tins: tuple[bytes, bytes]) -> None:
         await producer.stop()
 
 
-async def _offset_da_xac_nhan(cau_hinh) -> int | None:
+async def _offset_da_xac_nhan(cau_hinh, *, nhom=None, topic=None) -> int | None:
     admin = AIOKafkaAdminClient(bootstrap_servers=cau_hinh.kafka_bootstrap)
     await admin.start()
     try:
-        offsets = await admin.list_consumer_group_offsets(cau_hinh.kafka_consumer_group)
+        offsets = await admin.list_consumer_group_offsets(nhom or cau_hinh.kafka_consumer_group)
     finally:
         await admin.close()
-    meta = offsets.get(TopicPartition(cau_hinh.kafka_topic_tai_lieu, 0))
+    meta = offsets.get(TopicPartition(topic or cau_hinh.kafka_topic_tai_lieu, 0))
     return meta.offset if meta else None
 
 
@@ -117,8 +125,10 @@ async def _doc_dlq(cau_hinh) -> list:
         await consumer.stop()
 
 
-def _worker(cau_hinh, factory, embed=None) -> Worker:
-    return Worker(cau_hinh, embed=embed or MockEmbedClient(1024), factory=factory)
+def _worker(cau_hinh, factory, embed=None, java_core=None) -> Worker:
+    return Worker(
+        cau_hinh, embed=embed or MockEmbedClient(1024), factory=factory, java_core=java_core
+    )
 
 
 # ── 1. DLQ ───────────────────────────────────────────────────────────────────
@@ -234,6 +244,53 @@ async def test_worker_chet_giua_chung_khoi_dong_lai_khong_mat_job(
     assert (status, loi, lan, buoc) == ("READY", None, 2, None)
     doan = await cac_doan(factory, tenant_a, doc)
     assert [d.chunk_index for d in doan] == list(range(len(doan)))  # không sót, không trùng
+
+
+# ── 4. Kênh tóm tắt (UC026) ──────────────────────────────────────────────────
+
+
+async def test_hoi_thoai_dong_qua_kafka_thi_tom_tat_patch_mot_lan_va_xac_nhan(ha_tang, kenh):
+    factory, _ = ha_tang
+    cau_hinh = kenh
+    tenant, conv = str(uuid4()), uuid4()
+    gia = MockJavaCoreClient()
+    gia.nap_hoi_thoai(tenant, conv, [
+        TinNhanHoiThoai("CUSTOMER", "Nồi cơm điện bị lỗi E3"),
+        TinNhanHoiThoai("BOT", "Dạ anh mua ở chi nhánh nào ạ?"),
+        TinNhanHoiThoai("CUSTOMER", "Chi nhánh Quận 7, tuần trước"),
+    ])
+    vo = json.dumps({
+        "event_id": int(time.time_ns() % 10**15), "event_version": 1,
+        "event_type": "ConversationClosed", "tenant_id": tenant, "aggregate_id": str(conv),
+        "occurred_at": "2026-10-09T08:00:00Z",
+        "payload": {"conversation_id": str(conv), "closed_by": str(uuid4()),
+                    "closed_at": "2026-10-09T08:00:00Z"},
+    }).encode()
+    producer = AIOKafkaProducer(bootstrap_servers=cau_hinh.kafka_bootstrap)
+    await producer.start()
+    try:
+        # Gửi HAI LẦN cùng bản tin — outbox phát lại là chuyện chắc chắn xảy ra.
+        for _ in range(2):
+            await producer.send_and_wait(cau_hinh.kafka_topic_hoi_thoai_dong, vo,
+                                         key=tenant.encode())
+    finally:
+        await producer.stop()
+
+    worker = _worker(cau_hinh, factory, java_core=gia)
+    tac_vu = asyncio.create_task(worker.chay())
+    try:
+        await _cho(lambda: _bang(_offset_da_xac_nhan(
+            cau_hinh, nhom=cau_hinh.kafka_consumer_group_tom_tat,
+            topic=cau_hinh.kafka_topic_hoi_thoai_dong), 2))
+    finally:
+        worker.dung.set()
+        await tac_vu
+
+    [(t, c, ban_ghi)] = gia.tom_tat_da_ghi
+    assert (t, c, ban_ghi.trigger) == (tenant, conv, "CLOSING")
+    assert ban_ghi.model_version.endswith("@tt2")
+    # Kênh nạp tài liệu không bị kênh tóm tắt xác nhận hộ.
+    assert await _offset_da_xac_nhan(cau_hinh) is None
 
 
 async def _la_ready(factory, tenant, doc) -> bool:

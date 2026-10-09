@@ -253,3 +253,49 @@ class InvalidMetadataError(AiServiceError):
     ``422 INVALID_METADATA``; cùng mã với lỗi validate của UC018."""
 
     code = "INVALID_METADATA"
+
+
+# ── java-core — bề mặt /internal/* (ADR-0002) ────────────────────────────────
+
+
+class JavaCoreUnavailableError(AiServiceError):
+    """java-core không phục vụ được lời gọi nội bộ: mất kết nối, quá hạn, 5xx, hoặc trả 4xx cho
+    một hợp đồng ai-service tin là đúng. Worker thử lại; UC041 đánh dấu MỤC đó thất bại (đặc tả
+    UC041 luồng phụ 9.1 — phía ngược lại), không kết luận cả yêu cầu."""
+
+    code = "JAVA_CORE_UNAVAILABLE"
+
+
+# ── Tóm tắt hội thoại — UC026 (Ngày 12) ──────────────────────────────────────
+
+
+class SummarySchemaInvalidError(AiServiceError):
+    """Mô hình trả về thiếu một trong bốn phần, kể cả sau một vòng sửa — đặc tả UC026 luồng phụ
+    3.1. Giữ nguyên bản tóm tắt cũ, không ghi đè bằng kết quả hỏng."""
+
+    code = "SUMMARY_SCHEMA_INVALID"
+
+
+class SummaryLlmError(AiServiceError):
+    """LLM không khả dụng cho lượt tóm tắt (mạch mở, quá hạn, 429/5xx) — đặc tả UC026 ``LLM_ERROR``:
+    lỗi TẠM THỜI, worker không xác nhận offset ngay mà thử lại."""
+
+    code = "LLM_ERROR"
+
+
+# ── Xoá dữ liệu cá nhân — UC041 (Ngày 12) ────────────────────────────────────
+
+
+class InternalOnlyError(AiServiceError):
+    """Endpoint chỉ dành cho java-core: thiếu hoặc sai ``X-Internal-Token``, hoặc ai-service chưa
+    cấu hình token (khi đó endpoint đóng hẳn). Xoá dữ liệu cá nhân không đảo ngược được — chỉ
+    được chạy SAU bước xác minh danh tính của quy trình bên CRM (đặc tả UC041)."""
+
+    code = "INTERNAL_ONLY"
+
+
+class ConversationTooShortError(AiServiceError):
+    """Đường đồng bộ ``POST /v1/ai/summarize``: hội thoại chưa đủ tin nhắn của khách để tóm tắt —
+    đặc tả UC026 luồng phụ 1.1. Đường Kafka thì bỏ qua lặng lẽ, không ném."""
+
+    code = "CONVERSATION_TOO_SHORT"

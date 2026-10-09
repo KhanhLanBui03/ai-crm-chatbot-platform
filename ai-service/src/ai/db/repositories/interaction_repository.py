@@ -55,7 +55,7 @@ async def ghi_luot(
     conversation_id: str,
     branch: str,
     intent: str | None,
-    intent_confidence: float,
+    intent_confidence: float | None,
     user_query: str,
     response_text: str | None,
     retrieved_chunk_ids: Sequence[str],
@@ -237,6 +237,10 @@ class TinHieuLuot:
 async def tin_hieu_luot(session: AsyncSession, tu: datetime, den: datetime) -> TinHieuLuot:
     """Bốn tín hiệu rẻ của UC027 — chạy trên 100% lượt vì chỉ là đếm cột đã ghi sẵn.
 
+    BỎ nhánh ``SUMMARY`` (UC026, Ngày 12): đó là lượt NỀN của worker, không phải lượt chat. Gộp vào
+    thì mỗi hội thoại đóng thêm một lượt "có gọi LLM" và KPI ≥ 55% lượt không gọi LLM (§1.6) tụt
+    theo số hội thoại đã tóm tắt — đo sai đúng thứ nó được dựng ra để đo.
+
     Độ phủ trích dẫn tính trên lượt RAG trả lời bằng LLM, KHÔNG gồm lượt suy giảm: lượt suy giảm
     luôn có đúng một trích dẫn (chép nguyên văn đoạn), gộp vào thì chỉ số đẹp lên đúng lúc LLM sập.
     """
@@ -257,6 +261,7 @@ async def tin_hieu_luot(session: AsyncSession, tu: datetime, den: datetime) -> T
                    avg(groundedness_score) FILTER (WHERE status = 'SUCCESS')
               FROM ai.ai_interactions
              WHERE created_at >= :tu AND created_at < :den
+               AND branch <> 'SUMMARY'
             """
         ),
         {"tu": tu, "den": den},
@@ -268,7 +273,7 @@ async def tin_hieu_luot(session: AsyncSession, tu: datetime, den: datetime) -> T
             SELECT refusal_reason, count(*)
               FROM ai.ai_interactions
              WHERE created_at >= :tu AND created_at < :den
-               AND status = 'SUCCESS' AND NOT is_answered
+               AND status = 'SUCCESS' AND NOT is_answered AND branch <> 'SUMMARY'
              GROUP BY refusal_reason
             """
         ),
@@ -388,3 +393,51 @@ async def doc_luot_de_cham(session: AsyncSession, interaction_id: UUID) -> NoiDu
     if not cac_doan:
         return None
     return NoiDungLuot(luot[0] or "", luot[1], cac_doan)
+
+
+# ── UC041 — xoá dữ liệu cá nhân (ADR-0033) ───────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class KetQuaXoaLuot:
+    so_luot: int
+    so_danh_gia: int
+    so_goi_cong_cu: int
+
+
+async def xoa_theo_hoi_thoai(
+    session: AsyncSession, conversation_ids: Sequence[UUID]
+) -> KetQuaXoaLuot:
+    """Xoá CỨNG mọi lượt của các hội thoại đã cho — kể cả lượt ``SUMMARY`` (bản tóm tắt cũ cũng là
+    dữ liệu cá nhân). ``ai_feedback`` và ``ai_tool_calls`` đi theo ``ON DELETE CASCADE`` (V204,
+    V205); đếm TRƯỚC khi xoá để biên bản có số theo từng bảng.
+
+    Khoá là ``conversation_id`` vì ``ai_interactions`` không có ``contact_id`` (liên làn, V204):
+    danh sách hội thoại của khách do java-core gửi kèm — chỉ java-core biết khách nào có hội thoại
+    nào. RLS chặn tenant khác: id hội thoại của tenant khác không khớp dòng nào.
+
+    ``ai_tool_calls``: ``ai_app`` bị thu hồi DELETE (V206 — "không có đường nào xoá bằng chứng"),
+    nhưng hành động xoá lan của khoá ngoại chạy bằng quyền chủ bảng, nên lan được. Nhóm MCP đã hoãn
+    nên bảng đang rỗng; khi bật lại thì cân nhắc ẩn danh hoá ``arguments`` thay vì xoá (ADR-0033).
+    """
+    if not conversation_ids:
+        return KetQuaXoaLuot(0, 0, 0)
+    tham_so = {"ids": [UUID(str(c)) for c in conversation_ids]}
+    dem = await session.execute(
+        text(
+            """
+            SELECT (SELECT count(*) FROM ai.ai_feedback f
+                      JOIN ai.ai_interactions i ON i.id = f.ai_interaction_id
+                     WHERE i.conversation_id = ANY(:ids)),
+                   (SELECT count(*) FROM ai.ai_tool_calls t
+                      JOIN ai.ai_interactions i ON i.id = t.ai_interaction_id
+                     WHERE i.conversation_id = ANY(:ids))
+            """
+        ),
+        tham_so,
+    )
+    so_danh_gia, so_goi = dem.one()
+    xoa = await session.execute(
+        text("DELETE FROM ai.ai_interactions WHERE conversation_id = ANY(:ids)"), tham_so
+    )
+    return KetQuaXoaLuot(xoa.rowcount, so_danh_gia, so_goi)
