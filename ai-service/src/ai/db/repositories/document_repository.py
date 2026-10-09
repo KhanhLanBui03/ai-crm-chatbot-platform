@@ -211,8 +211,20 @@ async def danh_dau_buoc(
         raise IngestOwnershipLostError(f"Lượt {lan} không còn giữ tài liệu {document_id}")
 
 
-async def hoan_tat(session: AsyncSession, document_id: UUID, lan: int, so_doan: int) -> None:
-    """``PROCESSING → READY`` + ``chunk_count`` + ``indexed_at``. Có thẻ sở hữu."""
+async def hoan_tat(
+    session: AsyncSession, document_id: UUID, lan: int, so_doan: int
+) -> UUID | None:
+    """``PROCESSING → READY`` + ``chunk_count`` + ``indexed_at``. Có thẻ sở hữu.
+
+    Nếu dòng này là BẢN BÓNG của một lượt nạp lại (``replaces_document_id``, V213, ADR-0031): cũng
+    trong ``session`` này — tức CÙNG transaction — xoá đoạn của bản cũ rồi chuyển nó ``ARCHIVED``.
+    Người đọc khác (truy hồi) thấy hoặc trạng thái trước (bản cũ READY + đoạn cũ), hoặc trạng thái
+    sau (bản mới READY + đoạn mới): không có khoảnh khắc nào tài liệu vắng khỏi kho, và không có
+    khoảnh khắc nào hai bản cùng được truy hồi. Trả ``id`` bản cũ vừa thay, hoặc ``None``.
+
+    Bản cũ chỉ bị thay khi nó còn ``READY`` — gỡ bản cũ trong lúc đang nạp lại đã bị chặn bằng 409
+    (``xoa_khoi_chi_muc``), điều kiện này là lưới đỡ thứ hai.
+    """
     ket_qua = await session.execute(
         text(
             f"""
@@ -220,12 +232,39 @@ async def hoan_tat(session: AsyncSession, document_id: UUID, lan: int, so_doan: 
                SET status = 'READY', ingest_step = NULL, chunk_count = :so_doan,
                    indexed_at = now(), error_message = NULL
              WHERE {_DIEU_KIEN_SO_HUU}
+            RETURNING replaces_document_id
             """
         ),
         {"id": document_id, "lan": lan, "so_doan": so_doan},
     )
-    if ket_qua.rowcount == 0:
+    dong = ket_qua.one_or_none()
+    if dong is None:
         raise IngestOwnershipLostError(f"Lượt {lan} không còn giữ tài liệu {document_id}")
+    ban_cu = dong[0]
+    if ban_cu is None:
+        return None
+    # Xoá đoạn TRƯỚC, rồi mới ARCHIVED — cùng thứ tự với gỡ thủ công (xoa_khoi_chi_muc).
+    await session.execute(
+        text(
+            """
+            DELETE FROM knowledge.knowledge_chunks c
+             USING knowledge.knowledge_documents d
+             WHERE c.document_id = d.id AND d.id = :cu AND d.status = 'READY'
+            """
+        ),
+        {"cu": ban_cu},
+    )
+    da_thay = await session.execute(
+        text(
+            """
+            UPDATE knowledge.knowledge_documents
+               SET status = 'ARCHIVED', chunk_count = 0
+             WHERE id = :cu AND status = 'READY'
+            """
+        ),
+        {"cu": ban_cu},
+    )
+    return ban_cu if da_thay.rowcount else None
 
 
 async def tra_ve_hang_doi(session: AsyncSession, document_id: UUID, lan: int) -> bool:
@@ -373,3 +412,216 @@ async def lay_tien_do(session: AsyncSession, document_id: UUID) -> TienDoTaiLieu
     )
     dong = ket_qua.one_or_none()
     return TienDoTaiLieu(*dong) if dong else None
+
+
+# ── UC020 — quản lý kho tri thức (ADR-0031) ─────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class TaiLieu:
+    """Một tài liệu cho SCR030/SCR031 — KHÔNG có ``file_path`` (đường dẫn kho S3 là chi tiết nội
+    bộ, java-core đã biết từ lúc tải lên)."""
+
+    id: UUID
+    title: str
+    description: str | None
+    language: str
+    source_type: str
+    file_name: str | None
+    mime_type: str | None
+    file_size_bytes: int | None
+    status: str
+    version: int
+    chunk_count: int
+    error_message: str | None
+    uploaded_by: UUID | None
+    indexed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    # Dòng này là bản bóng nạp lại của tài liệu nào (V213), nếu có.
+    replaces_document_id: UUID | None
+    # Bản bóng ĐANG nạp lại tài liệu này (PENDING/PROCESSING), nếu có — job_id để xem tiến độ.
+    reindex_document_id: UUID | None
+
+
+_COT_TAI_LIEU = """
+    d.id, d.title, d.description, d.language, d.source_type, d.file_name, d.mime_type,
+    d.file_size_bytes, d.status, d.version, d.chunk_count, d.error_message, d.uploaded_by,
+    d.indexed_at, d.created_at, d.updated_at, d.replaces_document_id,
+    (SELECT b.id FROM knowledge.knowledge_documents b
+      WHERE b.replaces_document_id = d.id AND b.status IN ('PENDING', 'PROCESSING'))
+"""
+
+# Biểu thức PHẢI trùng từng ký tự với chỉ mục ix_doc_tim_kiem (V213) — lệch là quét toàn bảng.
+_BIEU_THUC_TIM = (
+    "lower(knowledge.f_unaccent("
+    "d.title || ' ' || coalesce(d.description, '') || ' ' || coalesce(d.file_name, '')))"
+)
+
+
+def thoat_like(tu_khoa: str) -> str:
+    """``%`` và ``_`` trong từ khoá là ký tự thường, không phải ký tự đại diện của LIKE."""
+    return tu_khoa.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+async def danh_sach(
+    session: AsyncSession,
+    *,
+    tu_khoa: str | None,
+    status: str | None,
+    source_type: str | None,
+    gioi_han: int,
+    bo_qua: int,
+) -> tuple[list[TaiLieu], int]:
+    """SCR030 — phân trang, lọc, tìm trên tiêu đề + mô tả + tên tệp, không phân biệt hoa thường
+    và dấu. Mới nhất trước (đặc tả UC020).
+
+    Không lọc ``status`` thì ẨN ``ARCHIVED``: tài liệu đã gỡ không còn chi phối câu trả lời nào,
+    để chúng lẫn vào danh sách là làm quản trị viên tưởng chúng vẫn đang được dùng. Muốn xem thì
+    lọc ``status=ARCHIVED``.
+
+    ``tu_khoa`` phải ĐÃ qua ``normalize_vi`` (tầng service) — cùng hàm chuẩn hoá lúc nạp.
+    """
+    dieu_kien = ["d.status <> 'ARCHIVED'" if status is None else "d.status = :status"]
+    tham_so: dict[str, object] = {"gioi_han": gioi_han, "bo_qua": bo_qua}
+    if status is not None:
+        tham_so["status"] = status
+    if source_type is not None:
+        dieu_kien.append("d.source_type = :source_type")
+        tham_so["source_type"] = source_type
+    if tu_khoa:
+        dieu_kien.append(
+            f"{_BIEU_THUC_TIM} LIKE '%' || lower(knowledge.f_unaccent(:tu_khoa)) || '%' "
+            "ESCAPE '\\'"
+        )
+        tham_so["tu_khoa"] = thoat_like(tu_khoa)
+    ket_qua = await session.execute(
+        text(
+            f"""
+            SELECT {_COT_TAI_LIEU}, count(*) OVER ()
+              FROM knowledge.knowledge_documents d
+             WHERE {' AND '.join(dieu_kien)}
+             ORDER BY d.created_at DESC, d.id
+             LIMIT :gioi_han OFFSET :bo_qua
+            """
+        ),
+        tham_so,
+    )
+    dong = ket_qua.all()
+    return [TaiLieu(*d[:-1]) for d in dong], (dong[0][-1] if dong else 0)
+
+
+async def lay_tai_lieu(
+    session: AsyncSession, document_id: UUID, *, khoa: bool = False
+) -> TaiLieu | None:
+    """``None`` = không tồn tại HOẶC thuộc tenant khác — RLS che cả hai như nhau (404 cho cả hai).
+
+    ``khoa=True``: ``FOR UPDATE`` — thao tác đổi trạng thái (gỡ, nạp lại) khoá dòng tới hết
+    transaction, để một lượt nạp không chen vào giữa lúc kiểm và lúc ghi.
+    """
+    ket_qua = await session.execute(
+        text(
+            f"SELECT {_COT_TAI_LIEU} FROM knowledge.knowledge_documents d WHERE d.id = :id"
+            + (" FOR UPDATE OF d" if khoa else "")
+        ),
+        {"id": document_id},
+    )
+    dong = ket_qua.one_or_none()
+    return TaiLieu(*dong) if dong else None
+
+
+async def cap_nhat_sieu_du_lieu(
+    session: AsyncSession, document_id: UUID, thay_doi: dict[str, str | None]
+) -> None:
+    """Chỉ ``title`` và ``description`` — KHÔNG đụng ``knowledge_chunks`` (chỉ mục vector giữ
+    nguyên). Trùng ``(tenant, title, version)`` thì ``uq_doc_title_version`` nổ ``IntegrityError``
+    ngay tại câu lệnh — tầng service dịch thành 422.
+    """
+    cot = [c for c in ("title", "description") if c in thay_doi]
+    if not cot:
+        return
+    await session.execute(
+        text(
+            "UPDATE knowledge.knowledge_documents SET "
+            + ", ".join(f"{c} = :{c}" for c in cot)
+            + " WHERE id = :id"
+        ),
+        {"id": document_id, **{c: thay_doi[c] for c in cot}},
+    )
+
+
+async def xoa_khoi_chi_muc(session: AsyncSession, document_id: UUID) -> int:
+    """Gỡ một tài liệu khỏi chỉ mục: xoá ĐOẠN trước, rồi mới ``ARCHIVED``. Trả số đoạn đã xoá.
+
+    Hai câu lệnh trong CÙNG transaction của ``session``: xoá đoạn hỏng thì câu thứ hai không bao
+    giờ chạy và transaction rollback — tài liệu giữ nguyên trạng thái (đặc tả UC020 luồng phụ 7.2).
+    Thứ tự vẫn có nghĩa với người đọc log và với người viết lại hàm này thành hai transaction: đánh
+    dấu ``ARCHIVED`` trước rồi xoá hỏng là tài liệu biến khỏi giao diện trong khi vector vẫn nằm
+    trong chỉ mục và vẫn chi phối câu trả lời.
+
+    Nơi gọi đã khoá dòng (``lay_tai_lieu(khoa=True)``) và đã kiểm trạng thái.
+    """
+    xoa = await session.execute(
+        text("DELETE FROM knowledge.knowledge_chunks WHERE document_id = :id"),
+        {"id": document_id},
+    )
+    await session.execute(
+        text(
+            """
+            UPDATE knowledge.knowledge_documents
+               SET status = 'ARCHIVED', chunk_count = 0, ingest_step = NULL
+             WHERE id = :id
+            """
+        ),
+        {"id": document_id},
+    )
+    return xoa.rowcount
+
+
+async def tao_ban_bong(session: AsyncSession, cu: TaiLieu) -> tuple[UUID, int]:
+    """Bản bóng ``PENDING`` của tài liệu ``cu`` (ADR-0031): cùng tệp, cùng siêu dữ liệu, version kế
+    tiếp, ``replaces_document_id = cu.id``. Trả ``(id, version)``.
+
+    Bộ quét job kẹt nhặt nó trong ≤ 1 chu kỳ (V213). Đã có một lượt nạp lại đang chạy thì
+    ``uq_doc_mot_luot_nap_lai`` nổ ``IntegrityError`` — tầng service dịch thành 409.
+    """
+    version = await tinh_version_ke_tiep(session, cu.title)
+    ket_qua = await session.execute(
+        text(
+            """
+            INSERT INTO knowledge.knowledge_documents (
+                tenant_id, title, description, language, source_type, file_name, file_path,
+                source_url, mime_type, file_size_bytes, status, version, uploaded_by,
+                replaces_document_id
+            )
+            SELECT ai.current_tenant(), d.title, d.description, d.language, d.source_type,
+                   d.file_name, d.file_path, d.source_url, d.mime_type, d.file_size_bytes,
+                   'PENDING', :version, d.uploaded_by, d.id
+              FROM knowledge.knowledge_documents d
+             WHERE d.id = :id
+            RETURNING id
+            """
+        ),
+        {"id": cu.id, "version": version},
+    )
+    return ket_qua.scalar_one(), version
+
+
+async def tai_lieu_can_nap_lai(session: AsyncSession) -> list[TaiLieu]:
+    """Mọi tài liệu ``READY`` của tenant chưa có lượt nạp lại đang chạy — đầu vào của nạp lại toàn
+    kho khi đổi mô hình nhúng (UC020 luồng phụ 6.1). Khoá dòng cho tới khi bản bóng được tạo."""
+    ket_qua = await session.execute(
+        text(
+            f"""
+            SELECT {_COT_TAI_LIEU}
+              FROM knowledge.knowledge_documents d
+             WHERE d.status = 'READY'
+               AND NOT EXISTS (
+                   SELECT 1 FROM knowledge.knowledge_documents b
+                    WHERE b.replaces_document_id = d.id AND b.status IN ('PENDING', 'PROCESSING'))
+             ORDER BY d.created_at
+               FOR UPDATE OF d
+            """
+        ),
+    )
+    return [TaiLieu(*d) for d in ket_qua.all()]

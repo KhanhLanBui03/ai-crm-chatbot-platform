@@ -15,12 +15,16 @@ from fastapi.responses import JSONResponse
 
 from src.ai.exceptions import (
     AiServiceError,
+    DocumentArchivedError,
+    DocumentBusyError,
     DocumentNotFoundError,
+    DocumentNotReadyError,
     FeedbackInteractionMissingError,
     FeedbackReasonRequiredError,
     FileTooLargeError,
     ForbiddenFileUriError,
     InteractionNotFoundError,
+    InvalidMetadataError,
     InvalidRaterError,
     StorageUnavailableError,
     StoredFileNotFoundError,
@@ -37,6 +41,10 @@ _MA_HTTP: dict[type[AiServiceError], int] = {
     ForbiddenFileUriError: 403,
     DocumentNotFoundError: 404,
     InteractionNotFoundError: 404,
+    DocumentBusyError: 409,
+    DocumentNotReadyError: 409,
+    DocumentArchivedError: 409,
+    InvalidMetadataError: 422,
     StoredFileNotFoundError: 422,
     FeedbackReasonRequiredError: 422,
     FeedbackInteractionMissingError: 422,
@@ -76,8 +84,20 @@ async def _xu_ly_loi_nghiep_vu(request: Request, exc: AiServiceError) -> JSONRes
     return JSONResponse(status_code=status, content={"code": exc.code, "message": str(exc)})
 
 
+def _ma_validate(request: Request) -> str:
+    duong = request.url.path
+    if duong in _MA_VALIDATE_THEO_DUONG_DAN:
+        return _MA_VALIDATE_THEO_DUONG_DAN[duong]
+    # PATCH /v1/documents/{id} — đặc tả UC020 gọi lỗi siêu dữ liệu là INVALID_METADATA, như UC018.
+    if request.method == "PATCH" and duong.startswith("/v1/documents/"):
+        return "INVALID_METADATA"
+    if duong.startswith("/v1/ai-interactions/") and duong.endswith("/feedback"):
+        return "INVALID_FEEDBACK"
+    return "INVALID_REQUEST"
+
+
 async def _xu_ly_loi_validate(request: Request, exc: RequestValidationError) -> JSONResponse:
-    code = _MA_VALIDATE_THEO_DUONG_DAN.get(request.url.path, "INVALID_REQUEST")
+    code = _ma_validate(request)
     # Chỉ trả vị trí + lý do, KHÔNG trả lại giá trị "input": body có thể chứa mô tả tài liệu
     # dài, và lặp lại nguyên văn dữ liệu người dùng vào log/phản hồi là thói quen xấu (NĐ 13).
     loi = [{"loc": list(e["loc"]), "msg": e["msg"]} for e in exc.errors()]

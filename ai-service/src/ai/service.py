@@ -35,8 +35,13 @@ Các phương thức của facade — bám theo 10 endpoint §2.5 và hai topic 
     nap_tai_lieu()     UC019               (bất đồng bộ, từ crm.kb.document.uploaded) — Ngày 4–5
     quet_job_ket()     UC019               (bộ quét trong worker, ADR-0024) — Ngày 5
     tien_do_nap()      UC019               GET /v1/ai/kb/ingestion-jobs/{job_id} — Ngày 5
-    delete_document()  UC020               DELETE /v1/ai/kb/documents/{id}
-    reindex_tenant()   UC020               POST /v1/ai/kb/reindex
+    list_documents()   UC020               GET /v1/documents — Ngày 11
+    get_document()     UC020               GET /v1/documents/{id} — Ngày 11
+    list_chunks()      UC020               GET /v1/documents/{id}/chunks — Ngày 11
+    update_document_metadata()  UC020      PATCH /v1/documents/{id} — Ngày 11
+    reindex_document() UC020               POST /v1/documents/{id}/reindex — Ngày 11 (ADR-0031)
+    delete_document()  UC020               DELETE /v1/documents/{id} · /v1/ai/kb/documents/{id}
+    reindex_tenant()   UC020               POST /v1/ai/kb/reindex — Ngày 11
     record_feedback()  UC027               POST /v1/ai/feedback — Ngày 10
     knowledge_gaps()   UC025               GET /v1/knowledge-gaps — Ngày 10
     quality_summary()  UC027               GET /v1/ai/quality — Ngày 10
@@ -57,6 +62,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.ai.config import get_settings
@@ -70,7 +76,10 @@ from src.ai.db.repositories import (
 from src.ai.db.session import get_system_session, get_tenant_session
 from src.ai.exceptions import (
     AiServiceError,
+    DocumentArchivedError,
+    DocumentBusyError,
     DocumentNotFoundError,
+    DocumentNotReadyError,
     EmbeddingModelMismatchError,
     EmbeddingRejectedError,
     FeedbackInteractionMissingError,
@@ -81,6 +90,7 @@ from src.ai.exceptions import (
     IngestRetryExhaustedError,
     IngestStalledError,
     InteractionNotFoundError,
+    InvalidMetadataError,
     InvalidRaterError,
     NoTextExtractedError,
     ParseFailedError,
@@ -109,6 +119,7 @@ from src.ai.orchestrator.turn import (
     run_turn,
 )
 from src.ai.rag.answerer import RagAnswerer
+from src.ai.rag.chuan_hoa import normalize_vi
 from src.ai.rag.danh_gia.cham_tu_dong import cham
 from src.ai.rag.ingest import tien_do
 from src.ai.rag.ingest.chia_doan import Doan
@@ -120,7 +131,13 @@ from src.ai.rag.tsquery import build_tsquery
 from src.ai.schemas import (
     ChatRequest,
     ChatResponse,
+    ChunkItem,
+    ChunkPage,
     DanhGiaPhia,
+    DocumentDeleted,
+    DocumentDetail,
+    DocumentMetadataUpdate,
+    DocumentPage,
     FeedbackRecorded,
     FeedbackRequest,
     IngestionJobProgress,
@@ -130,6 +147,8 @@ from src.ai.schemas import (
     KnowledgeGapItem,
     KnowledgeGapPage,
     QualitySummary,
+    ReindexAccepted,
+    ReindexTenantAccepted,
     TyLe,
 )
 from src.ai.telemetry.metrics import auto_eval
@@ -794,3 +813,159 @@ async def cham_tu_dong_lo(
 def bay_gio() -> datetime:
     """Đồng hồ của worker — một chỗ để test thay."""
     return datetime.now(UTC)
+
+
+# ── UC020 — quản lý kho tri thức (ADR-0031) ──────────────────────────────────
+#
+# Mọi thao tác ghi khoá dòng tài liệu (``FOR UPDATE``) rồi mới kiểm trạng thái, trong CÙNG
+# transaction của request (``SessionDep``): một lượt nạp không chen được vào giữa lúc kiểm "không
+# bận" và lúc ghi. Ba thao tác ghi để lại một dòng log ``kiem_toan_kho`` — nhật ký kiểm toán thật
+# (``platform.audit_logs``, đặc tả UC020 bước 8) là của java-core: ai-service không ghi schema của
+# Track A.
+
+_DANG_NAP = ("PENDING", "PROCESSING")
+
+
+def _tai_lieu_ra(t: document_repository.TaiLieu) -> DocumentDetail:
+    return DocumentDetail(
+        id=t.id, title=t.title, status=t.status, source_type=t.source_type,
+        uploaded_by=t.uploaded_by, chunk_count=t.chunk_count, created_at=t.created_at,
+        description=t.description, language=t.language, file_name=t.file_name,
+        mime_type=t.mime_type, file_size_bytes=t.file_size_bytes, version=t.version,
+        error_message=t.error_message, indexed_at=t.indexed_at, updated_at=t.updated_at,
+        replaces_document_id=t.replaces_document_id, reindex_document_id=t.reindex_document_id,
+    )
+
+
+async def _lay_hoac_404(
+    session: AsyncSession, document_id: UUID, *, khoa: bool = False
+) -> document_repository.TaiLieu:
+    t = await document_repository.lay_tai_lieu(session, document_id, khoa=khoa)
+    if t is None:
+        raise DocumentNotFoundError(f"Không có tài liệu {document_id}")
+    return t
+
+
+def _kiem_toan(thao_tac: str, document_id: UUID, **chi_tiet) -> None:
+    logger.info(
+        "kiem_toan_kho thao_tac=%s tai_lieu=%s %s",
+        thao_tac, document_id, " ".join(f"{k}={v}" for k, v in chi_tiet.items()),
+    )
+
+
+async def list_documents(
+    session: AsyncSession,
+    *,
+    keyword: str | None,
+    status: str | None,
+    source_type: str | None,
+    page: int,
+    size: int,
+) -> DocumentPage:
+    """SCR030. Từ khoá qua ``normalize_vi`` — CÙNG hàm chuẩn hoá lúc nạp (kế hoạch Ngày 11: dùng
+    lại, không viết hàm thứ hai); bỏ dấu + viết thường do ``knowledge.f_unaccent`` làm trong SQL."""
+    tu_khoa = normalize_vi(keyword).strip() if keyword else None
+    cac, tong = await document_repository.danh_sach(
+        session, tu_khoa=tu_khoa or None, status=status, source_type=source_type,
+        gioi_han=size, bo_qua=page * size,
+    )
+    return DocumentPage(items=[_tai_lieu_ra(t) for t in cac], total=tong, page=page, size=size)
+
+
+async def get_document(session: AsyncSession, document_id: UUID) -> DocumentDetail:
+    return _tai_lieu_ra(await _lay_hoac_404(session, document_id))
+
+
+async def list_chunks(
+    session: AsyncSession, document_id: UUID, *, page: int, size: int
+) -> ChunkPage:
+    await _lay_hoac_404(session, document_id)
+    cac, tong = await chunk_repository.danh_sach_doan(session, document_id, size, page * size)
+    return ChunkPage(
+        items=[
+            ChunkItem(
+                chunk_id=d.id, chunk_index=d.chunk_index, content=d.content, heading=d.heading,
+                page_number=d.page_number, token_count=d.token_count,
+                embedding_model=d.embedding_model, embedding_version=d.embedding_version,
+                has_vector=d.co_vector,
+            )
+            for d in cac
+        ],
+        total=tong, page=page, size=size,
+    )
+
+
+async def update_document_metadata(
+    session: AsyncSession, document_id: UUID, yeu_cau: DocumentMetadataUpdate
+) -> DocumentDetail:
+    """Sửa ``title``/``description``. KHÔNG đụng ``knowledge_chunks`` — chỉ mục vector giữ nguyên.
+
+    Chặn khi đang có lượt nạp lại: bản bóng đã chép tiêu đề cũ, sửa bản cũ lúc này thì tới khi đổi
+    bản, tiêu đề mới biến mất mà không ai biết vì sao.
+    """
+    t = await _lay_hoac_404(session, document_id, khoa=True)
+    if t.status == "ARCHIVED":
+        raise DocumentArchivedError(f"Tài liệu {document_id} đã gỡ khỏi chỉ mục")
+    if t.reindex_document_id is not None:
+        raise DocumentBusyError(f"Tài liệu {document_id} đang được nạp lại")
+    thay_doi = {c: getattr(yeu_cau, c) for c in yeu_cau.model_fields_set}
+    try:
+        await document_repository.cap_nhat_sieu_du_lieu(session, document_id, thay_doi)
+    except IntegrityError as loi:
+        if "uq_doc_title_version" in str(loi.orig):
+            raise InvalidMetadataError(
+                f"Đã có tài liệu khác tên '{thay_doi.get('title')}' ở version {t.version}"
+            ) from None
+        raise
+    _kiem_toan("SUA", document_id, truong=",".join(sorted(thay_doi)))
+    return _tai_lieu_ra(await _lay_hoac_404(session, document_id))
+
+
+async def reindex_document(session: AsyncSession, document_id: UUID) -> ReindexAccepted:
+    """Nạp lại một tài liệu bằng bản bóng (ADR-0031). Bộ quét nhặt bản bóng trong ≤ 1 chu kỳ."""
+    t = await _lay_hoac_404(session, document_id, khoa=True)
+    if t.status in _DANG_NAP or t.reindex_document_id is not None:
+        raise DocumentBusyError(f"Tài liệu {document_id} đang được nạp")
+    if t.status != "READY":
+        raise DocumentNotReadyError(
+            f"Chỉ nạp lại tài liệu READY; tài liệu đang {t.status} — hãy tải lên lại"
+        )
+    try:
+        moi, version = await document_repository.tao_ban_bong(session, t)
+    except IntegrityError as loi:
+        if "uq_doc_mot_luot_nap_lai" in str(loi.orig):
+            raise DocumentBusyError(f"Tài liệu {document_id} đang được nạp lại") from None
+        raise
+    _kiem_toan("NAP_LAI", document_id, ban_bong=moi, version=version)
+    return ReindexAccepted(
+        message="Đã xếp hàng nạp lại — bản cũ vẫn phục vụ tới khi bản mới nạp xong",
+        document_id=document_id, job_id=moi, version=version,
+    )
+
+
+async def reindex_tenant(session: AsyncSession, tenant_id: str) -> ReindexTenantAccepted:
+    """Nạp lại toàn kho của tenant (đổi mô hình nhúng — UC020 luồng phụ 6.1): một bản bóng cho mỗi
+    tài liệu ``READY`` chưa có lượt nạp lại đang chạy. Worker xử lý lần lượt, một job đồng thời.
+
+    ⚠️ Đổi mô hình nhúng: đổi ``EMBED_URL`` của WORKER trước, chạy lệnh này, đợi xong rồi mới đổi
+    ``EMBED_URL`` của API — truy hồi lọc đoạn theo mô hình của chính vector câu hỏi (ADR-0031).
+    """
+    cac = await document_repository.tai_lieu_can_nap_lai(session)
+    for t in cac:
+        await document_repository.tao_ban_bong(session, t)
+    logger.info("kiem_toan_kho thao_tac=NAP_LAI_TOAN_KHO so_tai_lieu=%d", len(cac))
+    return ReindexTenantAccepted(tenant_id=UUID(tenant_id), total_documents=len(cac))
+
+
+async def delete_document(session: AsyncSession, document_id: UUID) -> DocumentDeleted:
+    """Gỡ khỏi chỉ mục: xoá đoạn TRƯỚC rồi ``ARCHIVED``, cùng transaction — hỏng giữa chừng thì
+    rollback, trạng thái giữ nguyên (đặc tả UC020 luồng phụ 7.2). Gỡ lại tài liệu đã gỡ: luỹ
+    đẳng."""
+    t = await _lay_hoac_404(session, document_id, khoa=True)
+    if t.status == "ARCHIVED":
+        return DocumentDeleted(message="Tài liệu đã được gỡ trước đó", chunks_deleted=0)
+    if t.status in _DANG_NAP or t.reindex_document_id is not None:
+        raise DocumentBusyError(f"Tài liệu {document_id} đang được nạp — thử lại sau")
+    so = await document_repository.xoa_khoi_chi_muc(session, document_id)
+    _kiem_toan("GO", document_id, so_doan=so)
+    return DocumentDeleted(message="Đã gỡ tài liệu khỏi kho tri thức", chunks_deleted=so)

@@ -224,3 +224,32 @@ class FeedbackInteractionMissingError(AiServiceError):
     chê."""
 
     code = "INVALID_FEEDBACK"
+
+
+# ── Quản lý kho tri thức — UC020 (Ngày 11) ───────────────────────────────────
+
+
+class DocumentBusyError(AiServiceError):
+    """Tài liệu đang nạp (``PENDING``/``PROCESSING``) hoặc đang có lượt nạp lại — đặc tả UC020
+    luồng phụ 5.1. Gỡ giữa chừng là để lại đoạn mồ côi; nạp lại chồng là hai bản bóng tranh nhau."""
+
+    code = "DOCUMENT_BUSY"
+
+
+class DocumentNotReadyError(AiServiceError):
+    """Nạp lại chỉ cho tài liệu ``READY`` (ADR-0031). Tài liệu lỗi thì tải lên lại (UC018)."""
+
+    code = "DOCUMENT_NOT_READY"
+
+
+class DocumentArchivedError(AiServiceError):
+    """Tài liệu đã gỡ khỏi chỉ mục — chỉ còn để đọc."""
+
+    code = "DOCUMENT_ARCHIVED"
+
+
+class InvalidMetadataError(AiServiceError):
+    """Tiêu đề mới trùng một tài liệu khác cùng version (``uq_doc_title_version``) — đặc tả UC020
+    ``422 INVALID_METADATA``; cùng mã với lỗi validate của UC018."""
+
+    code = "INVALID_METADATA"

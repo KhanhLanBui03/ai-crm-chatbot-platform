@@ -297,3 +297,115 @@ class QualitySummary(BaseModel):
     tu_choi_theo_ly_do: dict[str, int]
     # Người đánh giá (khi có) và bộ chấm LLM (mẫu 5%)
     danh_gia: list[DanhGiaPhia]
+
+
+# ── Kho tri thức — UC020 (SCR030–SCR032), nháp docs/contracts/uc020-quan-ly-kho.md ───────────
+# Giữ đúng tên trường của ``DocumentDetailResponse`` / ``ChunkPageResponse`` trong hợp đồng, THÊM
+# các trường giao diện cần — không đổi, không bỏ trường nào.
+
+
+class DocumentDetail(BaseModel):
+    """Một tài liệu cho SCR030/SCR031. Không có ``file_path`` — đường dẫn kho S3 là chi tiết nội
+    bộ."""
+
+    id: UUID
+    title: str
+    status: Literal["PENDING", "PROCESSING", "READY", "FAILED", "ARCHIVED"]
+    source_type: str
+    uploaded_by: UUID | None
+    chunk_count: int
+    created_at: datetime
+    description: str | None
+    language: str
+    file_name: str | None
+    mime_type: str | None
+    file_size_bytes: int | None
+    version: int
+    error_message: str | None
+    indexed_at: datetime | None
+    updated_at: datetime
+    # Dòng này là bản bóng nạp lại của tài liệu nào (ADR-0031).
+    replaces_document_id: UUID | None
+    # Bản bóng ĐANG nạp lại tài liệu này — job_id để xem tiến độ.
+    reindex_document_id: UUID | None
+
+
+class DocumentPage(BaseModel):
+    items: list[DocumentDetail]
+    total: int
+    page: int
+    size: int
+
+
+class ChunkItem(BaseModel):
+    """Một đoạn cho người đọc — KHÔNG có ``embedding`` (đặc tả UC020 bước 4: hiện mô hình nhúng)."""
+
+    chunk_id: UUID
+    chunk_index: int
+    content: str
+    heading: str | None
+    page_number: int | None
+    token_count: int
+    embedding_model: str
+    embedding_version: str
+    has_vector: bool
+
+
+class ChunkPage(BaseModel):
+    items: list[ChunkItem]
+    total: int
+    page: int
+    size: int
+
+
+class DocumentMetadataUpdate(BaseModel):
+    """``PATCH`` siêu dữ liệu — chỉ ``title`` và ``description``, KHÔNG đụng chỉ mục vector.
+
+    ``language`` không sửa được: nó quyết định cách tách từ lúc nạp, đổi nó là nạp lại. Trường vắng
+    mặt thì giữ nguyên; ``description: null`` thì xoá mô tả (phân biệt bằng ``model_fields_set``).
+    Cùng giới hạn độ dài và cùng chuẩn hoá NFC như lúc tải lên (``KbDocumentCreate``).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, min_length=3, max_length=255)
+    description: str | None = Field(default=None, max_length=500)
+
+    @field_validator("title", "description", mode="before")
+    @classmethod
+    def _nfc_roi_strip(cls, v: object) -> object:
+        if isinstance(v, str):
+            return unicodedata.normalize("NFC", v).strip()
+        return v
+
+    @field_validator("title")
+    @classmethod
+    def _tieu_de_khong_null(cls, v: str | None) -> str:
+        if v is None:
+            raise ValueError("title không được null — bỏ trường đi nếu không sửa")
+        return v
+
+
+class ReindexAccepted(BaseModel):
+    """Bám ``ActionSuccessResponse`` + trường thêm. ``job_id`` là bản bóng MỚI (ADR-0031)."""
+
+    success: Literal[True] = True
+    message: str
+    document_id: UUID
+    job_id: UUID
+    version: int
+    status: Literal["PENDING"] = "PENDING"
+
+
+class ReindexTenantAccepted(BaseModel):
+    """``ReindexResponse`` của hợp đồng."""
+
+    tenant_id: UUID
+    status: Literal["ACCEPTED"] = "ACCEPTED"
+    total_documents: int
+
+
+class DocumentDeleted(BaseModel):
+    success: Literal[True] = True
+    message: str
+    chunks_deleted: int
