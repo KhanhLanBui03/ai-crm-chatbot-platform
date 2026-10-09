@@ -502,6 +502,7 @@ erDiagram
         text         error_message      "bắt buộc khi status=FAILED"
         int          version         UK "phiên bản tài liệu cùng tên"
         uuid         uploaded_by        "không FK · liên làn"
+        uuid         replaces_document_id FK "V213 · bản bóng nạp lại của tài liệu nào · ON DELETE SET NULL"
         timestamptz  indexed_at
         timestamptz  created_at
         timestamptz  updated_at
@@ -525,6 +526,7 @@ erDiagram
     }
 
     KNOWLEDGE_DOCUMENTS ||--o{ KNOWLEDGE_CHUNKS : "chia thành"
+    KNOWLEDGE_DOCUMENTS |o--o| KNOWLEDGE_DOCUMENTS : "bản bóng nạp lại thay cho (V213)"
 ```
 
 ---
@@ -555,7 +557,7 @@ erDiagram
         text          user_query
         text          response_text
         uuid[]        retrieved_chunk_ids    "trích dẫn N-N dạng mảng"
-        numeric       retrieval_top_score    "numeric(5,4) · điểm RRF cao nhất"
+        numeric       retrieval_top_score    "numeric(5,4) · cosine cao nhất câu hỏi–đoạn (từ Ngày 8)"
         numeric       groundedness_score     "numeric(4,3) · V209 · 0..1, độ bám nguồn"
         boolean       is_answered
         varchar(50)   refusal_reason         "NOT_COVERED/OUT_OF_SCOPE_DATA/LOW_CONFIDENCE/SAFETY_PROBE"
@@ -568,6 +570,9 @@ erDiagram
         numeric       cost_vnd               "numeric(16,4) · một lượt gọi mô hình nhỏ hơn một đồng"
         int           latency_ms
         boolean       is_cached              "V209 · trả từ bộ nhớ đệm ngữ nghĩa"
+        boolean       llm_called             "V212 · có gửi yêu cầu tới LLM — mẫu số KPI ≥ 55%"
+        boolean       is_degraded            "V212 · LLM sập, trích nguyên văn đoạn"
+        boolean       is_handoff             "V212 · trả handoff=true cho java-core"
         varchar(20)   status                 "SUCCESS/FAILED/TIMEOUT"
         text          error_message
         timestamptz   created_at
