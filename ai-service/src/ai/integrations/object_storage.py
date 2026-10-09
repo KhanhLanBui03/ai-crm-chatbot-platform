@@ -1,8 +1,9 @@
 """Đọc tệp gốc từ kho S3 — RustFS ở dev, AWS S3 trên cloud (ADR-0022). [PRODUCTION]
 
-ai-service chỉ ĐỌC: java-core ghi tệp, ai-service lấy dung lượng và tải về để kiểm định dạng
-(UC018) hoặc để phân tích cú pháp (UC019). Không có hàm ghi hay xoá ở đây — thêm khi UC020 và
-UC041 cần, và lúc đó quyền của ai-service trên bucket cũng phải mở rộng đúng bằng chừng ấy.
+ai-service ĐỌC: java-core ghi tệp, ai-service lấy dung lượng và tải về để kiểm định dạng
+(UC018) hoặc để phân tích cú pháp (UC019). Ngoại lệ DUY NHẤT là ``xoa`` — UC041 xoá tệp gốc chứa
+dữ liệu cá nhân (Ngày 12). Quyền của ai-service trên bucket mở rộng đúng bằng chừng ấy: thêm
+``s3:DeleteObject``, không thêm ``PutObject`` (ADR-0022 mục 5, ADR-0033).
 
 Mọi hàm nhận ``key`` ĐÃ được kiểm thuộc tenant (``rag/ingest/luu_tru.kiem_uri_thuoc_tenant``).
 Module này không biết tenant là gì — đúng vai một adapter ra hệ thống ngoài.
@@ -97,3 +98,11 @@ def tai_ve(bucket: str, key: str, dich: Path, gioi_han: int, client: Minio | Non
         finally:
             resp.close()
             resp.release_conn()
+
+
+def xoa(bucket: str, key: str, client: Minio | None = None) -> None:
+    """Xoá một object — LUỸ ĐẲNG: S3 trả thành công cả khi object không còn, nên chạy lại một yêu
+    cầu xoá dở dang không hỏng ở bước này. Hạ tầng hỏng thì ``StorageUnavailableError``.
+    """
+    with _dich_loi(bucket, key):
+        (client or _client_mac_dinh()).remove_object(bucket, key)

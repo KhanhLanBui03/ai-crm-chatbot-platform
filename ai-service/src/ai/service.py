@@ -47,9 +47,10 @@ Các phương thức của facade — bám theo 10 endpoint §2.5 và hai topic 
     quality_summary()  UC027               GET /v1/ai/quality — Ngày 10
     cham_tu_dong_lo()  UC027               (bộ chấm tự động trong worker, mẫu 5%) — Ngày 10
     set_mcp_config()   UC021               PUT /v1/ai/mcp/config
-    forget_contact()   UC041               DELETE /v1/ai/privacy/contacts/{id}
+    forget_contact()   UC041               DELETE /v1/ai/privacy/contacts/{id} — Ngày 12
     usage_summary()    UC006/039           GET /v1/ai/usage
-    summarize()        UC026               (bất đồng bộ, từ crm.conversation.closed)
+    summarize()        UC026               (bất đồng bộ, từ crm.conversation.closed) — Ngày 12
+    summarize_messages() UC026             POST /v1/ai/summarize (MANUAL) — Ngày 12
 """
 
 import asyncio
@@ -60,7 +61,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -76,6 +77,7 @@ from src.ai.db.repositories import (
 from src.ai.db.session import get_system_session, get_tenant_session
 from src.ai.exceptions import (
     AiServiceError,
+    ConversationTooShortError,
     DocumentArchivedError,
     DocumentBusyError,
     DocumentNotFoundError,
@@ -95,7 +97,9 @@ from src.ai.exceptions import (
     NoTextExtractedError,
     ParseFailedError,
     ParseTimeoutError,
+    StorageUnavailableError,
     StoredFileNotFoundError,
+    SummarySchemaInvalidError,
 )
 from src.ai.inference.clients import (
     ClassifyClient,
@@ -106,9 +110,17 @@ from src.ai.inference.clients import (
     tao_embed_client,
 )
 from src.ai.integrations import object_storage
+from src.ai.integrations.java_core import (
+    BanGhiTomTat,
+    JavaCoreClient,
+    TinNhanHoiThoai,
+    tao_java_core_client,
+)
 from src.ai.integrations.llm import (
     CircuitBreaker,
     LLMChiuLoi,
+    MockLLMClient,
+    OpenAICompatLLMClient,
     tao_llm_chiu_loi,
     tao_llm_client,
 )
@@ -121,6 +133,7 @@ from src.ai.orchestrator.turn import (
 from src.ai.rag.answerer import RagAnswerer
 from src.ai.rag.chuan_hoa import normalize_vi
 from src.ai.rag.danh_gia.cham_tu_dong import cham
+from src.ai.rag.generate import tom_tat
 from src.ai.rag.ingest import tien_do
 from src.ai.rag.ingest.chia_doan import Doan
 from src.ai.rag.ingest.duong_ong import chia_doan_tu_khoi, trich_khoi_tu_s3
@@ -138,6 +151,8 @@ from src.ai.schemas import (
     DocumentDetail,
     DocumentMetadataUpdate,
     DocumentPage,
+    ErasureItem,
+    ErasureResult,
     FeedbackRecorded,
     FeedbackRequest,
     IngestionJobProgress,
@@ -149,9 +164,11 @@ from src.ai.schemas import (
     QualitySummary,
     ReindexAccepted,
     ReindexTenantAccepted,
+    SummarizeRequest,
+    SummarizeResponse,
     TyLe,
 )
-from src.ai.telemetry.metrics import auto_eval
+from src.ai.telemetry.metrics import auto_eval, privacy_erasures, summaries
 
 logger = logging.getLogger(__name__)
 
@@ -834,6 +851,7 @@ def _tai_lieu_ra(t: document_repository.TaiLieu) -> DocumentDetail:
         mime_type=t.mime_type, file_size_bytes=t.file_size_bytes, version=t.version,
         error_message=t.error_message, indexed_at=t.indexed_at, updated_at=t.updated_at,
         replaces_document_id=t.replaces_document_id, reindex_document_id=t.reindex_document_id,
+        contact_id=t.contact_id,
     )
 
 
@@ -898,7 +916,8 @@ async def list_chunks(
 async def update_document_metadata(
     session: AsyncSession, document_id: UUID, yeu_cau: DocumentMetadataUpdate
 ) -> DocumentDetail:
-    """Sửa ``title``/``description``. KHÔNG đụng ``knowledge_chunks`` — chỉ mục vector giữ nguyên.
+    """Sửa ``title``/``description``/``contact_id``. KHÔNG đụng ``knowledge_chunks`` — chỉ mục
+    vector giữ nguyên. ``contact_id`` (V214) gắn tài liệu với khách để UC041 xoá được.
 
     Chặn khi đang có lượt nạp lại: bản bóng đã chép tiêu đề cũ, sửa bản cũ lúc này thì tới khi đổi
     bản, tiêu đề mới biến mất mà không ai biết vì sao.
@@ -969,3 +988,387 @@ async def delete_document(session: AsyncSession, document_id: UUID) -> DocumentD
     so = await document_repository.xoa_khoi_chi_muc(session, document_id)
     _kiem_toan("GO", document_id, so_doan=so)
     return DocumentDeleted(message="Đã gỡ tài liệu khỏi kho tri thức", chunks_deleted=so)
+
+
+# ── UC026 — tóm tắt hội thoại (ADR-0032) ─────────────────────────────────────
+
+TriggerTomTat = Literal["HANDOFF", "CLOSING", "TURN_THRESHOLD", "MANUAL"]
+
+
+@dataclass(frozen=True, slots=True)
+class KetQuaTomTatHoiThoai:
+    """Kết cục một lượt ``summarize``.
+
+    ``DA_GHI``         đã PATCH sang java-core + ghi ``ai_interactions`` nhánh ``SUMMARY``.
+    ``BO_QUA_NGAN``    dưới ngưỡng tin nhắn của khách — 0 lời gọi LLM (luồng phụ 1.1).
+    ``TRUNG``          sự kiện đã xử lý từ trước (luồng phụ 1.2).
+    ``SAI_DINH_DANG``  vẫn thiếu phần sau một vòng sửa — bản cũ giữ nguyên (luồng phụ 3.1).
+    """
+
+    trang_thai: Literal["DA_GHI", "BO_QUA_NGAN", "TRUNG", "SAI_DINH_DANG"]
+    ban_ghi: BanGhiTomTat | None = None
+    interaction_id: UUID | None = None
+    so_lan_goi_llm: int = 0
+    loi: str | None = None
+
+
+def tao_bo_tom_tat(settings=None, *, transport=None) -> tom_tat.BoTomTat:
+    """Bộ tóm tắt — client LLM RIÊNG với lượt chat, vì hai lẽ:
+
+    - ``temperature`` GHIM ở ``tom_tat.NHIET_DO`` (= 0), không đọc ``LLM_TEMPERATURE`` (ADR-0032);
+    - mạch riêng + hạn chót rộng (``tom_tat_han_chot_s``): chạy nền, không ai chờ, và một loạt hội
+      thoại đóng cùng lúc làm mở mạch thì khách đang chat không phải nhận câu suy giảm vì nó.
+
+    ``transport`` chỉ để test tiêm ``httpx.MockTransport`` và kiểm thân request thật.
+    """
+    s = settings or get_settings()
+    if s.llm_mode == "mock":
+        client = MockLLMClient(noi_dung=tom_tat.DAU_RA_GIA)
+    else:
+        if not s.llm_api_key:
+            raise ValueError("LLM_MODE=remote nhưng LLM_API_KEY trống — điền khoá vào .env")
+        client = OpenAICompatLLMClient(
+            base_url=s.llm_base_url,
+            api_key=s.llm_api_key,
+            model=s.llm_model,
+            temperature=tom_tat.NHIET_DO,
+            max_tokens=s.tom_tat_max_tokens,
+            reasoning_effort=s.llm_reasoning_effort,
+            transport=transport,
+        )
+    return tom_tat.BoTomTat(
+        LLMChiuLoi(
+            client,
+            CircuitBreaker(
+                nguong_hong=s.llm_breaker_nguong_hong, thoi_gian_mo_s=s.llm_breaker_thoi_gian_mo_s
+            ),
+            han_chot_s=s.tom_tat_han_chot_s,
+        ),
+        ky_tu_moi_khoi=s.tom_tat_ky_tu_moi_khoi,
+    )
+
+
+# Một bộ tóm tắt mỗi event loop — cùng lý do với ``_TRA_LOI``: mạch phải nhớ lượt hỏng trước.
+_TOM_TAT: dict[int, tom_tat.BoTomTat] = {}
+
+
+def _bo_tom_tat() -> tom_tat.BoTomTat:
+    loop = id(asyncio.get_running_loop())
+    bo = _TOM_TAT.get(loop)
+    if bo is None:
+        bo = tao_bo_tom_tat()
+        _TOM_TAT[loop] = bo
+    return bo
+
+
+async def _ghi_luot_tom_tat(
+    tenant_id: str,
+    conversation_id: UUID,
+    trigger: str,
+    kq: tom_tat.KetQuaTomTat | None,
+    *,
+    so_tin: int,
+    loi: str | None,
+    su_kien: SuKienNap | None,
+    factory: SessionFactory,
+) -> UUID:
+    """Một dòng ``ai_interactions`` nhánh ``SUMMARY`` + (nếu có) dòng chống trùng, CÙNG transaction.
+
+    ``response_text`` là JSON bốn phần — bản tóm tắt cũ truy lại được từ đây khi java-core đã ghi
+    đè bản mới (đặc tả UC026 luồng phụ 4.1: "không có bảng tóm tắt riêng"). Nội dung đã che PII từ
+    đầu vào. Lượt hỏng ghi ``FAILED`` + ``LOW_CONFIDENCE`` theo đúng quy ước lượt hỏng của
+    ``orchestrator/turn.py`` — CHECK ``ck_interaction_refusal`` đòi một lý do khi không trả lời.
+    """
+    s = get_settings()
+    vao = kq.prompt_tokens if kq else 0
+    ra = kq.completion_tokens if kq else 0
+    interaction_id = uuid4()
+    async with get_tenant_session(tenant_id, factory) as phien:
+        await interaction_repository.ghi_luot(
+            phien,
+            id=interaction_id,
+            conversation_id=str(conversation_id),
+            branch="SUMMARY",
+            intent=f"summary:{trigger}"[:50],
+            intent_confidence=None,
+            user_query=f"[UC026 {trigger}] tóm tắt {so_tin} tin nhắn",
+            response_text=kq.tom_tat.model_dump_json(by_alias=True) if kq else None,
+            retrieved_chunk_ids=[],
+            retrieval_top_score=None,
+            is_answered=loi is None,
+            refusal_reason=None if loi is None else "LOW_CONFIDENCE",
+            model_name=kq.model_name if kq else s.llm_model,
+            model_version=kq.model_version if kq else None,
+            prompt_tokens=vao,
+            completion_tokens=ra,
+            cost_vnd=round(
+                (vao * s.llm_gia_vao_vnd_trieu_token + ra * s.llm_gia_ra_vnd_trieu_token)
+                / 1_000_000,
+                4,
+            ),
+            latency_ms=kq.latency_ms if kq else 0,
+            status="SUCCESS" if loi is None else "FAILED",
+            error_message=loi,
+            safety_flag=None,
+            groundedness_score=None,
+            llm_called=True,
+            is_degraded=False,
+            is_handoff=False,
+        )
+        if su_kien is not None:
+            await processed_event_repository.ghi_nhan(
+                phien, su_kien.consumer_group, su_kien.event_id, conversation_id
+            )
+    return interaction_id
+
+
+async def _danh_dau_su_kien(
+    tenant_id: str, conversation_id: UUID, su_kien: SuKienNap | None, factory: SessionFactory
+) -> None:
+    if su_kien is None:
+        return
+    async with get_tenant_session(tenant_id, factory) as phien:
+        await processed_event_repository.ghi_nhan(
+            phien, su_kien.consumer_group, su_kien.event_id, conversation_id
+        )
+
+
+async def summarize(
+    tenant_id: str,
+    conversation_id: UUID,
+    *,
+    trigger: TriggerTomTat = "CLOSING",
+    su_kien: SuKienNap | None = None,
+    java_core: JavaCoreClient | None = None,
+    bo_tom_tat: tom_tat.BoTomTat | None = None,
+    factory: SessionFactory = None,
+) -> KetQuaTomTatHoiThoai:
+    """UC026 bước 1–6, đường bất đồng bộ (worker, ``crm.conversation.closed``).
+
+    THỨ TỰ — và vì sao không gom được vào một transaction như UC019:
+    tác động chính là PATCH sang java-core (HTTP), không thể chung transaction với
+    ``ai.processed_events``. Nên:
+
+        1. kiểm sớm ``da_xu_ly`` — sự kiện trùng thì khỏi tốn LLM;
+        2. đọc lịch sử qua java-core;
+        3. luật: quá ít tin của khách ⇒ đánh dấu xong, 0 LLM;
+        4. sinh bốn phần (LLM, ``temperature = 0``);
+        5. PATCH sang java-core — LUỸ ĐẲNG (ghi đè bản mới nhất);
+        6. CÙNG một transaction: dòng ``SUMMARY`` + dòng chống trùng.
+
+    Chết giữa 5 và 6 ⇒ Kafka giao lại ⇒ tóm tắt + PATCH lần nữa: vô hại (cùng nội dung ở nhiệt độ
+    0), chỉ tốn thêm một lượt LLM. Đảo thứ tự (đánh dấu trước, PATCH sau) thì chết giữa chừng là
+    sự kiện "xong" mà hội thoại không có tóm tắt — mất việc, tệ hơn hẳn làm thừa.
+
+    Lỗi TẠM THỜI (``SummaryLlmError``, ``JavaCoreUnavailableError``, CSDL) thoát ra ngoài — worker
+    thử lại rồi DLQ, không xác nhận offset ngay (đặc tả UC026 ``LLM_ERROR``).
+    """
+    s = get_settings()
+    java_core = java_core or tao_java_core_client(s)
+    bo = bo_tom_tat or _bo_tom_tat()
+
+    if su_kien is not None:
+        async with get_tenant_session(tenant_id, factory) as phien:
+            if await processed_event_repository.da_xu_ly(
+                phien, su_kien.consumer_group, su_kien.event_id
+            ):
+                summaries.labels(trigger=trigger, outcome="TRUNG").inc()
+                return KetQuaTomTatHoiThoai("TRUNG")
+
+    cac_tin = await java_core.lay_tin_nhan(tenant_id, conversation_id)
+    if tom_tat.dem_tin_khach(cac_tin) < s.tom_tat_so_tin_khach_toi_thieu:
+        await _danh_dau_su_kien(tenant_id, conversation_id, su_kien, factory)
+        summaries.labels(trigger=trigger, outcome="BO_QUA_NGAN").inc()
+        logger.info("Tóm tắt %s: bỏ qua — %d tin, quá ngắn", conversation_id, len(cac_tin))
+        return KetQuaTomTatHoiThoai("BO_QUA_NGAN")
+
+    try:
+        kq = await bo.tom_tat(cac_tin)
+    except SummarySchemaInvalidError as loi:
+        # Vĩnh viễn với lịch sử này (nhiệt độ 0) — ghi nhận lỗi, giữ bản cũ, KHÔNG thử lại.
+        await _ghi_luot_tom_tat(
+            tenant_id, conversation_id, trigger, None,
+            so_tin=len(cac_tin), loi=loi.code, su_kien=su_kien, factory=factory,
+        )
+        summaries.labels(trigger=trigger, outcome="SAI_DINH_DANG").inc()
+        logger.warning("Tóm tắt %s: %s — giữ bản cũ", conversation_id, loi)
+        return KetQuaTomTatHoiThoai("SAI_DINH_DANG", loi=loi.code)
+
+    ban_ghi = BanGhiTomTat(
+        trigger=trigger,
+        main_need=kq.tom_tat.main_need,
+        provided_info=kq.tom_tat.provided_info,
+        unresolved_issues=kq.tom_tat.unresolved_issues,
+        next_steps=kq.tom_tat.next_steps,
+        model_version=kq.model_version,
+        summary_text=kq.tom_tat.ban_phang(),
+        generated_at=bay_gio(),
+    )
+    await java_core.ghi_tom_tat(tenant_id, conversation_id, ban_ghi)
+    interaction_id = await _ghi_luot_tom_tat(
+        tenant_id, conversation_id, trigger, kq,
+        so_tin=len(cac_tin), loi=None, su_kien=su_kien, factory=factory,
+    )
+    summaries.labels(trigger=trigger, outcome="DA_GHI").inc()
+    logger.info(
+        "Tóm tắt %s: %s, %d lượt LLM, %d khối, sửa=%s",
+        conversation_id, kq.model_version, kq.so_lan_goi, kq.so_khoi, kq.da_sua,
+    )
+    return KetQuaTomTatHoiThoai("DA_GHI", ban_ghi, interaction_id, kq.so_lan_goi)
+
+
+async def summarize_messages(
+    tenant_id: str,
+    yeu_cau: SummarizeRequest,
+    *,
+    bo_tom_tat: tom_tat.BoTomTat | None = None,
+    factory: SessionFactory = None,
+) -> SummarizeResponse:
+    """UC026, đường ĐỒNG BỘ ``POST /v1/ai/summarize``: java-core gửi kèm lịch sử, nhận bốn phần về
+    và tự ghi (nút "tóm tắt lại" — trigger ``MANUAL``). Không PATCH ngược sang java-core.
+
+    Cùng bộ tóm tắt, cùng luật bỏ qua — chỉ khác: quá ngắn thì báo lỗi rõ (người bấm đang chờ), sai
+    định dạng thì ném ``SummarySchemaInvalidError`` (đã ghi ``FAILED`` trước khi ném).
+    """
+    s = get_settings()
+    bo = bo_tom_tat or _bo_tom_tat()
+    cac_tin = [
+        TinNhanHoiThoai(nguoi_gui=m.sender, noi_dung=m.text, gui_luc=m.created_at)
+        for m in yeu_cau.messages
+    ]
+    if tom_tat.dem_tin_khach(cac_tin) < s.tom_tat_so_tin_khach_toi_thieu:
+        raise ConversationTooShortError(
+            f"Cần ít nhất {s.tom_tat_so_tin_khach_toi_thieu} tin nhắn của khách để tóm tắt"
+        )
+    try:
+        kq = await bo.tom_tat(cac_tin)
+    except SummarySchemaInvalidError as loi:
+        await _ghi_luot_tom_tat(
+            tenant_id, yeu_cau.conversation_id, yeu_cau.trigger, None,
+            so_tin=len(cac_tin), loi=loi.code, su_kien=None, factory=factory,
+        )
+        summaries.labels(trigger=yeu_cau.trigger, outcome="SAI_DINH_DANG").inc()
+        raise
+    interaction_id = await _ghi_luot_tom_tat(
+        tenant_id, yeu_cau.conversation_id, yeu_cau.trigger, kq,
+        so_tin=len(cac_tin), loi=None, su_kien=None, factory=factory,
+    )
+    summaries.labels(trigger=yeu_cau.trigger, outcome="DA_GHI").inc()
+    return SummarizeResponse(
+        trigger=yeu_cau.trigger,
+        main_need=kq.tom_tat.main_need,
+        provided_info=kq.tom_tat.provided_info,
+        unresolved_issues=kq.tom_tat.unresolved_issues,
+        next_steps=kq.tom_tat.next_steps,
+        model_version=kq.model_version,
+        summary_text=kq.tom_tat.ban_phang(),
+        generated_at=bay_gio(),
+        interaction_id=interaction_id,
+    )
+
+
+# ── UC041 — xoá dữ liệu cá nhân (ADR-0033) ───────────────────────────────────
+
+GHI_CHU_GIOI_HAN_XOA = (
+    "Phạm vi xoá phía AI: tài liệu tri thức gắn với khách (kể cả tệp gốc), mọi lượt xử lý AI và "
+    "đánh giá của các hội thoại được gửi kèm, đặc trưng lead. KHÔNG vươn tới hệ thống bên ngoài đã "
+    "nhận dữ liệu qua MCP, và không tới nhà cung cấp LLM — nội dung gửi đi đã che số điện thoại, "
+    "email, CCCD nhưng không xoá được ở phía họ."
+)
+
+
+async def forget_contact(
+    tenant_id: str,
+    contact_id: UUID,
+    conversation_ids: Sequence[UUID],
+    *,
+    java_core: JavaCoreClient | None = None,
+    factory: SessionFactory = None,
+) -> ErasureResult:
+    """UC041 — xoá dữ liệu cá nhân của MỘT khách ở phía Track B. LUỸ ĐẲNG: gọi lại sau khi đã xoá
+    thì mọi mục ra 0 dòng ``DONE``; gọi lại sau ``PARTIALLY_FAILED`` thì làm nốt phần hỏng.
+
+    Ba chặng, mỗi chặng một mục trong kết quả — đặc tả: "tiến độ theo từng bảng":
+
+    1. MỘT transaction CSDL: tài liệu + đoạn của khách, lượt + đánh giá của các hội thoại. Commit
+       TRƯỚC khi chạm hệ thống ngoài — truy hồi ngừng thấy dữ liệu đó ngay tại commit, nên câu trả
+       lời sinh sau đó không thể trích nó. Hỏng ở đây thì ném (500) — chưa xoá gì, java-core gọi
+       lại.
+    2. Tệp gốc trên S3 — sau commit: S3 hỏng thì tệp còn nhưng không dòng nào trỏ tới, không truy
+       hồi được; mục ghi ``FAILED`` để lần gọi lại xoá tiếp.
+    3. Đặc trưng lead QUA API java-core (``sales.lead_scores``, ADR-0016 — không có
+       ``ai.lead_features``). java-core sập ⇒ mục ``FAILED``, không kết luận cả yêu cầu (luồng phụ
+       9.1 nhìn từ phía ai-service).
+
+    Bên AI KHÔNG tự khởi động việc xoá — chỉ chạy khi java-core gọi, sau bước xác minh danh tính
+    (chốt ``X-Internal-Token`` ở tầng API). Số tổng hợp (``GET /v1/ai/quality``) tính trực tiếp từ
+    bảng nên giảm theo — không có bảng tổng hợp nào của Track B để "giữ ở dạng tổng hợp".
+    """
+    s = get_settings()
+    java_core = java_core or tao_java_core_client(s)
+
+    async with get_tenant_session(tenant_id, factory) as phien:
+        tai_lieu = await document_repository.xoa_tai_lieu_theo_khach(phien, contact_id)
+        luot = await interaction_repository.xoa_theo_hoi_thoai(phien, conversation_ids)
+
+    cac_muc = [
+        ErasureItem(target_schema="knowledge", target_table="knowledge_documents", action="DELETE",
+                    status="DONE", affected_rows=tai_lieu.so_tai_lieu),
+        ErasureItem(target_schema="knowledge", target_table="knowledge_chunks", action="DELETE",
+                    status="DONE", affected_rows=tai_lieu.so_doan),
+        ErasureItem(target_schema="ai", target_table="ai_interactions", action="DELETE",
+                    status="DONE", affected_rows=luot.so_luot),
+        ErasureItem(target_schema="ai", target_table="ai_feedback", action="DELETE",
+                    status="DONE", affected_rows=luot.so_danh_gia),
+        ErasureItem(target_schema="ai", target_table="ai_tool_calls", action="DELETE",
+                    status="DONE", affected_rows=luot.so_goi_cong_cu),
+    ]
+
+    # ── 2. Tệp gốc ───────────────────────────────────────────────────────────
+    so_tep = 0
+    loi_tep: str | None = None
+    for uri in tai_lieu.cac_tep:
+        try:
+            key = kiem_uri_thuoc_tenant(uri, tenant_id, s.s3_bucket)
+            await asyncio.to_thread(object_storage.xoa, s.s3_bucket, key)
+            so_tep += 1
+        except (ForbiddenFileUriError, StorageUnavailableError) as loi:
+            # ForbiddenFileUri: đường dẫn ngoài vùng tenant — KHÔNG BAO GIỜ xoá thứ đó.
+            loi_tep = loi.code
+            logger.warning("UC041: không xoá được một tệp gốc (%s)", loi.code)
+    cac_muc.append(
+        ErasureItem(target_schema="s3", target_table=s.s3_bucket, action="DELETE",
+                    status="FAILED" if loi_tep else "DONE", affected_rows=so_tep,
+                    error_code=loi_tep)
+    )
+
+    # ── 3. Đặc trưng lead qua java-core ──────────────────────────────────────
+    try:
+        so_lead = await java_core.xoa_dac_trung_lead(tenant_id, contact_id)
+        cac_muc.append(
+            ErasureItem(target_schema="sales", target_table="lead_scores", action="DELETE",
+                        status="DONE", affected_rows=so_lead)
+        )
+    except AiServiceError as loi:
+        logger.warning("UC041: java-core không xoá được đặc trưng lead (%s)", loi.code)
+        cac_muc.append(
+            ErasureItem(target_schema="sales", target_table="lead_scores", action="DELETE",
+                        status="FAILED", affected_rows=0, error_code=loi.code)
+        )
+
+    for m in cac_muc:
+        if m.affected_rows:
+            privacy_erasures.labels(table=f"{m.target_schema}.{m.target_table}").inc(
+                m.affected_rows
+            )
+    trang_thai = "COMPLETED" if all(m.status == "DONE" for m in cac_muc) else "PARTIALLY_FAILED"
+    # Nhật ký kiểm toán: định danh + số đếm, KHÔNG nội dung. Biên bản chính thức là của java-core
+    # (platform.audit_logs) — ai-service không ghi schema của Track A.
+    logger.info(
+        "kiem_toan_rieng_tu thao_tac=XOA_DU_LIEU_CA_NHAN khach=%s so_hoi_thoai=%d trang_thai=%s %s",
+        contact_id, len(conversation_ids), trang_thai,
+        " ".join(f"{m.target_schema}.{m.target_table}={m.affected_rows}" for m in cac_muc),
+    )
+    return ErasureResult(
+        contact_id=contact_id, status=trang_thai, items=cac_muc, note=GHI_CHU_GIOI_HAN_XOA
+    )

@@ -1,10 +1,13 @@
 """Tiến trình Kafka consumer — chạy khi ``RUN_MODE=worker`` (Master Plan §6.6). [PRODUCTION]
 
-Hiện tiêu thụ một topic do java-core phát:
+Tiêu thụ hai topic do java-core phát — mỗi topic một "kênh": consumer + group + vòng lặp riêng:
 
     crm.kb.document.uploaded  → UC018/UC019  nạp và lập chỉ mục tài liệu   (group ingestion-cg)
+    crm.conversation.closed   → UC026        tóm tắt hội thoại             (group summarizer-cg)
 
-``crm.conversation.closed`` → UC026 (tóm tắt) sẽ thêm ở Ngày 13 theo cùng khuôn.
+Group riêng cho từng kênh (docs/events/README.md): một job nạp 3 phút không làm hội thoại vừa đóng
+phải chờ tóm tắt, và offset của kênh này không bao giờ xác nhận hộ kênh kia. Bốn luật dưới đây áp
+cho MỖI kênh. Đặt ``KAFKA_TOPIC_HOI_THOAI_DONG`` rỗng thì tắt kênh tóm tắt.
 
 Hai vòng nền chạy cạnh consumer: bộ quét job kẹt (UC019, ADR-0024) và bộ chấm tự động (UC027 bước
 6, mẫu 5% lượt RAG đã trả lời — chỉ khi ``LLM_MODE=remote``).
@@ -36,7 +39,9 @@ import asyncio
 import logging
 import signal
 from contextlib import suppress
+from dataclasses import dataclass
 from datetime import timedelta
+from typing import Protocol
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, ConsumerRecord, TopicPartition
 from aiokafka.errors import CommitFailedError
@@ -46,11 +51,26 @@ from src.ai.config import Settings, get_settings
 from src.ai.db import session as db_session
 from src.ai.events.dlq import dung_header_dlq
 from src.ai.inference.clients import EmbedClient, tao_embed_client
+from src.ai.integrations.java_core import JavaCoreClient
 from src.ai.rag.ingest.tien_trinh import bo_phan_tich
 from src.ai.telemetry.logging import setup_logging
-from src.worker.consumers.tai_lieu import XuLyTaiLieu
+from src.worker.consumers.tai_lieu import KetQuaBanTin, XuLyTaiLieu
+from src.worker.consumers.tom_tat import XuLyTomTat
 
 logger = logging.getLogger(__name__)
+
+
+class _BoXuLy(Protocol):
+    async def xu_ly_ban_tin(self, gia_tri, headers) -> KetQuaBanTin: ...
+
+
+@dataclass(frozen=True, slots=True)
+class Kenh:
+    """Một topic, một consumer group, một bộ xử lý bản tin."""
+
+    topic: str
+    group: str
+    xu_ly: _BoXuLy
 
 
 class Worker:
@@ -63,6 +83,7 @@ class Worker:
         *,
         embed: EmbedClient,
         factory=None,
+        java_core: JavaCoreClient | None = None,
     ) -> None:
         self.settings = settings
         self.embed = embed
@@ -74,14 +95,30 @@ class Worker:
             cho_thu_lai_s=settings.kb_cho_thu_lai_s,
             factory=factory,
         )
+        self.cac_kenh = [
+            Kenh(settings.kafka_topic_tai_lieu, settings.kafka_consumer_group, self.xu_ly)
+        ]
+        if settings.kafka_topic_hoi_thoai_dong:
+            self.xu_ly_tom_tat = XuLyTomTat(
+                consumer_group=settings.kafka_consumer_group_tom_tat,
+                java_core=java_core,
+                factory=factory,
+            )
+            self.cac_kenh.append(
+                Kenh(
+                    settings.kafka_topic_hoi_thoai_dong,
+                    settings.kafka_consumer_group_tom_tat,
+                    self.xu_ly_tom_tat,
+                )
+            )
         self.dung = asyncio.Event()
 
-    def _tao_consumer(self) -> AIOKafkaConsumer:
+    def _tao_consumer(self, kenh: Kenh) -> AIOKafkaConsumer:
         s = self.settings
         return AIOKafkaConsumer(
-            s.kafka_topic_tai_lieu,
+            kenh.topic,
             bootstrap_servers=s.kafka_bootstrap,
-            group_id=s.kafka_consumer_group,
+            group_id=kenh.group,
             enable_auto_commit=False,          # luật 1
             max_poll_interval_ms=600_000,      # luật 3
             # Group mới (lần đầu triển khai) đọc từ ĐẦU topic: sự kiện phát trước khi worker có mặt
@@ -99,9 +136,13 @@ class Worker:
         )
 
     async def _xu_ly_mot(
-        self, ban_tin: ConsumerRecord, consumer: AIOKafkaConsumer, producer: AIOKafkaProducer
+        self,
+        kenh: Kenh,
+        ban_tin: ConsumerRecord,
+        consumer: AIOKafkaConsumer,
+        producer: AIOKafkaProducer,
     ) -> None:
-        ket_qua = await self.xu_ly.xu_ly_ban_tin(ban_tin.value, ban_tin.headers)
+        ket_qua = await kenh.xu_ly.xu_ly_ban_tin(ban_tin.value, ban_tin.headers)
 
         if ket_qua.hanh_dong == "DLQ":
             # send_and_wait: chờ broker xác nhận. Hỏng ở đây thì ném ra — offset KHÔNG được xác
@@ -115,7 +156,7 @@ class Worker:
                     topic=ban_tin.topic,
                     partition=ban_tin.partition,
                     offset=ban_tin.offset,
-                    consumer_group=self.settings.kafka_consumer_group,
+                    consumer_group=kenh.group,
                     ma_loi=ket_qua.ma_loi or "UNKNOWN",
                     thong_diep=ket_qua.thong_diep or "",
                 ),
@@ -140,7 +181,9 @@ class Worker:
                 ban_tin.topic, ban_tin.partition, ban_tin.offset,
             )
 
-    async def _vong_kafka(self, consumer: AIOKafkaConsumer, producer: AIOKafkaProducer) -> None:
+    async def _vong_kafka(
+        self, kenh: Kenh, consumer: AIOKafkaConsumer, producer: AIOKafkaProducer
+    ) -> None:
         while not self.dung.is_set():
             # getmany có timeout thay vì getone: getone chặn tới khi có bản tin, nên SIGTERM phải
             # chờ bản tin kế tiếp mới được nhìn thấy. max_records=1: xử lý và xác nhận từng bản
@@ -148,7 +191,7 @@ class Worker:
             lo = await consumer.getmany(timeout_ms=1000, max_records=1)
             for ban_tins in lo.values():
                 for ban_tin in ban_tins:
-                    await self._xu_ly_mot(ban_tin, consumer, producer)
+                    await self._xu_ly_mot(kenh, ban_tin, consumer, producer)
 
     async def _vong_quet(self) -> None:
         """Bộ quét job kẹt (ADR-0024): mỗi ``kb_chu_ky_quet_s`` giây một lần.
@@ -202,37 +245,50 @@ class Worker:
 
     async def chay(self) -> None:
         """Chạy tới khi ``self.dung`` được đặt, rồi dừng sạch: xong việc dở → rời group → trả tài
-        nguyên."""
-        consumer = self._tao_consumer()
+        nguyên. Một kênh hỏng (ví dụ DLQ không ghi được) thì cả worker dừng — các kênh còn lại làm
+        nốt bản tin đang dở rồi mới thoát; Kubernetes khởi động lại tiến trình."""
+        cac_consumer = [(k, self._tao_consumer(k)) for k in self.cac_kenh]
         producer = self._tao_producer()
         await producer.start()
+        da_chay: list[AIOKafkaConsumer] = []
         try:
-            await consumer.start()
+            for _, consumer in cac_consumer:
+                await consumer.start()
+                da_chay.append(consumer)
+            quet = asyncio.create_task(self._vong_quet(), name="quet-job-ket")
+            cham = asyncio.create_task(self._vong_cham_tu_dong(), name="cham-tu-dong")
+            vong = [
+                asyncio.create_task(self._vong_kafka(k, c, producer), name=f"kafka-{k.group}")
+                for k, c in cac_consumer
+            ]
             try:
-                quet = asyncio.create_task(self._vong_quet(), name="quet-job-ket")
-                cham = asyncio.create_task(self._vong_cham_tu_dong(), name="cham-tu-dong")
-                try:
-                    await self._vong_kafka(consumer, producer)
-                except asyncio.CancelledError:
-                    # Bị HUỶ (không phải SIGTERM): không chờ ai làm nốt gì — job đang treo của bộ
-                    # quét sẽ giữ tiến trình sống mãi. Tài liệu dở dang để bộ quét lần sau nhặt.
-                    quet.cancel()
-                    cham.cancel()
-                    raise
-                finally:
-                    self.dung.set()
-                    # SIGTERM: bộ quét đang giữa một job thì chờ nó xong — cùng tinh thần luật 4.
-                    # Bộ chấm thì không đáng chờ: lượt đang chấm dở sẽ được xét lại sau khởi động.
-                    cham.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await quet
-                    with suppress(asyncio.CancelledError):
-                        await cham
+                await asyncio.gather(*vong)
+            except asyncio.CancelledError:
+                # Bị HUỶ (không phải SIGTERM): không chờ ai làm nốt gì — job đang treo của bộ
+                # quét sẽ giữ tiến trình sống mãi. Tài liệu dở dang để bộ quét lần sau nhặt.
+                quet.cancel()
+                cham.cancel()
+                for t in vong:
+                    t.cancel()
+                raise
             finally:
-                # stop() rời group ngay (không chờ session timeout) — partition được chia lại cho
-                # replica khác trong vài giây. KHÔNG tự xác nhận offset nào (luật 1).
-                await consumer.stop()
+                self.dung.set()
+                # Kênh còn lại (khi một kênh hỏng) làm nốt bản tin đang dở — luật 4.
+                for t in vong:
+                    with suppress(Exception, asyncio.CancelledError):
+                        await t
+                # SIGTERM: bộ quét đang giữa một job thì chờ nó xong — cùng tinh thần luật 4.
+                # Bộ chấm thì không đáng chờ: lượt đang chấm dở sẽ được xét lại sau khởi động.
+                cham.cancel()
+                with suppress(asyncio.CancelledError):
+                    await quet
+                with suppress(asyncio.CancelledError):
+                    await cham
         finally:
+            # stop() rời group ngay (không chờ session timeout) — partition được chia lại cho
+            # replica khác trong vài giây. KHÔNG tự xác nhận offset nào (luật 1).
+            for consumer in da_chay:
+                await consumer.stop()
             await producer.stop()
 
 
@@ -248,9 +304,9 @@ async def run_worker() -> None:
         vong_lap.add_signal_handler(tin_hieu, worker.dung.set)
 
     logger.info(
-        "Worker nạp tài liệu: topic %s, group %s, Kafka %s, AI_MODE=%s",
-        settings.kafka_topic_tai_lieu, settings.kafka_consumer_group,
-        settings.kafka_bootstrap, settings.ai_mode,
+        "Worker: kênh %s, Kafka %s, AI_MODE=%s, LLM_MODE=%s, JAVA_CORE_MODE=%s",
+        ", ".join(f"{k.topic}/{k.group}" for k in worker.cac_kenh),
+        settings.kafka_bootstrap, settings.ai_mode, settings.llm_mode, settings.java_core_mode,
     )
     try:
         await worker.chay()

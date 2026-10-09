@@ -879,26 +879,48 @@ không ghi thẳng.**
 
 **Việc — UC026:**
 
-- [ ] 🤖 Worker nhận sự kiện hội thoại đóng, sinh tóm tắt — *verify: **4 PHẦN BẮT BUỘC** (nhu cầu
+- [x] 🤖 Worker nhận sự kiện hội thoại đóng, sinh tóm tắt — *verify: **4 PHẦN BẮT BUỘC** (nhu cầu
       chính · thông tin khách đã cung cấp · vấn đề chưa giải quyết · bước tiếp theo đề xuất);
       thiếu phần nào là vi phạm `ck_conv_summary_complete`.*
-- [ ] 🖐 **`temperature = 0`** để tái lập được.
-- [ ] 🖐 **GHIM phiên bản model làm ẢNH CHỤP**, không đọc tham chiếu.
+      (AI viết 09/10 — worker hai kênh, group `summarizer-cg` (`worker/consumers/tom_tat.py`); bốn
+      phần kiểm bằng Pydantic, một vòng sửa, vẫn sai thì giữ bản cũ; Gemini thật **20/20 × 4/4**
+      cả hai lượt; Kafka thật: gửi trùng hai lần → PATCH đúng một lần. ADR-0032)
+- [x] 🖐 **`temperature = 0`** để tái lập được.
+      (AI viết 09/10 — hằng `tom_tat.NHIET_DO`, client riêng không đọc `LLM_TEMPERATURE`; test đọc thân
+      HTTP thật. Đo được: Gemini ở 0 vẫn KHÔNG tất định — 0/20 bản giống hệt, tương đồng 0,746,
+      không nhận `seed` ⇒ tái lập dựa vào ảnh chụp, ghi ở ADR-0032 Đánh đổi)
+- [x] 🖐 **GHIM phiên bản model làm ẢNH CHỤP**, không đọc tham chiếu.
       *Đổi model rồi đọc qua tham chiếu thì mọi bản tóm tắt cũ **tự khai sai** phiên bản.*
-- [ ] 🤖 Lưu `jsonb` **qua API của java-core** — *verify: không có câu `INSERT`/`UPDATE` nào chạm
+      (AI viết 09/10 — `chup_phien_ban`: model NHÀ CUNG CẤP TRẢ VỀ + `@tt2` (phiên bản lời nhắc),
+      ≤ 50 ký tự; đột biến "đọc từ cấu hình" ban đầu SỐNG — sửa test, giờ đỏ)
+- [x] 🤖 Lưu `jsonb` **qua API của java-core** — *verify: không có câu `INSERT`/`UPDATE` nào chạm
       schema `engagement` (ADR-0002).*
+      (AI viết 09/10 — `PATCH /internal/conversations/{id}/summary` qua `integrations/java_core/`;
+      java-core CHƯA có endpoint ⇒ `JAVA_CORE_MODE=mock`, client HTTP thật test bằng `MockTransport`;
+      thứ tự PATCH rồi mới đánh dấu xong — đột biến đảo thứ tự làm test đỏ; grep `engagement` trong
+      `src/` chỉ ra comment)
 
 **Việc — UC041:**
 
-- [ ] 🖐 Endpoint xoá dữ liệu cá nhân — xoá **mọi chunk theo `contact_id`**, xoá đặc trưng lead
+- [x] 🖐 Endpoint xoá dữ liệu cá nhân — xoá **mọi chunk theo `contact_id`**, xoá đặc trưng lead
       **QUA API** trên `sales.lead_scores`.
       ⚠️ *Không có `ai.lead_features` để xoá — bảng đó không tồn tại và sẽ không tạo (ADR-0016).*
-- [ ] 🖐 **Xoá hội thoại nguồn KHÔNG kéo theo xoá cơ hội tiềm năng** — liên kết về rỗng, bản ghi
+      (AI viết 09/10 — `DELETE /v1/ai/privacy/contacts/{id}?conversationId=…`, chốt `X-Internal-Token`;
+      xoá cứng tài liệu + đoạn + tệp S3 (kể cả dòng dõi cùng tệp), lượt + đánh giá của các hội thoại,
+      đặc trưng lead qua java-core (giả); luỹ đẳng, `PARTIALLY_FAILED` khi java-core sập. ADR-0033)
+- [x] 🖐 **Xoá hội thoại nguồn KHÔNG kéo theo xoá cơ hội tiềm năng** — liên kết về rỗng, bản ghi
       vẫn còn.
       *Nghị định 13/2023/NĐ-CP yêu cầu xoá **dữ liệu cá nhân**, không phải xoá **dấu vết kinh doanh**.*
-- [ ] 🤖 Nếu cần chỉ mục bộ phận theo `contact_id` → migration **V210** (hoặc số kế tiếp) —
+      (AI kiểm 09/10 — đã đúng ở java-core: V132 của Dev B `ON DELETE SET NULL (source_conversation_id)`
+      + `LeadIntegrationTest:160`; phía AI chỉ xoá đặc trưng lead, không đụng `sales.leads`. Phát hiện
+      V125 `contact_notes.conversation_id` NO ACTION sẽ CHẶN xoá hội thoại có ghi chú — báo Dev B)
+- [x] 🤖 Nếu cần chỉ mục bộ phận theo `contact_id` → migration **V210** (hoặc số kế tiếp) —
       *verify: không trùng số với migration Dev B có thể đã tạo; `ls migration/` trước khi đặt tên.*
-- [ ] 🖐 Test: câu trả lời sinh **SAU** khi xoá không còn trích dẫn dữ liệu đã xoá.
+      (AI viết 09/10 — **V214** (V210–V213 đã có chủ): cột `knowledge_documents.contact_id` + chỉ mục
+      bộ phận `ix_doc_khach`; đã chạy trên CSDL dev)
+- [x] 🖐 Test: câu trả lời sinh **SAU** khi xoá không còn trích dẫn dữ liệu đã xoá.
+      (AI viết 09/10 — `test_cau_tra_loi_sau_khi_xoa_khong_con_trich_du_lieu_da_xoa` (RagAnswerer thật,
+      LLM giả trích mọi đoạn); hạ tầng thật + Gemini: trước 1 đoạn của khách → sau 0)
 
 **File sẽ đụng:** `src/worker/consumers/` · `src/ai/rag/generate/` ·
 `src/ai/integrations/java_core/` · `ai-service/migration/V21x__*.sql`
@@ -914,6 +936,9 @@ không ghi thẳng.**
 
 **Cổng ra (DoD):** 4/4 phần tóm tắt xuất hiện trên 20 hội thoại mẫu · xoá xong thì câu trả lời
 mới không còn trích dẫn dữ liệu đã xoá.
+→ ✅ cả hai (`docs/report/uc026-uc041-ngay12-2026-10-09.md`). Còn nợ (Track A): phát
+`crm.conversation.closed`, ba endpoint `/internal/*`, sửa FK V125; tài liệu riêng của khách trong kho chung
+bị trích cho người khác — đưa vào Ngày 17.
 
 **Minh chứng báo cáo:** 4/4 phần tóm tắt trên 20 hội thoại mẫu · báo cáo xoá dữ liệu (số chunk +
 số dòng đặc trưng đã xoá cho một contact) · chứng minh câu trả lời sinh sau đó không còn trích dẫn

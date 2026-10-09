@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from src.ai.exceptions import (
     AiServiceError,
+    ConversationTooShortError,
     DocumentArchivedError,
     DocumentBusyError,
     DocumentNotFoundError,
@@ -24,10 +25,14 @@ from src.ai.exceptions import (
     FileTooLargeError,
     ForbiddenFileUriError,
     InteractionNotFoundError,
+    InternalOnlyError,
     InvalidMetadataError,
     InvalidRaterError,
+    JavaCoreUnavailableError,
     StorageUnavailableError,
     StoredFileNotFoundError,
+    SummaryLlmError,
+    SummarySchemaInvalidError,
     TenantContextMissingError,
     UnsupportedFormatError,
 )
@@ -39,6 +44,7 @@ logger = logging.getLogger(__name__)
 _MA_HTTP: dict[type[AiServiceError], int] = {
     TenantContextMissingError: 401,
     ForbiddenFileUriError: 403,
+    InternalOnlyError: 403,
     DocumentNotFoundError: 404,
     InteractionNotFoundError: 404,
     DocumentBusyError: 409,
@@ -52,6 +58,11 @@ _MA_HTTP: dict[type[AiServiceError], int] = {
     FileTooLargeError: 413,
     UnsupportedFormatError: 415,
     StorageUnavailableError: 503,
+    # UC026 — đường đồng bộ: người bấm "tóm tắt lại" cần biết lỗi tạm thời hay vĩnh viễn.
+    ConversationTooShortError: 422,
+    SummarySchemaInvalidError: 422,
+    SummaryLlmError: 503,
+    JavaCoreUnavailableError: 503,
 }
 
 # Mã nghiệp vụ cho lỗi validate, theo từng đường dẫn. Đặc tả UC018 gọi lỗi siêu dữ liệu là
@@ -60,6 +71,7 @@ _MA_HTTP: dict[type[AiServiceError], int] = {
 _MA_VALIDATE_THEO_DUONG_DAN: dict[str, str] = {
     "/v1/ai/kb/documents": "INVALID_METADATA",
     "/v1/ai/feedback": "INVALID_FEEDBACK",
+    "/v1/ai/summarize": "INVALID_REQUEST",
 }
 
 

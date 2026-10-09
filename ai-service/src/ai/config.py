@@ -44,6 +44,15 @@ class Settings(BaseSettings):
 
     # ── java-core: bề mặt DUY NHẤT để chạm dữ liệu nghiệp vụ ─────────────
     java_core_url: str = "http://java-core:8081"
+    # mock: client giả trong bộ nhớ (src/ai/integrations/java_core/client.py). Ba endpoint
+    # /internal/* mà UC026/UC041 cần CHƯA có ở java-core (09/10) — nháp ở
+    # docs/contracts/uc026-uc041-tom-tat-va-xoa-du-lieu.md. Có rồi thì đổi sang remote.
+    java_core_mode: Literal["remote", "mock"] = "mock"
+    java_core_timeout_s: float = Field(default=5.0, gt=0)
+    # Bí mật dùng chung cho endpoint CHỈ java-core được gọi (DELETE /v1/ai/privacy/…). Rỗng =
+    # endpoint đóng hẳn (403). Gateway mở /ai/v1/** cho mọi JWT của tenant: không có chốt này thì
+    # nhân viên bất kỳ xoá được dữ liệu cá nhân mà bỏ qua bước xác minh danh tính của UC041.
+    internal_api_token: str = ""
 
     # ── MCP: repository riêng mcp-server-mock ────────────────────────────
     mcp_server_url: str = "http://host.docker.internal:9000"
@@ -134,6 +143,18 @@ class Settings(BaseSettings):
     # Lần quét đầu sau khi worker khởi động nhìn lại bao xa.
     cham_tu_dong_nhin_lai_s: float = Field(default=86400.0, gt=0)
 
+    # ── Tóm tắt hội thoại — UC026, chạy nền trong worker (ADR-0032) ───────
+    # Dưới chừng này tin nhắn của KHÁCH thì không tóm tắt (luồng phụ 1.1): một câu chào không đáng
+    # một lượt gọi mô hình. Luật, 0 đồng — đúng thứ tự Rule → ML → LLM.
+    tom_tat_so_tin_khach_toi_thieu: int = Field(default=2, ge=1)
+    # Lịch sử dài hơn chừng này ký tự thì tóm tắt từng khối rồi gộp (luồng phụ 2.1). ~12.000 ký tự
+    # tiếng Việt ≈ 4.000 token: còn xa cửa sổ của Flash-Lite, nhưng lời nhắc ngắn thì trả lời nhanh
+    # và ít "quên giữa" hơn.
+    tom_tat_ky_tu_moi_khoi: int = Field(default=12_000, ge=1_000)
+    # Chạy nền, không ai chờ — hạn chót rộng như bộ chấm tự động, không phải 2,5 s của lượt chat.
+    tom_tat_han_chot_s: float = Field(default=20.0, gt=0)
+    tom_tat_max_tokens: int = Field(default=1024, gt=0)
+
     # ── Kho tệp S3 — UC018 (ADR-0022) ────────────────────────────────────
     # java-core GHI tệp gốc vào bucket, ai-service chỉ ĐỌC. Key có dạng {tenant_id}/… — cô lập
     # ngay ở tầng lưu trữ, không chỉ ở truy vấn. Dev: RustFS trong compose. Cloud: AWS S3
@@ -176,6 +197,9 @@ class Settings(BaseSettings):
 
     # ── Kafka — worker nạp tài liệu ─────────────────────────────────────
     kafka_topic_tai_lieu: str = "crm.kb.document.uploaded"
+    # UC026 — group riêng (docs/events/README.md): offset của tóm tắt không dính vào offset nạp.
+    kafka_topic_hoi_thoai_dong: str = "crm.conversation.closed"
+    kafka_consumer_group_tom_tat: str = "summarizer-cg"
     # Master Plan §2.6: "Lỗi vĩnh viễn đẩy sang ai.dlq (giữ 30 ngày)". Bộ tên topic đã
     # chốt ở ADR-0017 (quyết định 2) — tên này chỉ ai-service ghi, không ai tiêu thụ tự động.
     kafka_topic_dlq: str = "ai.dlq"

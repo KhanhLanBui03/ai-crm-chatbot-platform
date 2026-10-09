@@ -48,6 +48,8 @@ class KetQuaBanTin:
     ma_loi: str | None = None
     thong_diep: str | None = None
     ket_qua_nap: service.KetQuaNap | None = None
+    # Consumer tóm tắt (UC026, ``tom_tat.py``) dùng chung lớp này — worker chỉ đọc ba trường đầu.
+    ket_qua_tom_tat: service.KetQuaTomTatHoiThoai | None = None
 
 
 def _cho_lan(cho_s: Sequence[float], lan_thu: int) -> float:

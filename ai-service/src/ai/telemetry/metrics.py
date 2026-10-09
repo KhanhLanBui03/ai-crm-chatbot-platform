@@ -60,3 +60,17 @@ auto_eval = Counter(
     "Số lượt bộ chấm tự động đã xử lý",
     labelnames=("outcome",),  # GHI | KHONG_CHAC | BO_QUA | LOI
 )
+
+# UC026 — kết cục từng lượt tóm tắt. SAI_DINH_DANG khác 0 kéo dài = lời nhắc cần sửa.
+summaries = Counter(
+    "ai_summaries_total",
+    "Số lượt tóm tắt hội thoại theo kết cục",
+    labelnames=("trigger", "outcome"),  # outcome: DA_GHI | BO_QUA_NGAN | TRUNG | SAI_DINH_DANG
+)
+
+# UC041 — số dòng đã xoá theo bảng. Không có contact_id/tenant làm nhãn (lý do ở đầu tệp).
+privacy_erasures = Counter(
+    "ai_privacy_erased_rows_total",
+    "Số dòng dữ liệu cá nhân đã xoá theo bảng",
+    labelnames=("table",),
+)

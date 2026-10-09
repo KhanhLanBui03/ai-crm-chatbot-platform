@@ -440,6 +440,8 @@ class TaiLieu:
     updated_at: datetime
     # Dòng này là bản bóng nạp lại của tài liệu nào (V213), nếu có.
     replaces_document_id: UUID | None
+    # Khách hàng mà tài liệu này mang dữ liệu cá nhân của họ (V214, UC041), nếu có.
+    contact_id: UUID | None
     # Bản bóng ĐANG nạp lại tài liệu này (PENDING/PROCESSING), nếu có — job_id để xem tiến độ.
     reindex_document_id: UUID | None
 
@@ -447,7 +449,7 @@ class TaiLieu:
 _COT_TAI_LIEU = """
     d.id, d.title, d.description, d.language, d.source_type, d.file_name, d.mime_type,
     d.file_size_bytes, d.status, d.version, d.chunk_count, d.error_message, d.uploaded_by,
-    d.indexed_at, d.created_at, d.updated_at, d.replaces_document_id,
+    d.indexed_at, d.created_at, d.updated_at, d.replaces_document_id, d.contact_id,
     (SELECT b.id FROM knowledge.knowledge_documents b
       WHERE b.replaces_document_id = d.id AND b.status IN ('PENDING', 'PROCESSING'))
 """
@@ -531,13 +533,13 @@ async def lay_tai_lieu(
 
 
 async def cap_nhat_sieu_du_lieu(
-    session: AsyncSession, document_id: UUID, thay_doi: dict[str, str | None]
+    session: AsyncSession, document_id: UUID, thay_doi: dict[str, object]
 ) -> None:
-    """Chỉ ``title`` và ``description`` — KHÔNG đụng ``knowledge_chunks`` (chỉ mục vector giữ
-    nguyên). Trùng ``(tenant, title, version)`` thì ``uq_doc_title_version`` nổ ``IntegrityError``
-    ngay tại câu lệnh — tầng service dịch thành 422.
+    """``title``, ``description`` và ``contact_id`` (V214) — KHÔNG đụng ``knowledge_chunks`` (chỉ
+    mục vector giữ nguyên). Trùng ``(tenant, title, version)`` thì ``uq_doc_title_version`` nổ
+    ``IntegrityError`` ngay tại câu lệnh — tầng service dịch thành 422.
     """
-    cot = [c for c in ("title", "description") if c in thay_doi]
+    cot = [c for c in ("title", "description", "contact_id") if c in thay_doi]
     if not cot:
         return
     await session.execute(
@@ -582,6 +584,9 @@ async def tao_ban_bong(session: AsyncSession, cu: TaiLieu) -> tuple[UUID, int]:
     """Bản bóng ``PENDING`` của tài liệu ``cu`` (ADR-0031): cùng tệp, cùng siêu dữ liệu, version kế
     tiếp, ``replaces_document_id = cu.id``. Trả ``(id, version)``.
 
+    Chép cả ``contact_id`` (V214): bản bóng mang đúng dữ liệu của bản cũ — mất liên kết ở đây là
+    UC041 bỏ sót bản mới nhất của một tài liệu chứa dữ liệu cá nhân.
+
     Bộ quét job kẹt nhặt nó trong ≤ 1 chu kỳ (V213). Đã có một lượt nạp lại đang chạy thì
     ``uq_doc_mot_luot_nap_lai`` nổ ``IntegrityError`` — tầng service dịch thành 409.
     """
@@ -592,11 +597,11 @@ async def tao_ban_bong(session: AsyncSession, cu: TaiLieu) -> tuple[UUID, int]:
             INSERT INTO knowledge.knowledge_documents (
                 tenant_id, title, description, language, source_type, file_name, file_path,
                 source_url, mime_type, file_size_bytes, status, version, uploaded_by,
-                replaces_document_id
+                replaces_document_id, contact_id
             )
             SELECT ai.current_tenant(), d.title, d.description, d.language, d.source_type,
                    d.file_name, d.file_path, d.source_url, d.mime_type, d.file_size_bytes,
-                   'PENDING', :version, d.uploaded_by, d.id
+                   'PENDING', :version, d.uploaded_by, d.id, d.contact_id
               FROM knowledge.knowledge_documents d
              WHERE d.id = :id
             RETURNING id
@@ -625,3 +630,50 @@ async def tai_lieu_can_nap_lai(session: AsyncSession) -> list[TaiLieu]:
         ),
     )
     return [TaiLieu(*d) for d in ket_qua.all()]
+
+
+# ── UC041 — xoá dữ liệu cá nhân (ADR-0033) ───────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class KetQuaXoaTaiLieu:
+    so_tai_lieu: int
+    so_doan: int
+    # Đường dẫn tệp gốc (``s3://…``) đã mất dòng trỏ tới — nơi gọi xoá object SAU khi commit.
+    cac_tep: list[str]
+
+
+async def xoa_tai_lieu_theo_khach(session: AsyncSession, contact_id: UUID) -> KetQuaXoaTaiLieu:
+    """Xoá CỨNG mọi tài liệu gắn ``contact_id`` + mọi đoạn của chúng, trong transaction của
+    ``session``. Gỡ khỏi chỉ mục (``ARCHIVED``) không đủ: tiêu đề, mô tả và tệp gốc vẫn còn.
+
+    Tính cả CÙNG DÒNG DÕI — mọi dòng trỏ cùng ``file_path`` với một dòng của khách (bản bóng nạp
+    lại, bản cũ đã ``ARCHIVED``): chúng là cùng một tệp, và ``contact_id`` có thể chỉ được gắn lên
+    bản mới nhất sau khi bản cũ đã lưu trữ.
+
+    Xoá đoạn TRƯỚC rồi xoá tài liệu — ``ON DELETE CASCADE`` của V203 cũng làm được, nhưng đếm
+    tường minh mới có số đoạn cho biên bản xoá (đặc tả UC041: tiến độ theo từng bảng). RLS chặn
+    tenant khác; ``contact_id`` của tenant khác không khớp dòng nào.
+    """
+    muc_tieu = """
+        SELECT d.id FROM knowledge.knowledge_documents d
+         WHERE d.contact_id = :contact_id
+            OR d.file_path IN (SELECT k.file_path FROM knowledge.knowledge_documents k
+                                WHERE k.contact_id = :contact_id)
+    """
+    doan = await session.execute(
+        text(f"DELETE FROM knowledge.knowledge_chunks WHERE document_id IN ({muc_tieu})"),
+        {"contact_id": contact_id},
+    )
+    tai_lieu = await session.execute(
+        text(
+            f"""
+            DELETE FROM knowledge.knowledge_documents
+             WHERE id IN ({muc_tieu})
+            RETURNING file_path
+            """
+        ),
+        {"contact_id": contact_id},
+    )
+    dong = tai_lieu.all()
+    return KetQuaXoaTaiLieu(len(dong), doan.rowcount, sorted({d[0] for d in dong if d[0]}))
