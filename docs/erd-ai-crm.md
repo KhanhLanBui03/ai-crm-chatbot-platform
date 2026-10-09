@@ -700,7 +700,7 @@ vị chính xác thì phải quay về dữ liệu thô ở `ai.ai_interactions`
 
 #### 5.23. `knowledge.knowledge_documents`
 
-> UC018 · UC019 · UC020
+> UC018 · UC019 · UC020 · UC041
 
 | Cột | Kiểu | Null | U | FK | Mô tả |
 |---|---|:--:|:--:|---|---|
@@ -720,6 +720,8 @@ vị chính xác thì phải quay về dữ liệu thô ở `ai.ai_interactions`
 | `error_message` | text | ✓ | — | — | `CHECK`: bắt buộc khi `FAILED` — hiển thị nguyên văn để người dùng sửa file |
 | `version` | int | — | ✓ | — | Tải lại cùng tên thì tăng version, **không đè bản cũ** |
 | `uploaded_by` | uuid | ✓ | — | *(logic)* | |
+| `replaces_document_id` | uuid | ✓ | — | `knowledge_documents` | **V213.** Bản bóng nạp lại của tài liệu nào — `ON DELETE SET NULL` (ADR-0031) |
+| `contact_id` | uuid | ✓ | — | *(logic)* | **V214.** Khách mà tài liệu mang dữ liệu cá nhân của họ (hợp đồng, báo giá riêng) — UC041 xoá theo cột này, chỉ mục bộ phận `ix_doc_khach (tenant_id, contact_id) WHERE contact_id IS NOT NULL`. `NULL` với tài liệu chung (ADR-0033) |
 | `indexed_at` | timestamptz | ✓ | — | — | |
 | `created_at` · `updated_at` | timestamptz | — | — | — | |
 
@@ -970,7 +972,7 @@ Mười hai cột cắt qua ranh giới Track A ↔ Track B, tất cả là `uui
 
 | Bảng nguồn (Track B) | Cột | Trỏ tới (Track A) | Toàn vẹn bảo đảm bởi |
 |---|---|---|---|
-| `knowledge.knowledge_documents` | `tenant_id` · `uploaded_by` | `tenants` · `users` | RLS + kiểm ở tầng API |
+| `knowledge.knowledge_documents` | `tenant_id` · `uploaded_by` · `contact_id` | `tenants` · `users` · `contacts` | RLS + kiểm ở tầng API |
 | `knowledge.knowledge_chunks` | `tenant_id` | `tenants` | RLS |
 | `integration.mcp_servers` | `tenant_id` · `created_by` | `tenants` · `users` | RLS + API |
 | `ai.ai_interactions` | `tenant_id` · `conversation_id` · `message_id` | `tenants` · `conversations` · `messages` | RLS + API nội bộ xác nhận hội thoại tồn tại trước khi ghi |

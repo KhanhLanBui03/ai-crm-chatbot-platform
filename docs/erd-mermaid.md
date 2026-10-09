@@ -503,6 +503,7 @@ erDiagram
         int          version         UK "phiên bản tài liệu cùng tên"
         uuid         uploaded_by        "không FK · liên làn"
         uuid         replaces_document_id FK "V213 · bản bóng nạp lại của tài liệu nào · ON DELETE SET NULL"
+        uuid         contact_id         "V214 · khách mà tài liệu mang dữ liệu cá nhân · không FK · UC041"
         timestamptz  indexed_at
         timestamptz  created_at
         timestamptz  updated_at
