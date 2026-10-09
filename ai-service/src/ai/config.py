@@ -102,14 +102,37 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     refusal_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     # Sàn liên quan theo COSINE (kế hoạch Ngày 8). Toàn tập: không đoạn nào đạt ⇒ từ chối
-    # NOT_COVERED mà không gọi LLM. Từng đoạn: đoạn dưới sàn không vào lời nhắc. Hai con số
-    # tạm theo kế hoạch — hiệu chỉnh ở Ngày 10 bằng 12 câu ngoài kho của bộ vàng.
-    rag_san_toan_tap: float = Field(default=0.25, ge=0.0, le=1.0)
+    # NOT_COVERED mà không gọi LLM. Từng đoạn: đoạn dưới sàn không vào lời nhắc.
+    # Hiệu chỉnh 09/10 (ADR-0029): với bge-m3 trên kho đo, cosine câu có đáp án thấp nhất 0,421
+    # còn câu ngoài kho cao nhất 0,650 — hai phân bố chồng nhau, mọi sàn 0–0,42 cho cùng kết quả,
+    # sàn cao hơn chỉ làm mất câu đúng. Luật chọn định trước lấy số nhỏ nhất ⇒ 0. Sàn từng đoạn
+    # 0,15 vẫn chặn đoạn quá xa — cơ chế còn đó cho mô hình nhúng / kho khác.
+    rag_san_toan_tap: float = Field(default=0.0, ge=0.0, le=1.0)
     rag_san_tung_doan: float = Field(default=0.15, ge=0.0, le=1.0)
+    # UC025 — cổng bám nguồn sau sinh: groundedness_score dưới ngưỡng ⇒ HUỶ câu trả lời, từ chối
+    # LOW_CONFIDENCE. 0 = tắt cổng. Hiệu chỉnh 09/10 (ADR-0029): mọi ngưỡng > 0 làm mất 4 câu
+    # trả lời đúng trên bộ vàng (groundedness là phép đo từ vựng, chấm oan câu diễn đạt lại) mà
+    # không thêm câu từ chối đúng nào ⇒ TẮT. Điểm vẫn được đo và ghi cho 100% lượt.
+    rag_nguong_bam_nguon: float = Field(default=0.0, ge=0.0, le=1.0)
+    # UC025 luồng phụ 3.3 — lượt từ chối thứ N liên tiếp trong một hội thoại thì chuyển nhân viên.
+    rag_tu_choi_lap_lai_chuyen_giao: int = Field(default=2, ge=1)
     # Số đoạn đưa vào lời nhắc.
     rag_so_doan_loi_nhac: int = Field(default=5, ge=1)
     # Xếp hạng lại — MẶC ĐỊNH TẮT (rag-eval.md). Bật khi nDCG@5 tăng ≥ 5 điểm VÀ p95 < 4 s.
     rerank_enabled: bool = False
+
+    # ── Bộ chấm tự động — UC027 bước 6, chạy nền trong worker ─────────────
+    # Chỉ chạy khi LLM_MODE=remote: giám khảo giả cho nhãn giả, làm bẩn đúng tỉ lệ cần đo.
+    cham_tu_dong_bat: bool = True
+    cham_tu_dong_ty_le: float = Field(default=0.05, gt=0.0, le=1.0)
+    cham_tu_dong_chu_ky_s: float = Field(default=900.0, gt=0)
+    cham_tu_dong_toi_da: int = Field(default=50, ge=1, le=200)
+    # Giám khảo tự khai độ chắc dưới ngưỡng ⇒ không ghi (UC027 luồng phụ 6.1).
+    cham_tu_dong_nguong_chac: float = Field(default=0.7, ge=0.0, le=1.0)
+    # Chạy nền, không có khách chờ — hạn chót rộng hơn hẳn 2,5 s của lượt chat.
+    cham_tu_dong_han_chot_s: float = Field(default=15.0, gt=0)
+    # Lần quét đầu sau khi worker khởi động nhìn lại bao xa.
+    cham_tu_dong_nhin_lai_s: float = Field(default=86400.0, gt=0)
 
     # ── Kho tệp S3 — UC018 (ADR-0022) ────────────────────────────────────
     # java-core GHI tệp gốc vào bucket, ai-service chỉ ĐỌC. Key có dạng {tenant_id}/… — cô lập

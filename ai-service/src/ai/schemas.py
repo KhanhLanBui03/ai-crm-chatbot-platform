@@ -18,6 +18,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # chiếu xuống bốn giá trị này ở orchestrator/router.py — java-core không cần biết bảy nhánh.
 ChatRoute = Literal["FAST_PATH", "RAG", "FALLBACK", "HANDOFF"]
 
+# Bốn lý do từ chối — khớp TỪNG CHỮ với CHECK của ai.ai_interactions.refusal_reason (V204).
+RefusalReason = Literal["NOT_COVERED", "OUT_OF_SCOPE_DATA", "LOW_CONFIDENCE", "SAFETY_PROBE"]
+
 
 class Citation(BaseModel):
     """Một căn cứ mà câu trả lời dựa vào. Bắt buộc có để chống bịa đặt (thí nghiệm E6)."""
@@ -46,11 +49,16 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     """Kết quả một lượt đi qua router ý định và nhánh xử lý."""
 
+    # Khoá của dòng ai.ai_interactions — java-core gửi lại khi khách/nhân viên đánh giá (UC027).
+    # None chỉ khi dựng ChatResponse ngoài run_turn (test).
+    interaction_id: UUID | None = None
     answer: str
     citations: list[Citation] = Field(default_factory=list)
     route: ChatRoute
     # Từ chối khi không đủ căn cứ. Đây là hành vi đúng, không phải lỗi (E7).
     refused: bool = False
+    # Một trong bốn lý do UC025 khi refused = true, ngược lại None.
+    refusal_reason: RefusalReason | None = None
     handoff: bool = False
     groundedness_score: float | None = None
     latency_ms: int
@@ -171,3 +179,121 @@ class IngestionJobProgress(BaseModel):
     finished_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+# ── Đánh giá chất lượng — UC027 ──────────────────────────────────────────────
+# Bám ``FeedbackRequest`` của docs/openapi/ai-service-to-java-core.yaml (interaction_id, rating
+# 1/-1, comment, corrected_answer) — THÊM ba trường V204 bắt buộc mà hợp đồng còn thiếu:
+# ``reason_code``, ``rater_type``, ``rater_user_id``.
+# Nháp hợp đồng: docs/contracts/uc025-uc027-tu-choi-danh-gia.md.
+
+FeedbackReason = Literal["WRONG_INFO", "IRRELEVANT", "INCOMPLETE", "BAD_TONE"]
+
+
+class FeedbackRequest(BaseModel):
+    """Khách (widget) hoặc nhân viên (hộp thư) đánh giá một lượt trả lời.
+
+    ``extra="forbid"``: lén gửi ``tenant_id`` thành 422 ồn ào (ADR-0001), như ``KbDocumentCreate``.
+    Hai ràng buộc chéo trường (chê thì có lý do; nhân viên thì có mã người dùng) KHÔNG kiểm ở đây
+    mà ở ``service.record_feedback`` — để trả mã lỗi riêng ``REASON_REQUIRED`` / ``INVALID_RATER``
+    như đặc tả UC027, thay vì ``INVALID_REQUEST`` chung của lỗi validate.
+
+    ``AUTO_EVAL`` không nhận từ API: nhãn máy chỉ do bộ chấm tự động trong ai-service ghi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Có trong body ở POST /v1/ai/feedback; ở POST /v1/ai-interactions/{id}/feedback thì lấy
+    # từ đường dẫn — None ở body là bình thường.
+    interaction_id: UUID | None = None
+    rating: Literal[1, -1]
+    reason_code: FeedbackReason | None = None
+    rater_type: Literal["CUSTOMER", "AGENT"] = "CUSTOMER"
+    # java-core điền từ JWT của nhân viên. KHÔNG phải tenant — tenant chỉ từ X-Tenant-Id.
+    rater_user_id: UUID | None = None
+    comment: str | None = Field(default=None, max_length=2000)
+    # Câu trả lời đúng do nhân viên sửa — nguồn phát hiện khoảng trống tri thức (V204).
+    corrected_answer: str | None = Field(default=None, max_length=4000)
+
+    @field_validator("comment", "corrected_answer", mode="before")
+    @classmethod
+    def _rong_la_none(cls, v: object) -> object:
+        if isinstance(v, str):
+            v = unicodedata.normalize("NFC", v).strip()
+            return v or None
+        return v
+
+
+class FeedbackRecorded(BaseModel):
+    """Bám ``ActionSuccessResponse`` (success, message) — thêm id và cờ tạo mới/cập nhật."""
+
+    success: Literal[True] = True
+    message: str
+    feedback_id: UUID
+    # False = phía này đã đánh giá lượt này trước đó, đã CẬP NHẬT dòng cũ (UC027 luồng phụ 2.1).
+    created: bool
+
+
+# ── Khoảng trống tri thức — UC025 bước 8, SCR034 ─────────────────────────────
+
+
+class KnowledgeGapItem(BaseModel):
+    """Bám ``KnowledgeGapItem`` (query_text, unanswered_count, last_occurred_at) — THÊM các trường
+    mà ``KhoangTrongTriThuc`` của dashboard-api.yaml cần, để java-core chỉ đổi tên trường."""
+
+    # uuid5 tất định từ (tenant, lý do, câu đã chuẩn hoá) — ổn định giữa các lần gọi để giao diện
+    # làm khoá; KHÔNG phải khoá chính của bảng nào (không có bảng knowledge_gaps).
+    id: UUID
+    query_text: str
+    gap_type: Literal["NOT_COVERED", "OUT_OF_SCOPE_DATA", "LOW_CONFIDENCE"]
+    unanswered_count: int
+    # Số hội thoại khác nhau — xấp xỉ "số khách khác nhau" (ai_interactions không có contact_id).
+    distinct_conversation_count: int
+    first_occurred_at: datetime
+    last_occurred_at: datetime
+
+
+class KnowledgeGapPage(BaseModel):
+    items: list[KnowledgeGapItem]
+    total: int
+    page: int
+    size: int
+
+
+# ── Tín hiệu chất lượng — UC027 bước 7 ───────────────────────────────────────
+
+
+class TyLe(BaseModel):
+    """Một tỉ lệ luôn đi kèm tử số và MẪU SỐ — để không ai đọc nhầm nó chia cho cái gì."""
+
+    tu_so: int
+    mau_so: int
+    gia_tri: float | None  # None khi mẫu số = 0, không phải 0
+
+
+class DanhGiaPhia(BaseModel):
+    rater_type: Literal["CUSTOMER", "AGENT", "AUTO_EVAL"]
+    # mẫu số = số lượt CÓ đánh giá từ phía này, KHÔNG phải tổng số lượt (đặc tả UC027)
+    ty_le_tich_cuc: TyLe
+    che_theo_ly_do: dict[str, int]
+
+
+class QualitySummary(BaseModel):
+    """Bảy tín hiệu chất lượng trong một cửa sổ thời gian — mỗi tín hiệu ghi rõ tần suất đo."""
+
+    tu: datetime
+    den: datetime
+    so_luot: int
+    so_luot_loi: int
+    # Bốn tín hiệu rẻ — 100% lượt
+    ty_le_tu_choi: TyLe
+    ty_le_suy_giam: TyLe
+    ty_le_chuyen_giao: TyLe
+    do_phu_trich_dan: TyLe
+    # KPI §1.6 ≥ 55%
+    ty_le_khong_goi_llm: TyLe
+    # Hậu kiểm — 100% lượt có sinh câu trả lời
+    groundedness_trung_binh: float | None
+    tu_choi_theo_ly_do: dict[str, int]
+    # Người đánh giá (khi có) và bộ chấm LLM (mẫu 5%)
+    danh_gia: list[DanhGiaPhia]

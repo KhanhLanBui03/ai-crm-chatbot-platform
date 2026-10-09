@@ -6,6 +6,9 @@ Hiện tiêu thụ một topic do java-core phát:
 
 ``crm.conversation.closed`` → UC026 (tóm tắt) sẽ thêm ở Ngày 13 theo cùng khuôn.
 
+Hai vòng nền chạy cạnh consumer: bộ quét job kẹt (UC019, ADR-0024) và bộ chấm tự động (UC027 bước
+6, mẫu 5% lượt RAG đã trả lời — chỉ khi ``LLM_MODE=remote``).
+
 BỐN LUẬT KHÔNG ĐƯỢC BỎ — mỗi luật ứng với một cách hỏng đã biết trước
 ---------------------------------------------------------------------
 1. ``enable_auto_commit=False``. Xác nhận offset **sau khi** xử lý xong. Bật tự động thì client
@@ -33,6 +36,7 @@ import asyncio
 import logging
 import signal
 from contextlib import suppress
+from datetime import timedelta
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, ConsumerRecord, TopicPartition
 from aiokafka.errors import CommitFailedError
@@ -166,6 +170,36 @@ class Worker:
             except Exception:  # noqa: BLE001 — bộ quét không được chết vì một lượt hỏng
                 logger.exception("Bộ quét job kẹt hỏng một lượt — thử lại ở chu kỳ sau")
 
+    async def _vong_cham_tu_dong(self) -> None:
+        """Bộ chấm tự động (UC027 bước 6): mỗi ``cham_tu_dong_chu_ky_s`` giây chấm mẫu 5% các lượt
+        mới từ lần quét trước.
+
+        Mốc ``tu`` lấy từ ``moc_tiep`` của lần quét vừa rồi — mỗi lượt chỉ được xét một lần, kể cả
+        lượt giám khảo không chắc. Khởi động lại thì nhìn lại ``cham_tu_dong_nhin_lai_s`` (một
+        ngày): vài lượt được xét lại sau mỗi lần khởi động, chấp nhận được. Hỏng một lần quét thì
+        GIỮ mốc cũ để lần sau xét lại.
+        """
+        s = self.settings
+        if not s.cham_tu_dong_bat or s.llm_mode != "remote":
+            logger.info("Bộ chấm tự động tắt (CHAM_TU_DONG_BAT=%s, LLM_MODE=%s)",
+                        s.cham_tu_dong_bat, s.llm_mode)
+            return
+        giam_khao = service.tao_giam_khao()
+        tu = service.bay_gio() - timedelta(seconds=s.cham_tu_dong_nhin_lai_s)
+        try:
+            while not self.dung.is_set():
+                with suppress(TimeoutError):
+                    await asyncio.wait_for(self.dung.wait(), timeout=s.cham_tu_dong_chu_ky_s)
+                if self.dung.is_set():
+                    break
+                try:
+                    kq = await service.cham_tu_dong_lo(giam_khao, tu=tu, factory=self.factory)
+                    tu = kq.moc_tiep
+                except Exception:  # noqa: BLE001 — vòng nền không được chết vì một lần quét hỏng
+                    logger.exception("Bộ chấm tự động hỏng một lượt — thử lại ở chu kỳ sau")
+        finally:
+            await giam_khao.aclose()
+
     async def chay(self) -> None:
         """Chạy tới khi ``self.dung`` được đặt, rồi dừng sạch: xong việc dở → rời group → trả tài
         nguyên."""
@@ -176,18 +210,24 @@ class Worker:
             await consumer.start()
             try:
                 quet = asyncio.create_task(self._vong_quet(), name="quet-job-ket")
+                cham = asyncio.create_task(self._vong_cham_tu_dong(), name="cham-tu-dong")
                 try:
                     await self._vong_kafka(consumer, producer)
                 except asyncio.CancelledError:
                     # Bị HUỶ (không phải SIGTERM): không chờ ai làm nốt gì — job đang treo của bộ
                     # quét sẽ giữ tiến trình sống mãi. Tài liệu dở dang để bộ quét lần sau nhặt.
                     quet.cancel()
+                    cham.cancel()
                     raise
                 finally:
                     self.dung.set()
                     # SIGTERM: bộ quét đang giữa một job thì chờ nó xong — cùng tinh thần luật 4.
+                    # Bộ chấm thì không đáng chờ: lượt đang chấm dở sẽ được xét lại sau khởi động.
+                    cham.cancel()
                     with suppress(asyncio.CancelledError):
                         await quet
+                    with suppress(asyncio.CancelledError):
+                        await cham
             finally:
                 # stop() rời group ngay (không chờ session timeout) — partition được chia lại cho
                 # replica khác trong vài giây. KHÔNG tự xác nhận offset nào (luật 1).

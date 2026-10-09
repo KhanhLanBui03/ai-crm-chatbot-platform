@@ -16,8 +16,12 @@ from fastapi.responses import JSONResponse
 from src.ai.exceptions import (
     AiServiceError,
     DocumentNotFoundError,
+    FeedbackInteractionMissingError,
+    FeedbackReasonRequiredError,
     FileTooLargeError,
     ForbiddenFileUriError,
+    InteractionNotFoundError,
+    InvalidRaterError,
     StorageUnavailableError,
     StoredFileNotFoundError,
     TenantContextMissingError,
@@ -32,7 +36,11 @@ _MA_HTTP: dict[type[AiServiceError], int] = {
     TenantContextMissingError: 401,
     ForbiddenFileUriError: 403,
     DocumentNotFoundError: 404,
+    InteractionNotFoundError: 404,
     StoredFileNotFoundError: 422,
+    FeedbackReasonRequiredError: 422,
+    FeedbackInteractionMissingError: 422,
+    InvalidRaterError: 422,
     FileTooLargeError: 413,
     UnsupportedFormatError: 415,
     StorageUnavailableError: 503,
@@ -43,6 +51,7 @@ _MA_HTTP: dict[type[AiServiceError], int] = {
 # INVALID_METADATA làm mặc định chung.
 _MA_VALIDATE_THEO_DUONG_DAN: dict[str, str] = {
     "/v1/ai/kb/documents": "INVALID_METADATA",
+    "/v1/ai/feedback": "INVALID_FEEDBACK",
 }
 
 

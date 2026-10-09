@@ -37,6 +37,25 @@ có thông tin về thu cũ đổi mới [1][2][3][4][5]" gộp 5 đoạn thì t
 dù không dựa vào đoạn nào; so từng đoạn thì ra 0 (đo 08/10, câu G004). Câu đúng trên 10 câu thử
 không đổi điểm giữa hai cách.
 
+CÂU "KHÔNG PHẢI CÂU TRẢ LỜI" (thêm 09/10, UC025)
+-----------------------------------------------
+Mô hình không phải lúc nào cũng ghi mã ``KHONG_DU_CAN_CU``: nó viết "Dạ cửa hàng chưa có thông tin
+về tỷ giá đô la hôm nay ạ [1][2][3][4][5]". Câu đó gắn đủ trích dẫn, và các âm tiết phổ thông ("cửa
+hàng", "thông tin", "hỗ trợ") có trong đoạn nên groundedness ra 1,0 (N005, đo 09/10).
+
+Định nghĩa dựa vào HỢP ĐỒNG của lời nhắc (quy tắc 2: câu nào mang thông tin từ tài liệu phải có
+trích dẫn), không dò câu xã giao theo dấu câu — dò "?" thì câu mời kết thúc bằng "!" hay "nhé" lọt
+(N012, N003 đo 09/10)::
+
+    câu mang thông tin  ⇔  có trích dẫn hợp lệ VÀ không phải câu "chưa có thông tin"
+    KHÔNG phải câu trả lời  ⇔  có ≥ 1 câu "chưa có thông tin"
+                               VÀ (0 câu mang thông tin  HOẶC  groundedness = 0)
+
+Vế "groundedness = 0": câu mời có gắn ``[1]`` vẫn là "câu mang thông tin" về hình thức, nhưng không
+câu nào bám được đoạn nào (N012 lượt 2). Câu trả lời một phần — có câu mang thông tin thật, bám được
+nguồn — được giữ (G047; N012 lượt baseline, groundedness 0,5). Kiểm trên điểm thô của bộ vàng trước
+khi dùng: 0 câu trả lời đúng bị bắt.
+
 Giới hạn đã biết (ghi vào báo cáo): đây là phép đo TỪ VỰNG. Mô hình diễn đạt lại bằng từ khác thì
 điểm thấp oan — rõ nhất là dịch từ tài liệu tiếng Anh sang câu trả lời tiếng Việt (G061: đúng,
 trích đúng, điểm 0). Chép đúng từ nhưng đảo nghĩa ("không được đổi" ↔ "được đổi") thì điểm cao
@@ -59,6 +78,11 @@ _DAU_TRICH_DAN = re.compile(r"^(?:\s*\[[\d\s,;]+\])+")
 # dấu chấm giữa hai chữ số không có khoảng trắng theo sau.
 _TACH_CAU = re.compile(r"(?<=[.!?…])\s+|\n+")
 _AM_TIET = re.compile(r"\w+")
+# Câu "chưa có thông tin" — so trên bản đã bỏ dấu, viết thường.
+_CHUA_CO_THONG_TIN = re.compile(
+    r"\b(?:chua|khong)\s+(?:co|tim\s+thay|duoc\s+cung\s+cap|nam\s+duoc)\s+(?:\w+\s+){0,3}?"
+    r"thong\s+tin\b|\b(?:khong|chua)\s+(?:duoc\s+)?de\s+cap\b"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +95,8 @@ class KetQuaHauKiem:
     groundedness_score: float
     so_cau_noi_dung: int
     so_pii_da_che: int
+    # Không phải câu trả lời — xem "CÂU KHÔNG PHẢI CÂU TRẢ LỜI" ở đầu tệp (UC025).
+    khong_phai_tra_loi: bool = False
 
 
 def _so_trong(nhom: str) -> list[int]:
@@ -124,6 +150,24 @@ def _tach_cau(van_ban: str) -> list[str]:
                 continue
         cac_cau.append(manh)
     return cac_cau
+
+
+def _bo_dau(van_ban: str) -> str:
+    return " ".join(_am_tiet(van_ban))
+
+
+def khong_phai_tra_loi(van_ban: str, groundedness_score: float) -> bool:
+    """Xem đầu tệp. Câu dưới ``SO_AM_TIET_TOI_THIEU`` âm tiết không tính."""
+    so_chua_co = so_thong_tin = 0
+    for cau in _tach_cau(van_ban):
+        sach = _TRICH_DAN.sub(" ", cau)
+        if len(_am_tiet(sach)) < SO_AM_TIET_TOI_THIEU:
+            continue
+        if _CHUA_CO_THONG_TIN.search(_bo_dau(sach)):
+            so_chua_co += 1
+        elif _TRICH_DAN.search(cau):
+            so_thong_tin += 1
+    return so_chua_co > 0 and (so_thong_tin == 0 or groundedness_score == 0)
 
 
 def do_bam_nguon(van_ban: str, cac_doan: Sequence[str]) -> tuple[float, int]:
@@ -209,4 +253,5 @@ def hau_kiem(cau_tra_loi: str, cac_doan: Sequence[str]) -> KetQuaHauKiem:
         groundedness_score=round(diem, 3),
         so_cau_noi_dung=so_cau,
         so_pii_da_che=so_pii,
+        khong_phai_tra_loi=khong_phai_tra_loi(da_loc, diem),
     )

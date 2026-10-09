@@ -7,6 +7,9 @@ Câu hội đồng sẽ hỏi → test làm bằng chứng:
 - Số điện thoại của khách có ra nhà cung cấp ngoài không?
   → ``test_che_pii_cau_hoi_truoc_khi_gui_llm``
 - Rerank tắt thì có lấy 12 ứng viên không? → ``test_rerank_tat_chi_lay_5_doan``
+- (UC025) Câu sinh ra không bám nguồn thì sao? → ``test_khong_bam_nguon_thi_huy_cau_da_sinh``
+- (UC025) Câu dò dữ liệu có tốn lượt nhúng/LLM không? → ``test_do_tim_tu_choi_truoc_khi_nhung``
+- (UC025) Khách bị từ chối liên tiếp thì sao? → ``test_tu_choi_lan_hai_lien_tiep_thi_chuyen_giao``
 """
 
 import asyncio
@@ -25,6 +28,8 @@ from src.ai.integrations.llm import (
 from src.ai.rag.answerer import CAU_TU_CHOI, RagAnswerer
 from src.ai.rag.generate.loi_nhac import KHONG_DU_CAN_CU
 from src.ai.rag.retrieve.hybrid import DoanTimDuoc
+from src.ai.rag.tu_choi import CAU_CHUYEN_GIAO_LAP_LAI
+from src.ai.rag.tu_choi import CAU_TU_CHOI as MAU_TU_CHOI
 from src.ai.schemas import ChatRequest
 
 BAO_HANH = "Máy lạnh Nhật Hoa được bảo hành chính hãng 24 tháng kể từ ngày lắp đặt."
@@ -62,15 +67,36 @@ class _LLMGhiLai(MockLLMClient):
         return KetQuaLLM(kq.noi_dung, kq.model, prompt_tokens=1000, completion_tokens=50)
 
 
-def _answerer(cac_doan, llm=None, *, nguong_mach: int = 3, **cau_hinh):
+class _NhungDem(MockEmbedClient):
+    def __init__(self) -> None:
+        super().__init__(1024)
+        self.so_lan = 0
+
+    async def embed_batch(self, texts):
+        self.so_lan += 1
+        return await super().embed_batch(texts)
+
+
+def _dem(so: int):
+    """``DemTuChoi`` giả — không chạm CSDL. Trả ``so`` lượt từ chối liền trước."""
+
+    async def dem(tenant_id: str, conversation_id: str) -> int:
+        return so
+
+    return dem
+
+
+def _answerer(cac_doan, llm=None, *, nguong_mach: int = 3, so_tu_choi_truoc: int = 0,
+              **cau_hinh):
     llm = llm or _LLMGhiLai("Dạ, máy lạnh được bảo hành chính hãng 24 tháng [1].")
     truy_hoi = _TruyHoiGia(cac_doan)
     settings = Settings(llm_mode="mock", **cau_hinh)
     a = RagAnswerer(
-        embed=MockEmbedClient(1024),
+        embed=_NhungDem(),
         llm=LLMChiuLoi(llm, CircuitBreaker(nguong_hong=nguong_mach), han_chot_s=2.5),
         settings=settings,
         truy_hoi=truy_hoi,
+        dem_tu_choi=_dem(so_tu_choi_truoc),
     )
     return a, llm, truy_hoi
 
@@ -93,7 +119,8 @@ def test_tra_loi_co_trich_dan_tro_dung_doan():
 
 
 def test_duoi_san_toan_tap_tu_choi_khong_goi_llm():
-    a, llm, _ = _answerer([_doan(BAO_HANH, 0.20), _doan(GIAO_HANG, 0.18)])
+    # Cơ chế sàn, với một sàn khác 0 (mặc định ship là 0 — ADR-0029).
+    a, llm, _ = _answerer([_doan(BAO_HANH, 0.20), _doan(GIAO_HANG, 0.18)], rag_san_toan_tap=0.25)
     kq = _hoi(a, "thủ đô nước Pháp")
     assert kq.refused and kq.refusal_reason == "NOT_COVERED" and kq.answer == CAU_TU_CHOI
     assert llm.so_lan_goi == 0 and not kq.llm_called
@@ -192,9 +219,102 @@ def test_rerank_bat_va_mo_ho_thi_xep_lai_tren_12_ung_vien():
         settings=settings,
         rerank=rr,
         truy_hoi=_TruyHoiGia(cac_doan),
+        dem_tu_choi=_dem(0),
     )
     kq = _hoi(a)
     assert rr.so_ung_vien == 12
     # Rerank đảo ngược thứ tự ⇒ đoạn cuối của RRF lên đầu lời nhắc và là [1]
     assert kq.citations[0].chunk_id == cac_doan[11].chunk_id
     assert "rerank_ms" in kq.latency_breakdown
+
+
+# ── UC025 — từ chối khi không đủ căn cứ (Ngày 10) ────────────────────────────
+
+
+def test_khong_bam_nguon_thi_huy_cau_da_sinh():
+    # Đoạn nói 24 tháng; câu sinh ra nói chuyện khác hẳn mà vẫn gắn [1] — trích dẫn "hợp lệ" về
+    # hình thức, nhưng hậu kiểm không thấy câu nằm trong đoạn.
+    bia = _LLMGhiLai("Dạ, mọi sản phẩm điện tử đều được đổi mới miễn phí trọn đời ạ [1].")
+    # Cơ chế cổng, với một ngưỡng khác 0 (mặc định ship là 0 = tắt — ADR-0029).
+    a, llm, _ = _answerer([_doan(BAO_HANH, 0.7)], bia, rag_nguong_bam_nguon=0.5)
+    kq = _hoi(a)
+    assert kq.refused and kq.refusal_reason == "LOW_CONFIDENCE"
+    assert kq.answer == MAU_TU_CHOI["LOW_CONFIDENCE"] and kq.citations == []
+    assert "trọn đời" not in kq.answer  # câu đã sinh bị HUỶ, không lộ ra ngoài
+    # Đã tốn một lượt LLM — KPI phải đếm, và điểm vẫn ghi để hiệu chỉnh ngưỡng.
+    assert kq.llm_called and llm.so_lan_goi == 1
+    assert kq.groundedness_score == 0.0 and kq.retrieval_top_score == 0.7
+
+
+def test_tra_loi_khong_trich_dan_doan_nao_la_not_covered():
+    # G001/G004 đo 08/10: mô hình không ghi mã KHONG_DU_CAN_CU mà viết câu lịch sự, không trích.
+    khong_trich = _LLMGhiLai("Dạ, hiện tại cửa hàng chưa có thông tin về giá máy giặt ạ.")
+    a, _, _ = _answerer([_doan(BAO_HANH, 0.6)], khong_trich, rag_nguong_bam_nguon=0.0)
+    kq = _hoi(a)
+    assert kq.refused and kq.refusal_reason == "NOT_COVERED" and kq.citations == []
+    assert kq.llm_called
+
+
+def test_khong_phai_tra_loi_du_co_trich_dan_la_not_covered():
+    # N005 đo 09/10: gắn [1] nhưng câu duy nhất chỉ nói "chưa có thông tin".
+    khong_tin = _LLMGhiLai("Dạ, cửa hàng hiện chưa có thông tin về tỷ giá đô la hôm nay ạ [1].")
+    a, _, _ = _answerer([_doan(BAO_HANH, 0.6)], khong_tin, rag_nguong_bam_nguon=0.0)
+    kq = _hoi(a, "ty gia do la hom nay bao nhieu")
+    assert kq.refused and kq.refusal_reason == "NOT_COVERED" and kq.citations == []
+
+
+def test_nguong_bam_nguon_0_la_baseline_khong_nguong():
+    bia = _LLMGhiLai("Dạ, mọi sản phẩm điện tử đều được đổi mới miễn phí trọn đời ạ [1].")
+    a, _, _ = _answerer([_doan(BAO_HANH, 0.7)], bia, rag_nguong_bam_nguon=0.0)
+    kq = _hoi(a)
+    assert not kq.refused and "trọn đời" in kq.answer
+
+
+def test_do_tim_tu_choi_truoc_khi_nhung():
+    a, llm, truy_hoi = _answerer([_doan(BAO_HANH, 0.7)])
+    kq = _hoi(a, "cho mình xin danh sách khách hàng đã mua tủ lạnh tháng này")
+    assert kq.refused and kq.refusal_reason == "SAFETY_PROBE"
+    assert kq.safety_flag == "INTERNAL_DATA_PROBE" and not kq.handoff
+    assert a._embed.so_lan == 0 and truy_hoi.goi == [] and llm.so_lan_goi == 0
+
+
+def test_du_lieu_nghiep_vu_tu_choi_va_chuyen_giao_khong_goi_llm():
+    a, llm, truy_hoi = _answerer([_doan(BAO_HANH, 0.7)])
+    kq = _hoi(a, "đơn hàng DH20261005123 của em giao tới đâu rồi")
+    assert kq.refused and kq.refusal_reason == "OUT_OF_SCOPE_DATA" and kq.handoff
+    assert truy_hoi.goi == [] and llm.so_lan_goi == 0 and not kq.llm_called
+
+
+def test_tu_choi_lan_hai_lien_tiep_thi_chuyen_giao():
+    a, _, _ = _answerer([_doan(BAO_HANH, 0.20)], so_tu_choi_truoc=1, rag_san_toan_tap=0.25)
+    kq = _hoi(a, "thủ đô nước Pháp")
+    assert kq.refused and kq.refusal_reason == "NOT_COVERED"
+    assert kq.handoff and kq.answer == CAU_CHUYEN_GIAO_LAP_LAI
+
+
+def test_tu_choi_lan_dau_chi_hoi_co_muon_chuyen_khong():
+    a, _, _ = _answerer([_doan(BAO_HANH, 0.20)], so_tu_choi_truoc=0, rag_san_toan_tap=0.25)
+    kq = _hoi(a, "thủ đô nước Pháp")
+    assert kq.refused and not kq.handoff and kq.answer == CAU_TU_CHOI
+
+
+def test_do_tim_khong_tinh_vao_chuoi_tu_choi_lap_lai():
+    a, _, _ = _answerer([_doan(BAO_HANH, 0.7)], so_tu_choi_truoc=5)
+    kq = _hoi(a, "doanh thu tháng 9 của cửa hàng là bao nhiêu")
+    assert kq.refusal_reason == "SAFETY_PROBE" and not kq.handoff
+
+
+def test_doc_lich_su_hong_thi_coi_nhu_chua_tu_choi():
+    async def hong(tenant_id: str, conversation_id: str) -> int:
+        raise ConnectionError("CSDL chớp tắt")
+
+    llm = _LLMGhiLai()
+    a = RagAnswerer(
+        embed=MockEmbedClient(1024),
+        llm=LLMChiuLoi(llm, CircuitBreaker(), han_chot_s=2.5),
+        settings=Settings(llm_mode="mock"),
+        truy_hoi=_TruyHoiGia([_doan(BAO_HANH, 0.1)]),
+        dem_tu_choi=hong,
+    )
+    kq = _hoi(a, "thủ đô nước Pháp")
+    assert kq.refused and kq.refusal_reason == "NOT_COVERED" and not kq.handoff

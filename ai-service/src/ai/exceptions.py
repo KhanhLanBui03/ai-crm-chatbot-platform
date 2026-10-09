@@ -193,3 +193,34 @@ class EventUnsupportedError(AiServiceError):
     """
 
     code = "EVENT_UNSUPPORTED"
+
+
+# ── Đánh giá chất lượng — UC027 (Ngày 10) ────────────────────────────────────
+
+
+class InteractionNotFoundError(AiServiceError):
+    """Lượt không tồn tại hoặc thuộc tenant khác — RLS che, không phân biệt hai trường hợp (như
+    ``DocumentNotFoundError``): 403 là xác nhận cho kẻ dò rằng id đó có thật ở tenant khác."""
+
+    code = "INTERACTION_NOT_FOUND"
+
+
+class FeedbackReasonRequiredError(AiServiceError):
+    """Chê mà không chọn lý do — đặc tả UC027 ``422 REASON_REQUIRED``. CSDL cũng chặn
+    (``ck_feedback_reason``, V204); kiểm ở ứng dụng trước để trả mã có nghĩa thay vì 500."""
+
+    code = "REASON_REQUIRED"
+
+
+class InvalidRaterError(AiServiceError):
+    """Nhân viên thiếu mã người dùng, khách kèm mã người dùng, hoặc khách gửi câu sửa
+    (``ck_feedback_rater`` của V204; câu sửa là quyền của nhân viên — đặc tả UC027 bước 4)."""
+
+    code = "INVALID_RATER"
+
+
+class FeedbackInteractionMissingError(AiServiceError):
+    """Thiếu ``interaction_id``, hai nguồn (đường dẫn, body) mâu thuẫn, hoặc khen mà kèm lý do
+    chê."""
+
+    code = "INVALID_FEEDBACK"

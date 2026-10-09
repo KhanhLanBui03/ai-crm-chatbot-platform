@@ -10,7 +10,14 @@ Câu hội đồng sẽ hỏi → test làm bằng chứng:
 
 from uuid import uuid4
 
-from src.ai.rag.generate.hau_kiem import do_bam_nguon, hau_kiem, loc_trich_dan
+import pytest
+
+from src.ai.rag.generate.hau_kiem import (
+    do_bam_nguon,
+    hau_kiem,
+    khong_phai_tra_loi,
+    loc_trich_dan,
+)
 from src.ai.rag.generate.loi_nhac import CHI_THI, KHONG_DU_CAN_CU, dung_loi_nhac
 from src.ai.rag.retrieve.hybrid import DoanTimDuoc
 
@@ -176,3 +183,47 @@ def test_danh_so_theo_thu_tu_doan():
     msgs = dung_loi_nhac("x", [_doan("một"), _doan("hai"), _doan("ba")])
     user = msgs[1]["content"]
     assert user.index('so="1"') < user.index('so="2"') < user.index('so="3"')
+
+
+# ── UC025 — câu "không phải câu trả lời" (09/10) ──────────────────────────────
+
+
+@pytest.mark.parametrize("van_ban, g", [
+    # N005: có trích dẫn, groundedness 1,0 — vẫn không phải câu trả lời
+    ("Dạ, cửa hàng hiện chưa có thông tin về tỷ giá đô la Mỹ hôm nay để hỗ trợ anh/chị ạ [1][2].",
+     1.0),
+    # G001: câu hỏi lại không trích dẫn — không phải câu mang thông tin
+    ("Dạ, hiện tại cửa hàng chưa có thông tin về giá của máy giặt trong tài liệu ạ. "
+     "Anh/chị cần em hỗ trợ thông tin về sản phẩm nào khác không ạ?", 0.0),
+    # N003: câu mời kết thúc bằng "!" — lọt luật cũ dò "?"
+    ("Dạ, trong tài liệu của cửa hàng chưa có thông tin về việc sửa đồng hồ đeo tay ạ [1][2]. "
+     "Nếu anh/chị cần hỗ trợ về sản phẩm khác, em rất sẵn lòng giải đáp nhé!", 0.5),
+    # N012 lượt 2: câu mời CÓ gắn [1] nhưng không câu nào bám nguồn
+    ("Dạ, hiện tại tài liệu của cửa hàng chưa có thông tin về các loại máy ép chậm ạ. "
+     "Anh/chị cần em hỗ trợ tư vấn về sản phẩm nào khác thì cứ nhắn em nhé [1].", 0.0),
+    ("Dạ tài liệu của cửa hàng khong de cap toi viec nay a [1].", 1.0),
+])
+def test_bat_cau_khong_phai_tra_loi(van_ban, g):
+    assert khong_phai_tra_loi(van_ban, g)
+
+
+@pytest.mark.parametrize("van_ban, g", [
+    # trả lời một phần — có câu mang thông tin bám nguồn (G047; N012 lượt baseline)
+    ("Cửa hàng hỗ trợ huỷ đơn trước khi xuất kho [1]. Phần thao tác huỷ trên ứng dụng thì cửa hàng "
+     "chưa có thông tin ạ.", 0.5),
+    ("Dạ, hiện tại cửa hàng chưa có thông tin về máy ép chậm ạ. Anh/chị có thể tham khảo các dòng "
+     "đồ gia dụng nhỏ mà cửa hàng đang bán nhé [1][2].", 0.5),
+    # câu đúng, groundedness 0 oan (G061 dịch từ tài liệu tiếng Anh) — không có câu "chưa có"
+    ("Dạ, khi bảo hành anh/chị cần mang theo hoá đơn và phiếu bảo hành ạ [1].", 0.0),
+    ("Máy lạnh được bảo hành chính hãng 24 tháng [1].", 1.0),
+    ("Dạ.", 0.0),
+])
+def test_khong_bat_cau_tra_loi_co_thong_tin(van_ban, g):
+    assert not khong_phai_tra_loi(van_ban, g)
+
+
+def test_hau_kiem_tinh_co_khong_phai_tra_loi():
+    van_ban = ("Dạ, hiện tại tài liệu của cửa hàng chưa có thông tin về các loại máy ép chậm ạ. "
+               "Anh/chị cần em hỗ trợ tư vấn về sản phẩm nào khác thì cứ nhắn em nhé [1].")
+    kq = hau_kiem(van_ban, ["Máy lạnh inverter tiết kiệm điện, bảo hành 24 tháng."])
+    assert kq.groundedness_score == 0.0 and kq.khong_phai_tra_loi
