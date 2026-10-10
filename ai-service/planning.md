@@ -1200,11 +1200,18 @@ rỗng (39 dòng docstring) — **phải viết code thật trước khi chạy.
 
 - [ ] 🤖 Viết `bench_cpu.py` thật — *verify: đo p50/p95/RSS, có warm-up, số lần lặp đủ lớn để
       p95 ổn định.*
-- [ ] 🖐 Chạy bản rút gọn: **3 model** (encoder S, encoder M, cross-encoder `bge-reranker-v2-m3`
-      INT8) × **2 mức vCPU** (2 và 4).
+- [ ] 🖐 Chạy bản rút gọn: **3 model** (encoder `bge-m3` INT8 ở `ai-embed` · cross-encoder
+      `bge-reranker-v2-m3` INT8 ở `ai-rerank` · router ý định ở `ai-classify`) × **2 mức vCPU**
+      (2 và 4).
       ⚠️ **CHẠY TỪNG SERVICE MỘT, không song song** — chạy song song thì các service tranh CPU
       và **mọi con số đều vô nghĩa**.
+      ⏳ **Router chờ `artifacts/router_model.onnx` của Dev B** (kiểm 11/10: chưa có). Chưa có file
+      thì đo hai model kia trước, router đo bù khi có. Router cũng là **model nhỏ duy nhất** —
+      điều (1) bên dưới phải chờ nó.
       *(Ma trận đầy đủ đã cắt — xem sheet "Phạm vi cắt & làm sau".)*
+      *Sửa 11/10/2026: bản trước ghi "encoder S, encoder M" — chữ sót từ Master Plan (`e5-small`,
+      `e5-base`). Hai model đó chưa từng có trong repo; hệ thống chỉ có một encoder là `bge-m3`
+      (`artifacts/MODEL_REGISTRY.md`).*
 - [ ] 🖐 **Chứng minh 2 điều:**
       (1) với model nhỏ, **tăng vCPU KHÔNG cải thiện p95**;
       (2) `OMP_NUM_THREADS` phải **BẰNG số CPU được cấp** — để mặc định thì ONNX Runtime đọc số
