@@ -107,18 +107,28 @@ chính, không giao cho agent AI.
 `docs/Ke-hoach-21-ngay-Module-AI-CRM.xlsx`. ⚠️ `.claude/agents/gate/eval-gatekeeper.md` vẫn
 liệt kê bảng 28 chỉ số của lịch 49 ngày — sửa trước lần gọi agent đó đầu tiên.
 
-## Ba mốc cắt phạm vi — không lùi lịch, chỉ cắt việc
+## Ba mốc — đổi 10/10/2026
 
 | Mốc | Hạn | Điều kiện thoát |
 |---|---|---|
 | **M1** Nền tảng dữ liệu | hết **Ngày 7** (27/09) | Tài liệu thật vào chunks, test cách ly tenant xanh, parity INT8 ≥ 0,995, router đã chốt nhánh ship |
-| **M2** Demo luồng chính | hết **Ngày 14** (04/10) | `/v1/ai/chat` end-to-end, recall@5 ≥ 0,85, có video |
-| **M3** Nghiệm thu | hết **Ngày 21** (11/10) | 7/7 chỉ số đạt, gói bàn giao, video demo 17 UC + slide |
+| **M2** Luồng chat chạy trọn | hết **Ngày 14** | Mỗi ngả có một lượt thật đi trọn tới `telemetry`: trả lời có trích dẫn · từ chối · chuyển giao |
+| **M3** Nghiệm thu | ⏸ **hoãn** cùng Ngày 21 | 7/7 chỉ số đạt, gói bàn giao, video demo 17 UC + slide |
 
-**Phạm vi khoá ở 17 UC.** Trượt lịch thì cắt **độ sâu** theo đúng thứ tự: rerank → semantic
-cache → chiều sâu UC038 → soak 1 giờ. **Không bao giờ bỏ nguyên một UC** — giảm độ sâu thì
-được, bỏ hẳn là mất điểm trực tiếp. Lịch không còn ngày đệm thuần: một ngày trượt phải cắt
-ngay trong ngày, không lùi sang ngày sau vì ngày sau đã đầy.
+**Phạm vi khoá ở 17 UC.** **Không bao giờ bỏ nguyên một UC** — giảm độ sâu thì được, bỏ hẳn là
+mất điểm trực tiếp.
+
+**Đổi 10/10/2026** — người dùng chốt, chi tiết ở đầu `ai-service/planning.md`:
+
+- **Bỏ** nội dung cũ của Ngày 16: semantic cache, giảm image < 400 MB, tối ưu độ trễ. Ô Ngày 16
+  thành **buổi đọc số liệu kỹ thuật**.
+- **Hoãn** Ngày 19 (load test) và Ngày 21 (M3). Ngày 20 là ngày cuối của đợt.
+- **Hệ quả:** p95 `/v1/ai/chat` dưới tải ghi "chưa đo"; image vẫn 776 MB nên cổng CI dung lượng
+  đỏ; bài kiểm "cách ly cache" ghi "không áp dụng".
+
+**Trễ lịch được chấp nhận:** 11/10 chỉ là mốc nội bộ, hạn thật của đồ án là 31/12/2026. Khi
+trễ, báo rõ việc nào đang bị chặn và để người dùng quyết cắt gì. Thứ tự cắt cũ (rerank → semantic
+cache → chiều sâu UC038 → soak 1 giờ) không còn áp dụng tự động.
 
 ## Branch và commit
 
