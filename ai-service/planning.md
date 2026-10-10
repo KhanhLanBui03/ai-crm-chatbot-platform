@@ -1050,6 +1050,10 @@ kỳ hoãn cùng Ngày 21 (danh sách ở cuối mục).*
 
 - [ ] 🖐 Chạy end-to-end: khách gửi tin → `guard` → `route` → `retrieve` → `generate` →
       `postguard` → `handoff` → `telemetry`.
+      → **10/10: 2/3 ngả đạt**. Gọi thẳng `POST /v1/ai/chat` (người dùng chốt), Gemini thật, kho đo.
+      (a) trả lời có trích dẫn `a4d6f8b9…` và (b) từ chối `NOT_COVERED` `3a105bb9…`, mỗi lượt đúng 1
+      dòng `ai.ai_interactions`. (c) chuyển giao **chặn**, chờ `router_model.onnx` của Dev B (người
+      dùng chốt: không tự export). Minh chứng: `docs/report/m2-ngay14-2026-10-10.md`, kịch bản (c) ở §7.
 
 **Chạm Dev B:** `route` cần `artifacts/router_model.onnx` của Dev B, hiện **chưa có trong repo**.
 Thiếu nó thì `ai-classify` không sẵn sàng và `router.py` cho mọi câu đi nhánh tra tri thức, nên
