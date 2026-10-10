@@ -19,11 +19,13 @@ Phần này **cố ý lệch xlsx**, xlsx chưa sửa theo.
 | Ngày | Trước | Sau |
 |---|---|---|
 | N14 | Mốc M2: chạy luồng chat, video 3 luồng, biểu đồ `latency_breakdown`, viết báo cáo 6 UC, bảng 7 chỉ số giữa kỳ | **Chỉ chạy trọn luồng chat.** Bốn việc còn lại hoãn cùng N21 |
+| N15 | Benchmark rút gọn + chốt cấp vCPU | **Thêm Khối A trước benchmark: rerank thật `BAAI/bge-reranker-v2-m3`**, thay bản giả Jaccard, đóng ô N8 "nDCG@5 có/không rerank" |
 | N16 | Giảm image < 400 MB, semantic cache, tối ưu độ trễ | **Bỏ.** Ô ngày này dùng cho **buổi đọc số liệu kỹ thuật** |
 | N19 | Load test 10 người / 10 phút và 50 người / 15 phút | **Hoãn** |
 | N21 | Mốc M3: báo cáo cuối, ADR, ERD, sơ đồ, mục hạn chế | **Hoãn** |
 
-Thứ tự làm sau khi đổi: N13 → N14 → N15 → **N16 đọc số** → N17 → N18 → N20.
+Thứ tự làm sau khi đổi: N13 → N14 → N15 (**rerank thật**, rồi benchmark) → **N16 đọc số** → N17 →
+N18 → N20.
 
 **Hệ quả:**
 
@@ -31,6 +33,8 @@ Thứ tự làm sau khi đổi: N13 → N14 → N15 → **N16 đọc số** → 
   mục tiêu 50 người. Đây là chỉ số §1.6 đầu tiên.
 - Image `ai-service` vẫn **776 MB**, cổng CI dung lượng (ngưỡng 400 MB, ADR-0015/0017) không đạt.
 - Không có semantic cache, nên bài (2) "cách ly cache" của N17 ghi **"không áp dụng"** kèm lý do.
+- N15 nặng thêm một khối, nhiều khả năng tràn sang buổi thứ hai. Rerank không còn là mục cắt đầu
+  tiên trong "Thứ tự cắt khi trượt lịch".
 
 ---
 
@@ -183,7 +187,8 @@ recall@5 trong báo cáo mất ý nghĩa.
 ≥ 80 cặp.
 
 *Đổi 10/10/2026: người dùng chốt bỏ cả Ngày 16, gồm semantic cache và việc giảm image < 400 MB —
-xem mục "Đổi kế hoạch tuần 3" ở đầu file.*
+xem mục "Đổi kế hoạch tuần 3" ở đầu file. Cùng ngày, mục 1 (rerank) **không còn là việc cắt**:
+người dùng chốt làm rerank thật với `bge-reranker-v2-m3` ở Ngày 15, Khối A.*
 
 Một ngày trượt phải xử lý bằng **cắt độ sâu ngay trong ngày**, không được lùi sang ngày sau —
 vì ngày sau đã đầy.
@@ -695,6 +700,7 @@ luật viết cho trường hợp trễ lịch. Ô ❌ #3 là kết quả kỹ t
 - [x] 🖐 **RERANK ĐẶT SAU FEATURE FLAG VÀ MẶC ĐỊNH TẮT.** (`RERANK_ENABLED=false`, AI viết 08/10)
 - [ ] 🖐 Đo nDCG@5 **có/không rerank MỘT LẦN** làm căn cứ cho ADR bật/tắt. ⏳ **Khối 2:**
       `inference/src/roles/rerank.py` vẫn là bản giả Jaccard của Dev B, chưa có ONNX reranker.
+      → **Chuyển sang Ngày 15, Khối A** (đổi 10/10), model `BAAI/bge-reranker-v2-m3`.
       **Cổng bật production:** ≥ **5 điểm nDCG@5** VÀ p95 chat vẫn **< 4 s**. Không đạt → giữ TẮT.
 - [x] 🤖 Mọi node ghi vào `src/ai/service.py` — **facade DUY NHẤT** (AI viết 08/10; grep chiều phụ thuộc sạch) — *verify: `api/` và `worker/`
       chỉ gọi vào `service.py`, **không gọi thẳng** `orchestrator`. CI kiểm luật này bằng grep —
@@ -1059,19 +1065,108 @@ tương ứng.
 
 # TUẦN 3 — Đo đạc, triển khai, nghiệm thu
 
-## Ngày 15 — T2 05/10 — Benchmark rút gọn + chốt cấp vCPU + ADR
+## Ngày 15 — T2 05/10 — Rerank thật `bge-reranker-v2-m3` + benchmark rút gọn + chốt cấp vCPU + ADR
 
-> **Mục tiêu:** chốt cấu hình vCPU **bằng bảng số**, không bằng phỏng đoán.
+> **Mục tiêu:** (A) thay bản rerank giả bằng `BAAI/bge-reranker-v2-m3` và đo xem nó có đáng bật
+> không; (B) chốt cấu hình vCPU **bằng bảng số**, không bằng phỏng đoán.
 
-**Điều kiện vào:** `inference/src/bench_cpu.py` hiện là khung rỗng (39 dòng docstring) — **phải
-viết code thật trước khi chạy.**
+*Đổi 10/10/2026 (người dùng chốt): thêm Khối A. Khối A làm **trước**, vì ma trận benchmark của Khối B
+cần một cross-encoder thật — đo p95 của bản Jaccard chỉ là đo một vòng lặp Python. Ngày này nhiều khả
+năng tràn sang buổi thứ hai; trễ được chấp nhận.*
 
-**Việc:**
+**Khối A — Rerank thật `BAAI/bge-reranker-v2-m3`**
+
+**Vì sao model này:** đa ngôn ngữ, dựng trên cùng xương sống với bge-m3 (XLM-RoBERTa-large, ~568
+triệu tham số), trong khi kho và câu hỏi là tiếng Việt, có cả câu không dấu. `bge-reranker-base` mà
+`inference/src/roles/rerank.py` đang khai chỉ được huấn luyện cho tiếng Anh và tiếng Trung. Tên
+`bge-reranker-v2-m3` đã khớp `ai-service/src/ai/config.py:108` và ADR-0006.
+
+**Số đã có trước khi bắt tay** — đếm 10/10 từ `tests/eval/reports/n13_lan1/truot.csv`, cấu hình ship:
+
+| 26 câu trượt top-5 | Số câu | Rerank N ứng viên, xếp hoàn hảo → trần recall@5 |
+|---|---|---|
+| đoạn đúng ở hạng 7–12 | 9 | N = 12: 0,74 + 0,09 = **0,83** |
+| đoạn đúng ở hạng 13–20 | 12 | N = 20: 0,74 + 0,21 = **0,95** |
+| đoạn đúng ở hạng 21–30 | 2 | N = 30: 0,97 |
+| ngoài top-30 | 3 | rerank không cứu được |
+
+⇒ **Với 12 ứng viên như hiện tại, rerank dù xếp hoàn hảo cũng không đưa recall@5 tới 0,85.** Giả
+định trong `quyet_dinh.py` ("đoạn đúng ngoài top-12 gần như không bao giờ được rerank kéo về top-5")
+chưa từng được đo; số trên cho thấy 12/23 đoạn đúng cứu được nằm ở hạng 13–20, ngoài tầm nhìn của
+rerank 12 ứng viên. Trần chỉ là trần: rerank thật không xếp hoàn hảo, và nếu chỉ chạy khi mơ hồ thì
+câu không bị đánh dấu mơ hồ sẽ không được rerank.
+
+**Ước lượng độ trễ — CHƯA ĐO, chỉ để biết trước rủi ro:** bge-m3 INT8 lô 1 chạy 9,8 đoạn/s trên 4
+luồng (đo 06/10, docstring `embed.py`), tức ~100 ms cho một đoạn trung vị 94 token. Cross-encoder cùng
+cỡ, mỗi cặp (câu hỏi + đoạn) dài hơn chút ⇒ cỡ **~1,2 s cho 12 cặp, ~2 s cho 20 cặp**, gấp 4–7 lần
+ngân sách 300 ms của §5.3. Cổng bật của ADR-0006 là **p95 chat < 4 s**, không phải 300 ms; vượt
+ngân sách §5.3 thì ghi rõ vào bảng, không giấu.
+
+**Việc (Khối A):**
+
+- [ ] 🤖 `notebooks/07_export_reranker.{ipynb,py}` **[R&D]** — Kaggle, **không bật GPU** (cùng lý do
+      notebook 06). Export `BAAI/bge-reranker-v2-m3` (ghim revision) sang ONNX rồi INT8 đúng cách
+      notebook 06, ghi `sha256`, ghép cặp jupytext. — *verify: đầu vào là **cặp** (câu hỏi, đoạn) mã
+      hoá chung một chuỗi, không phải hai chuỗi riêng; đầu ra là **một logit** mỗi cặp; `max_length`
+      khớp lúc chạy; tokenizer lấy từ repo của reranker, không dùng lại `tokenizer.json` của bge-m3.*
+- [ ] 🖐 **Cổng parity cho cross-encoder — đo THỨ HẠNG, không đo cosine.** Rerank chỉ dùng điểm để
+      sắp xếp: lệch thang điểm không sao, đảo thứ tự mới hỏng. Trên cặp thật (100 câu bộ vàng × 20
+      ứng viên hybrid kèm nhãn đoạn đúng, xuất từ máy dev — chỉ có chữ của `data/kb_samples`, không
+      có PII), so fp32 với INT8 **ngay trong notebook**: Spearman trung bình theo từng câu + độ trùng
+      top-5. Phân xử theo cổng `artifacts/MODEL_REGISTRY.md`: nDCG@5 sau rerank của INT8 so với fp32
+      chênh **< 1 điểm**. Trượt thì ship fp32 hoặc loại model — người dùng quyết, như ADR-0021.
+- [ ] 🤖 Thay bản Jaccard trong `inference/src/roles/rerank.py` bằng ONNX session thật, theo khuôn
+      `embed.py`: artifact mount từ `artifacts/models/` (không COPY vào image) · `model_version` tính
+      từ `sha256` của `.onnx` · thiếu file thì `/ready` = 503, **không** lùi về Jaccard · đổi
+      `DEFAULT_MODEL_ID` sang `BAAI/bge-reranker-v2-m3` · thêm `volumes` cho `ai-rerank` trong
+      `inference/compose.inference.yml` (hiện chưa mount). — *verify: mỗi cặp một lượt chạy (lô 1),
+      cùng lý do `embed.py`: `DynamicQuantizeLinear` tính thang trên cả tensor, ghép lô thì điểm của
+      một cặp phụ thuộc cặp đi cùng. Test khoá thứ tự trên một ví dụ chấm tay.*
+- [ ] 🖐 **Đo chất lượng — đóng ô Ngày 8 "nDCG@5 có/không rerank".** Chạy harness Ngày 13 với config
+      mới trong `tests/eval/configs/`, năm cấu hình: không rerank (mốc) · {12, 20} ứng viên × {mọi câu,
+      chỉ khi mơ hồ}. Báo recall@5 · nDCG@5 · MRR · KTC paired bootstrap so với mốc · **tỉ lệ lượt mơ
+      hồ** (kỳ vọng 30–40%) · trong 23 câu cứu được về lý thuyết, bao nhiêu câu bị cổng mơ hồ bỏ qua.
+- [ ] 🖐 **Đo độ trễ** — p95 rerank cho 12 và 20 cặp, gộp vào ma trận Khối B (2 và 4 vCPU, từng
+      service một). Thêm p95 `/v1/ai/chat` đơn luồng khi bật rerank (dưới tải: chưa đo, N19 hoãn).
+      Vượt thì thử đòn bẩy và ghi số từng đòn: giảm ứng viên · cắt `max_length` 512 → 256 · chỉ chạy
+      khi mơ hồ.
+- [ ] 🖐 **Quyết định bật/tắt** theo cổng ADR-0006: **≥ 5 điểm nDCG@5 VÀ p95 chat < 4 s**. Ghi vào
+      ADR-0006, mục cập nhật mới. Bật với 20 ứng viên thì sửa `SO_UNG_VIEN_RERANK` và docstring của
+      `quyet_dinh.py`. Không đạt thì giữ **TẮT**, vẫn ghi đủ số, model vào bảng "Model bị loại" của
+      `MODEL_REGISTRY.md` kèm đòn bẩy đã thử. ⚠️ Bật rerank là **đổi cấu hình ship** — người dùng chốt.
+- [ ] 🤖 Dòng `bge-reranker-v2-m3-int8` trong `artifacts/MODEL_REGISTRY.md` + Model Card.
+
+**File sẽ đụng (Khối A):** `notebooks/07_export_reranker.{ipynb,py}` · `artifacts/models/` ·
+`artifacts/MODEL_REGISTRY.md` · `inference/src/roles/rerank.py` · `inference/compose.inference.yml` ·
+`inference/tests/` · `ai-service/tests/eval/configs/` · `ai-service/src/ai/rag/rerank/quyet_dinh.py`
+(nếu đổi số ứng viên) · `docs/adr/0006-hybrid-search-rrf-rerank.md`
+
+**Chạm Dev B (Khối A):** bản Jaccard trong `rerank.py` là của Dev B — báo trước khi thay.
+
+**Phải giải thích được (Khối A):**
+- Bi-encoder và cross-encoder khác nhau ở đâu? Vì sao cross-encoder chính xác hơn mà vẫn không thay
+  được bi-encoder ở bước tìm?
+- Vì sao parity của cross-encoder đo thứ hạng chứ không đo cosine như encoder?
+- "Trần của rerank" là gì, và vì sao 12 ứng viên có trần 0,83?
+- Rerank có thể tăng nDCG@5 mà recall@5 giữ nguyên không? Vì sao?
+
+**Cổng ra Khối A:** `rerank.py` chạy model thật, không còn Jaccard · bảng 5 cấu hình kèm config ·
+p95 rerank 12/20 cặp ở 2 và 4 vCPU · quyết định bật/tắt đã ghi vào ADR-0006.
+
+**Minh chứng báo cáo (Khối A):** bảng có/không rerank (recall@5 · nDCG@5 · KTC) · bảng trần theo số
+ứng viên · tỉ lệ lượt mơ hồ · p95 rerank · dòng `MODEL_REGISTRY.md`.
+
+**Khối B — Benchmark rút gọn + chốt cấp vCPU (nội dung cũ)**
+
+**Điều kiện vào:** Khối A xong — có cross-encoder thật. `inference/src/bench_cpu.py` hiện là khung
+rỗng (39 dòng docstring) — **phải viết code thật trước khi chạy.**
+
+**Việc (Khối B):**
 
 - [ ] 🤖 Viết `bench_cpu.py` thật — *verify: đo p50/p95/RSS, có warm-up, số lần lặp đủ lớn để
       p95 ổn định.*
-- [ ] 🖐 Chạy bản rút gọn: **3 model** (encoder S, encoder M, cross-encoder S) × **2 mức vCPU**
-      (2 và 4).
+- [ ] 🖐 Chạy bản rút gọn: **3 model** (encoder S, encoder M, cross-encoder `bge-reranker-v2-m3`
+      INT8) × **2 mức vCPU** (2 và 4).
       ⚠️ **CHẠY TỪNG SERVICE MỘT, không song song** — chạy song song thì các service tranh CPU
       và **mọi con số đều vô nghĩa**.
       *(Ma trận đầy đủ đã cắt — xem sheet "Phạm vi cắt & làm sau".)*
@@ -1084,7 +1179,7 @@ viết code thật trước khi chạy.**
 - [ ] 🖐 **ADR chốt cấp vCPU.** Với model bị loại, ghi rõ **đã thử đòn bẩy nào và SỐ ĐO**.
       *Một dòng "quá chậm" không kèm bảng số là KHÔNG ĐỦ để loại một model trong báo cáo.*
 
-**File sẽ đụng:** `inference/src/bench_cpu.py` · `inference/compose.inference.yml` · `docs/adr/`
+**File sẽ đụng (Khối B):** `inference/src/bench_cpu.py` · `inference/compose.inference.yml` · `docs/adr/`
 
 **Chạm Dev B:** Dev B làm UC039 (mô hình đọc báo cáo) cùng ngày. Không giao cắt.
 
@@ -1093,7 +1188,7 @@ viết code thật trước khi chạy.**
 - Vì sao chạy benchmark từng service một? Nếu chạy song song thì số sai theo hướng nào?
 - Vì sao model nhỏ tăng vCPU không nhanh hơn?
 
-**Cổng ra (DoD):** có bảng benchmark đầy đủ · ADR chốt vCPU cho 3 service.
+**Cổng ra (DoD) cả ngày:** Cổng ra Khối A · có bảng benchmark đầy đủ · ADR chốt vCPU cho 3 service.
 
 **Minh chứng báo cáo:** bảng benchmark rút gọn (model × vCPU × threads × p50 × p95 × RSS ×
 đạt/không) · **bảng chênh lệch p95 khi ghim luồng và khi để mặc định** · ADR chốt cấp vCPU.
@@ -1128,6 +1223,8 @@ cho buổi đọc số.
       - **Trả lời (N13):** độ phủ trích dẫn · tỉ lệ từ chối (từ chối đúng, từ chối nhầm).
       - **Độ trễ và tài nguyên (N13, N15):** p50 và p95 (vì sao báo p95 chứ không báo trung bình) ·
         p95 từng service classify / embed / rerank · RSS · vCPU × `OMP_NUM_THREADS`.
+      - **Rerank (N15 Khối A):** nDCG@5 có/không rerank · trần recall@5 theo số ứng viên (12 → 0,83,
+        20 → 0,95) · tỉ lệ lượt mơ hồ · parity thứ hạng fp32 ↔ INT8.
       - **Số đã đo ở N1–N12 sẽ vào báo cáo:** parity cosine INT8 · 30/30 câu ngoài phạm vi ·
         4/4 phần tóm tắt · tỉ lệ lượt không gọi LLM (nếu đã đo).
 - [ ] 🖐 **Buổi đọc — người dùng tự làm, không giao AI:** đọc tài liệu, mở CSV/PNG của N13 và
@@ -1307,7 +1404,7 @@ chỉ số giữa kỳ).
 
 **ADR sinh trong 21 ngày:** ADR-0017 (4 quyết định hợp đồng, N1) · ADR bỏ nhánh A router (N4,
 Dev B) · ADR chốt nhánh router (N5, Dev B) · ADR fine-tune ship hay rollback (N7) · ADR cấp vCPU
-(N15) · ADR bật/tắt rerank (N8) · ADR phạm vi.
+(N15) · ADR bật/tắt rerank (N15, ghi vào ADR-0006) · ADR phạm vi.
 
 **Việc:**
 
@@ -1370,7 +1467,7 @@ ERD khớp 100% migration · bảng nghiệm thu 17/17 UC × trạng thái × s�
 | 14 | Parity cosine bản **FINE-TUNE** | ≥ 0,995 — không đạt thì rollback | N7 | | |
 | 15 | Hiệu số recall@5 fine-tune vs pretrained | KTC 95% paired bootstrap **không chứa 0** | N7 | | |
 | 16 | Thời gian reindex toàn bộ chunk | Đo thật; **0 giây kho tri thức trống** | N7, N11 | | |
-| 17 | Cổng quyết định bật rerank | ≥ 5 điểm nDCG@5 **VÀ** p95 < 4 s | N8 | | |
+| 17 | Cổng quyết định bật rerank | ≥ 5 điểm nDCG@5 **VÀ** p95 < 4 s | N8 → N15 | | |
 | 18 | 30 câu hỏi ngoài phạm vi trả rỗng đúng | **30/30** | N10 | | |
 | 19 | Eval harness tái lập được | Chạy 2 lần ra cùng con số; mỗi số kèm config | N13, N20 | | |
 | 20 | Cách ly tenant qua **ĐƯỜNG NGÔN NGỮ** | Hỏi A về tài liệu B → phải **TỪ CHỐI** | N17 | | |
