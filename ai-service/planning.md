@@ -12,6 +12,28 @@ Thứ tự ưu tiên khi tài liệu mâu thuẫn: `repo` > `docs/adr/` > Master
 
 ---
 
+## 🔁 Đổi kế hoạch tuần 3 — người dùng chốt 10/10/2026
+
+Phần này **cố ý lệch xlsx**, xlsx chưa sửa theo.
+
+| Ngày | Trước | Sau |
+|---|---|---|
+| N14 | Mốc M2: chạy luồng chat, video 3 luồng, biểu đồ `latency_breakdown`, viết báo cáo 6 UC, bảng 7 chỉ số giữa kỳ | **Chỉ chạy trọn luồng chat.** Bốn việc còn lại hoãn cùng N21 |
+| N16 | Giảm image < 400 MB, semantic cache, tối ưu độ trễ | **Bỏ.** Ô ngày này dùng cho **buổi đọc số liệu kỹ thuật** |
+| N19 | Load test 10 người / 10 phút và 50 người / 15 phút | **Hoãn** |
+| N21 | Mốc M3: báo cáo cuối, ADR, ERD, sơ đồ, mục hạn chế | **Hoãn** |
+
+Thứ tự làm sau khi đổi: N13 → N14 → N15 → **N16 đọc số** → N17 → N18 → N20.
+
+**Hệ quả:**
+
+- Ba ô của N19 ghi **"chưa đo (hoãn)"** ở N20: p95 `/v1/ai/chat` dưới tải, baseline 10 người, tải
+  mục tiêu 50 người. Đây là chỉ số §1.6 đầu tiên.
+- Image `ai-service` vẫn **776 MB**, cổng CI dung lượng (ngưỡng 400 MB, ADR-0015/0017) không đạt.
+- Không có semantic cache, nên bài (2) "cách ly cache" của N17 ghi **"không áp dụng"** kèm lý do.
+
+---
+
 ## ⚠️ Lệch lịch — đọc trước khi bắt đầu
 
 Hôm nay là **22/09**, theo lịch gốc đó là **Ngày 2**, nhưng phần việc Ngày 1 chưa làm xong.
@@ -72,7 +94,7 @@ container → xác minh lại → `.env` → `dev.txt` → `test_rls.py` → job
 | 7 | `postguard` — groundedness vs retrieval_top_score | N9 | Hai đại lượng khác nhau; nhầm là hỏng cả chương đánh giá |
 | 8 | Circuit breaker 3 trạng thái | N9 | Chịu lỗi LLM — hội đồng chắc chắn hỏi |
 | 9 | `search_or_abstain` — 4 lý do từ chối | N10 | Toàn bộ UC025 nằm ở đây |
-| 10 | Khoá semantic cache có `tenant_id` | N16 | Thiếu `tenant_id` = rò rỉ giữa doanh nghiệp, 1 trong 7 chỉ số §1.6 |
+| 10 | ~~Khoá semantic cache có `tenant_id`~~ — **bỏ cùng N16 (10/10)** | ~~N16~~ | Thiếu `tenant_id` = rò rỉ giữa doanh nghiệp, 1 trong 7 chỉ số §1.6 |
 
 ---
 
@@ -157,8 +179,11 @@ recall@5 trong báo cáo mất ý nghĩa.
 3. Chiều sâu UC038 (của Dev B)
 4. Soak 1 giờ (N19)
 
-**KHÔNG cắt:** nguyên một use case · giảm image xuống < 400 MB (N16, cổng CI đã `exit 1`) ·
-tập test đóng băng · test cách ly tenant trong CI · bộ vàng ≥ 80 cặp.
+**KHÔNG cắt:** nguyên một use case · tập test đóng băng · test cách ly tenant trong CI · bộ vàng
+≥ 80 cặp.
+
+*Đổi 10/10/2026: người dùng chốt bỏ cả Ngày 16, gồm semantic cache và việc giảm image < 400 MB —
+xem mục "Đổi kế hoạch tuần 3" ở đầu file.*
 
 Một ngày trượt phải xử lý bằng **cắt độ sâu ngay trong ngày**, không được lùi sang ngày sau —
 vì ngày sau đã đầy.
@@ -989,39 +1014,45 @@ Ngày 20 chạy nối nhau được. Bộ hồi quy đủ 17 UC vẫn hoãn — 
 
 ---
 
-## Ngày 14 — CN 04/10 — 🏁 MỐC M2 · Demo luồng chính end-to-end
+## Ngày 14 — CN 04/10 — 🏁 MỐC M2 · Chạy trọn luồng chat end-to-end
 
-> **Mục tiêu:** có video chứng minh hệ thống chạy thật, không phải slide.
+> **Mục tiêu:** lượt chat thật đi trọn từ lúc khách gửi tin tới dòng telemetry, trên hạ tầng thật.
+
+*Đổi 10/10/2026: ngày này **chỉ** chạy trọn luồng chat. Video, biểu đồ, báo cáo và bảng chỉ số giữa
+kỳ hoãn cùng Ngày 21 (danh sách ở cuối mục).*
 
 **Việc:**
 
 - [ ] 🖐 Chạy end-to-end: khách gửi tin → `guard` → `route` → `retrieve` → `generate` →
       `postguard` → `handoff` → `telemetry`.
-- [ ] 🖐 **Quay video 3 luồng:** (1) trả lời có trích dẫn · (2) từ chối khi thiếu căn cứ ·
-      (3) chuyển giao nhân viên.
-- [ ] 🤖 Dựng biểu đồ `latency_breakdown` **9 tầng** của một lượt thật — *verify: đặt **cạnh bảng
-      ngân sách §5.3** để thấy tầng nào đang ăn vào khoản dự phòng 900 ms.*
-- [ ] 🖐 **VIẾT:** phần báo cáo về UC020, UC023, UC025, UC026, UC027, UC041.
-      *Viết lúc còn nhớ rẻ hơn nhiều so với viết ở Ngày 21.*
-- [ ] 🖐 Bảng đối chiếu **7 chỉ số §1.6 ở mốc giữa kỳ** — **ô nào chưa đo thì ghi "chưa đo",
-      không để trống.** *Ô trống đọc như một chỉ số bị giấu.*
 
-**Chạm Dev B:** Dev B quay demo luồng nghiệp vụ + test ma trận suy giảm cùng ngày. **Ghép video
-sau**, Ngày 21.
+**Chạm Dev B:** `route` cần `artifacts/router_model.onnx` của Dev B, hiện **chưa có trong repo**.
+Thiếu nó thì `ai-classify` không sẵn sàng và `router.py` cho mọi câu đi nhánh tra tri thức, nên
+ngả chuyển giao và ngả mẫu câu không chạy qua `route` được. Xin Dev B file này trước ngày này;
+không có thì vẫn chạy, ghi rõ trong minh chứng.
 
 **Phải giải thích được:**
 - Đi qua 8 node theo đúng thứ tự và nói mỗi node làm gì trong **một câu**. Đây là câu hỏi mở đầu
   gần như chắc chắn của buổi bảo vệ.
-- Nhìn biểu đồ `latency_breakdown`: tầng nào đang ăn nhiều nhất, và nếu phải cắt 500 ms thì cắt ở đâu?
-- Vì sao ngân sách §5.3 có khoản **dự phòng 900 ms**, và nó đã bị tiêu vào đâu?
 
-**🏁 ĐIỀU KIỆN THOÁT M2:** 17/17 UC có endpoint/worker chạy + 1 test luồng chính + 1 con số minh
-chứng; đã quay được demo luồng trả lời và luồng lead.
+**🏁 ĐIỀU KIỆN THOÁT M2:** mỗi ngả có ít nhất một lượt thật đi trọn tới `telemetry`: trả lời có
+trích dẫn · từ chối khi thiếu căn cứ · chuyển giao. Mỗi lượt ghi đúng một dòng `ai.ai_interactions`.
 
-🚨 **TRƯỢT M2 → cắt UC038 (Ngày 17) và dồn Ngày 15–16 sang hoàn thiện UC còn thiếu.**
+🚨 **TRƯỢT M2 → chưa sang Ngày 15, sửa tới khi luồng chat chạy** (ưu tiên luồng chính trước phép đo).
 
-**Minh chứng báo cáo:** **VIDEO DEMO LUỒNG CHÍNH** · biểu đồ `latency_breakdown` 9 tầng của một
-lượt thật · **bảng đối chiếu 7 chỉ số §1.6 ở mốc giữa kỳ**.
+**Minh chứng báo cáo:** log của các lượt thật, mỗi ngả một lượt · các dòng `ai.ai_interactions`
+tương ứng.
+
+**⏸ Hoãn cùng Ngày 21 (đổi 10/10/2026):**
+
+- [ ] 🖐 **Quay video 3 luồng:** (1) trả lời có trích dẫn · (2) từ chối khi thiếu căn cứ ·
+      (3) chuyển giao nhân viên. Dev B quay luồng nghiệp vụ, ghép video sau.
+- [ ] 🤖 Dựng biểu đồ `latency_breakdown` **9 tầng** của một lượt thật, đặt **cạnh bảng ngân sách
+      §5.3**. Câu hỏi đi kèm: tầng nào ăn nhiều nhất, cắt 500 ms thì cắt ở đâu, khoản **dự phòng
+      900 ms** đã bị tiêu vào đâu.
+- [ ] 🖐 **VIẾT:** phần báo cáo về UC020, UC023, UC025, UC026, UC027, UC041.
+- [ ] 🖐 Bảng đối chiếu **7 chỉ số §1.6 ở mốc giữa kỳ** — ô nào chưa đo thì ghi "chưa đo",
+      không để trống.
 
 ---
 ---
@@ -1069,58 +1100,59 @@ viết code thật trước khi chạy.**
 
 ---
 
-## Ngày 16 — T3 06/10 — Tối ưu độ trễ + semantic cache + GIẢM DUNG LƯỢNG IMAGE
+## Ngày 16 — T3 06/10 — 📖 Buổi đọc số liệu kỹ thuật
 
-> **Mục tiêu:** image xuống dưới 400 MB (nợ kỹ thuật bắt buộc trả), và cache không rò rỉ tenant.
+> **Mục tiêu:** hiểu từng con số đã đo là gì, đo bằng kỹ thuật nào và đọc nó ra sao, đủ để tự
+> trả lời hội đồng bằng số của chính mình mà không cần mở tài liệu.
 
-**Điều kiện vào:** cổng CI dung lượng đã `exit 1` từ Ngày 1 → **đây là việc BẮT BUỘC, không phải
-tuỳ chọn.**
+⚠️ **Đổi 10/10/2026 — nội dung cũ của ngày này ĐÃ BỎ** (người dùng chốt): giảm image `ai-service`
+xuống < 400 MB (đang 776 MB), semantic cache có khoá `tenant_id`, tối ưu độ trễ theo số đo, test
+hai tenant cùng câu hỏi qua cache. Bản cũ còn trong lịch sử git của file này. Ô ngày trống dùng
+cho buổi đọc số.
 
-**Nợ kỹ thuật đã ghi nhận (ADR-0015 mục 6):** image `ai-service` đang **776 MB**, ngưỡng
-**< 400 MB**. Bóc tách: `scipy`+`numpy`+`sklearn` **252 MB** (phụ thuộc gián tiếp của `pyvi`) ·
-`pymupdf` **63 MB** · `babel`+`zstandard` **55 MB** (gián tiếp của `trafilatura`).
+**Điều kiện vào:** N13 đã ra bảng số (CSV + PNG), N15 đã có bảng benchmark.
 
 **Việc:**
 
-- [ ] 🤖 Giảm image xuống **< 400 MB** — tách layer worker, loại phụ thuộc chỉ dùng lúc build,
-      cân nhắc thay `trafilatura` ở nhánh HTML — *verify: **KHÔNG được bỏ `pyvi`** (`rag/tsquery`
-      cần `ViTokenizer`) và **KHÔNG được import `sklearn` trong `src/`** để suy luận. Chạy lại
-      cổng CI cả hai luật.*
-- [ ] 🖐 **Semantic cache trên Redis với KHOÁ BẮT BUỘC CÓ `tenant_id` — tự gõ.**
-      ⚠️ *Thiếu nó là rò rỉ dữ liệu giữa các doanh nghiệp, và đây là **một trong 7 chỉ số nghiệm thu**.*
-- [ ] 🖐 Đánh dấu `is_cached` và **KHÔNG tính chi phí** gọi model; **vô hiệu cache khi kho tri
-      thức của tenant thay đổi**.
-- [ ] 🖐 Tối ưu theo **số đo thật**: `ef_search` · `LIMIT` hybrid · độ dài prompt · số đoạn vào
-      lời nhắc.
-      ⚠️ *Các dòng ngân sách §5.3 **phân bổ lại được cho nhau**, chỉ dòng **TỔNG 4.000 ms** là
-      bất biến — embedding cần 200 ms thay vì 120 ms thì lấy từ khoản dự phòng 900 ms, **KHÔNG
-      loại model**.*
-- [ ] 🖐 Test chứng minh **hai tenant hỏi cùng câu nhận hai câu trả lời khác nhau**.
-- [ ] 🤝 PII trong log: grep tự động = 0 (làm cùng Dev B — Dev B làm phía UC040).
+- [ ] 🤖 Soạn tài liệu đọc `docs/on-tap/ngay-16-doc-so-lieu-ky-thuat.md`. Mỗi con số một mục,
+      cùng một khuôn:
+      1. nó đo cái gì, nói bằng lời thường;
+      2. kỹ thuật đứng sau và công thức, kèm **một ví dụ tính tay trên một câu hỏi thật** của bộ vàng;
+      3. số mình đo được · ngưỡng · đạt hay không · đo ngày nào, bằng config nào;
+      4. cách đọc: số cao hay thấp nghĩa là gì, hay bị hiểu nhầm ở đâu;
+      5. câu hội đồng hay hỏi, trả lời sẵn bằng số của mình.
 
-**File sẽ đụng:** `ai-service/Dockerfile` · `ai-service/requirements/base.in|txt` ·
-`src/ai/rag/` · `.github/workflows/ci.yml`
+      Các con số phải có:
+      - **Truy hồi (N13):** recall@5 · nDCG@5 · MRR · khoảng tin cậy paired bootstrap · hybrid
+        so với dense.
+      - **Trả lời (N13):** độ phủ trích dẫn · tỉ lệ từ chối (từ chối đúng, từ chối nhầm).
+      - **Độ trễ và tài nguyên (N13, N15):** p50 và p95 (vì sao báo p95 chứ không báo trung bình) ·
+        p95 từng service classify / embed / rerank · RSS · vCPU × `OMP_NUM_THREADS`.
+      - **Số đã đo ở N1–N12 sẽ vào báo cáo:** parity cosine INT8 · 30/30 câu ngoài phạm vi ·
+        4/4 phần tóm tắt · tỉ lệ lượt không gọi LLM (nếu đã đo).
+- [ ] 🖐 **Buổi đọc — người dùng tự làm, không giao AI:** đọc tài liệu, mở CSV/PNG của N13 và
+      bảng N15 bên cạnh, **tự tính tay recall@5 của 3 câu hỏi** rồi đối chiếu với số harness in ra.
+- [ ] 🤝 Hỏi đáp với agent `mentor` theo kiểu hội đồng: nó hỏi, bạn trả lời bằng số của mình.
+      Câu nào chưa trả lời được thì ghi lại, AI bổ sung lời giải vào tài liệu.
 
-**Chạm Dev B:** Dev B làm UC040 + UC006 cùng ngày, cũng grep PII. **Chia việc grep**, đừng làm
-trùng.
+**File sẽ đụng:** `docs/on-tap/ngay-16-doc-so-lieu-ky-thuat.md` — chỉ tài liệu, không đụng code.
+
+**Chạm Dev B:** không giao cắt.
 
 **Phải giải thích được:**
-- Vì sao khoá cache phải có `tenant_id`? Mô tả chính xác kịch bản rò rỉ nếu thiếu.
-- `sklearn` là phụ thuộc gián tiếp của `pyvi` — vậy vì sao cổng CI chỉ chặn 3 gói chứ không chặn
-  `sklearn`?
-- Khi nào thì phải vô hiệu cache của một tenant?
+- recall@5 và nDCG@5 khác nhau ở đâu? Khi nào recall@5 cao mà nDCG@5 vẫn thấp?
+- Vì sao báo p95 mà không báo độ trễ trung bình?
+- Khoảng tin cậy bootstrap "chứa 0" nghĩa là gì, và vì sao khi đó không được nói "A tốt hơn B"?
+- Độ phủ trích dẫn 0,80 nghĩa là gì trên một câu trả lời cụ thể?
 
-**Cổng ra (DoD):**
-- ✅ **Dung lượng image `ai-service` < 400 MB** (CI xanh ở cổng dung lượng)
-- ✅ Test hai tenant cùng câu hỏi → hai câu trả lời khác nhau
+**Cổng ra (DoD):** tự giải thích được mỗi con số trong 2–3 câu, kèm số của mình · tính tay
+recall@5 của 3 câu hỏi khớp số harness · mọi câu chưa trả lời được đã có lời giải trong tài liệu.
 
-**Minh chứng báo cáo:** dung lượng image < 400 MB · **bảng ngân sách §5.3 phiên bản ĐÃ PHÂN BỔ
-LẠI** theo số đo thật, đặt cạnh bảng gốc · p95 end-to-end trước/sau tối ưu · tỉ lệ cache hit và
-mức giảm chi phí · test cách ly cache.
+**Minh chứng báo cáo:** không có — đây là buổi học. Tài liệu đọc là nguồn để viết chương đánh giá.
 
 ---
 
-## Ngày 17 — T4 07/10 — Kiểm thử bảo mật phần dữ liệu (3/5 bài)
+## Ngày 17 — T4 07/10 — Kiểm thử bảo mật phần dữ liệu (3/5 bài, bài cache không áp dụng)
 
 > **Mục tiêu:** chứng minh mô hình ngôn ngữ **không trở thành đường vòng qua RLS**.
 
@@ -1133,8 +1165,8 @@ tấn công qua ĐƯỜNG NGÔN NGỮ chứ không qua đường SQL.**
       tài liệu của B** → phải **TỪ CHỐI**, không phải trả lời sai và cũng không phải trả lời đúng.
       ⚠️ **Đây là bài quan trọng nhất:** RLS chặn được truy vấn, nhưng **chỉ bài này** chứng minh
       mô hình không trở thành đường vòng qua RLS.
-- [ ] 🖐 **BÀI (2) — CÁCH LY CACHE.** Cùng một câu hỏi từ **2 tenant** phải trả **2 câu trả lời
-      từ 2 kho tri thức** (kiểm chứng khoá cache của Ngày 16).
+- ~~🖐 **BÀI (2) — CÁCH LY CACHE.**~~ **Không áp dụng** (đổi 10/10/2026): Ngày 16 đã bỏ nên không
+  có semantic cache để kiểm. Ghi "không áp dụng" kèm lý do vào bảng 5 bài, không để trống.
 - [ ] 🖐 **BÀI (3) — PII TRONG LOG.** Grep tự động tìm số điện thoại, email, nội dung tin nhắn
       thô trên **TOÀN BỘ** log.
 - [ ] 🖐 Xác nhận `ai-service` kết nối CSDL bằng role **`ai_app`** (không phải `crm_owner`).
@@ -1147,9 +1179,9 @@ dụng" kèm lý do**, không để ô trống.
 - Vì sao "trả lời đúng bằng tài liệu của B" cũng là **sai**, không chỉ "trả lời sai"?
 - RLS đã chặn ở tầng SQL rồi, vậy bài (1) còn chứng minh thêm điều gì?
 
-**Cổng ra (DoD):** **3/3 bài đạt** · kết quả grep PII = **0**.
+**Cổng ra (DoD):** **2/2 bài đạt** (bài 2 không áp dụng) · kết quả grep PII = **0**.
 
-**Minh chứng báo cáo:** 3/3 bài đạt · ảnh chụp tenant A **TỪ CHỐI đúng** khi được hỏi về tài liệu
+**Minh chứng báo cáo:** 2/2 bài đạt, bài 2 ghi "không áp dụng" · ảnh chụp tenant A **TỪ CHỐI đúng** khi được hỏi về tài liệu
 của B · kết quả grep PII = 0 · ảnh chụp `SELECT current_user` = `ai_app`.
 
 ---
@@ -1192,7 +1224,10 @@ thử nghiệm là loại nào** (thật đã ẩn danh / tự soạn / công kh
 
 ---
 
-## Ngày 19 — T6 09/10 — Load test rút gọn
+## Ngày 19 — T6 09/10 — Load test rút gọn · ⏸ HOÃN
+
+⏸ **HOÃN (đổi 10/10/2026, người dùng chốt):** không làm trong đợt này, nội dung giữ nguyên bên dưới
+để làm sau. Ở N20, ba ô #1, #24, #25 của bảng chỉ số ghi "chưa đo (hoãn)".
 
 > **Mục tiêu:** chỉ số §1.6 đầu tiên — p95 < 4.000 ms **và không tăng dần**.
 
@@ -1236,9 +1271,12 @@ autoscaling; trên một instance đơn nó chỉ làm bão hoà CPU và cho ra 
 
 - [ ] 🖐 **Chạy MỘT LƯỢT:** CI đầy đủ (gồm cổng chặn ML runtime **và** cổng dung lượng image) ·
       test RLS · eval RAG bằng lệnh đóng gói Ngày 13 · contract test.
+      *Đổi 10/10: cổng dung lượng sẽ đỏ vì Ngày 16 đã bỏ — ghi nhận, không sửa trong đợt này.
+      Ngày 21 hoãn nên đây là ngày cuối của đợt.*
 - [ ] 🖐 Ghi kết quả **có dấu thời gian** làm bằng chứng cuối.
 - [ ] 🖐 Xử lý mọi ca còn đỏ.
-- [ ] 🖐 Điền **phần Dev A** của bảng chỉ số nghiệm thu (bảng cuối file này + sheet xlsx).
+- [ ] 🖐 Điền **phần Dev A** của bảng chỉ số nghiệm thu (bảng cuối file này + sheet xlsx). Ô của
+      Ngày 19 ghi "chưa đo (hoãn)", không để trống.
 
 ⚠️ **Nguyên tắc:** *một ảnh chụp toàn bộ bộ test xanh **trong một lần chạy** thuyết phục hơn mười
 ảnh chụp rời rạc chụp ở mười thời điểm khác nhau.*
@@ -1259,7 +1297,11 @@ autoscaling; trên một instance đơn nó chỉ làm bão hoà CPU và cho ra 
 
 ---
 
-## Ngày 21 — CN 11/10 — 🏁 MỐC M3 · Báo cáo cuối + tài liệu kiến trúc + ADR
+## Ngày 21 — CN 11/10 — 🏁 MỐC M3 · Báo cáo cuối + tài liệu kiến trúc + ADR · ⏸ HOÃN
+
+⏸ **HOÃN (đổi 10/10/2026, người dùng chốt):** không làm trong đợt này, nội dung giữ nguyên bên dưới
+để làm sau, cùng bốn việc hoãn từ Ngày 14 (video, biểu đồ `latency_breakdown`, báo cáo 6 UC, bảng
+chỉ số giữa kỳ).
 
 > **Mục tiêu:** gói bàn giao nộp được.
 
@@ -1312,14 +1354,14 @@ ERD khớp 100% migration · bảng nghiệm thu 17/17 UC × trạng thái × s�
 
 | # | Chỉ số | Ngưỡng đạt | Ngày | Giá trị đo được | Kết luận |
 |---|---|---|---|---|---|
-| 1 | p95 độ trễ endpoint chat | < 4.000 ms và **KHÔNG tăng dần** | N19 | | |
+| 1 | p95 độ trễ endpoint chat | < 4.000 ms và **KHÔNG tăng dần** | N19 ⏸ | chưa đo (hoãn) | |
 | 2 | Tổng p95 phần suy luận CPU | < 480 ms (classify 60 + embed 120 + rerank 300) | N13, N15 | | |
 | 3 | recall@5 trên bộ vàng | **≥ 0,85** (bộ vàng ≥ 80 cặp) | N13, N20 | | |
 | 4 | Độ phủ trích dẫn | ≥ 0,80 | N13, N20 | | |
 | 5 | Rò rỉ dữ liệu giữa tenant | **0 trường hợp** | N1, N7, N17, N18 | | |
 | 6 | Flyway V201–V209 chạy sạch | 9 dòng history, 6 bảng, đủ chỉ mục | N1 | | |
 | 7 | Test cách ly tenant trong CI | **3/3 ca xanh** | N1 | | |
-| 8 | Dung lượng image `ai-service` | **< 400 MB** (đang 776 MB) | N1, N16, N20 | | |
+| 8 | Dung lượng image `ai-service` | **< 400 MB** (đang 776 MB) | N1, N20 (N16 đã bỏ) | | |
 | 9 | Parity cosine INT8 vs fp32 (encoder base) | ≥ 0,995 | N2 | | |
 | 10 | Số chiều vector khớp lược đồ | **1024** — `INSERT` thật không lỗi | N2 | | |
 | 11 | Chênh lệch recall@5 (1 tenant vs 20 tenant) | < 3 điểm | N6 | | |
@@ -1332,13 +1374,15 @@ ERD khớp 100% migration · bảng nghiệm thu 17/17 UC × trạng thái × s�
 | 18 | 30 câu hỏi ngoài phạm vi trả rỗng đúng | **30/30** | N10 | | |
 | 19 | Eval harness tái lập được | Chạy 2 lần ra cùng con số; mỗi số kèm config | N13, N20 | | |
 | 20 | Cách ly tenant qua **ĐƯỜNG NGÔN NGỮ** | Hỏi A về tài liệu B → phải **TỪ CHỐI** | N17 | | |
-| 21 | Cách ly bộ nhớ đệm ngữ nghĩa | 2 tenant → 2 câu trả lời từ 2 kho tri thức | N17 | | |
-| 22 | PII trong log *(cùng Dev B)* | grep tự động = **0** | N16, N17 | | |
+| 21 | Cách ly bộ nhớ đệm ngữ nghĩa | 2 tenant → 2 câu trả lời từ 2 kho tri thức | N17 | không áp dụng — N16 đã bỏ, không có cache | |
+| 22 | PII trong log *(cùng Dev B)* | grep tự động = **0** | N17 | | |
 | 23 | Năm bài kiểm thử bảo mật *(cùng Dev B)* | 5/5 đạt (bài "quyền công cụ" ghi *không áp dụng*) | N17, N20 | | |
-| 24 | Baseline 10 người dùng / 10 phút | p95 < 2.500 ms, lỗi 0% | N19 | | |
-| 25 | Tải mục tiêu 50 người dùng / 15 phút | p95 < 4.000 ms, lỗi < 1%, KHÔNG tăng dần | N19 | | |
-| 26 | Nguồn dữ liệu thử nghiệm *(cùng Dev B)* | Ghi rõ tự soạn/công khai hay đã ẩn danh | N18, N21 | | |
+| 24 | Baseline 10 người dùng / 10 phút | p95 < 2.500 ms, lỗi 0% | N19 ⏸ | chưa đo (hoãn) | |
+| 25 | Tải mục tiêu 50 người dùng / 15 phút | p95 < 4.000 ms, lỗi < 1%, KHÔNG tăng dần | N19 ⏸ | chưa đo (hoãn) | |
+| 26 | Nguồn dữ liệu thử nghiệm *(cùng Dev B)* | Ghi rõ tự soạn/công khai hay đã ẩn danh | N18, N21 ⏸ | | |
 | 27 | Số use case hoàn thành *(cùng Dev B)* | 17/17 UC | N20 | | |
+
+⏸ = ngày đó đã hoãn (đổi 10/10/2026).
 
 ---
 
@@ -1347,8 +1391,8 @@ ERD khớp 100% migration · bảng nghiệm thu 17/17 UC × trạng thái × s�
 | Mốc | Hạn | Điều kiện thoát | 🚨 Trượt thì làm gì |
 |---|---|---|---|
 | **M1** Nền tảng dữ liệu | hết **N7** (27/09) | Tài liệu thật vào chunks · test cách ly tenant xanh · hybrid thắng dense ≥ 5 điểm · router chạy trong `ai-classify` | **Cắt rerank khỏi N8** và **bỏ semantic cache ở N16** |
-| **M2** Demo luồng chính | hết **N14** (04/10) | 17/17 UC có endpoint/worker + 1 test + 1 con số · có video luồng trả lời và luồng lead | **Cắt UC038 (N17)**, dồn N15–16 sang hoàn thiện UC còn thiếu |
-| **M3** Nghiệm thu | hết **N21** (11/10) | 7/7 chỉ số đạt · gói bàn giao · video demo 17 UC + slide | Không còn đường lùi — đây là hạn cuối |
+| **M2** Luồng chat chạy trọn | hết **N14** (04/10) | Mỗi ngả một lượt thật đi trọn tới `telemetry`: trả lời có trích dẫn · từ chối · chuyển giao *(đổi 10/10)* | Chưa sang N15, sửa tới khi luồng chat chạy |
+| **M3** Nghiệm thu | ⏸ **hoãn** cùng N21 *(đổi 10/10)* | 7/7 chỉ số đạt · gói bàn giao · video demo 17 UC + slide | Hạn thật của đồ án là 31/12/2026 |
 
 ---
 
