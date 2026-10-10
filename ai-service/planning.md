@@ -21,16 +21,28 @@ Phần này **cố ý lệch xlsx**, xlsx chưa sửa theo.
 | N14 | Mốc M2: chạy luồng chat, video 3 luồng, biểu đồ `latency_breakdown`, viết báo cáo 6 UC, bảng 7 chỉ số giữa kỳ | **Chỉ chạy trọn luồng chat.** Bốn việc còn lại hoãn cùng N21 |
 | N15 | Benchmark rút gọn + chốt cấp vCPU | **Thêm Khối A trước benchmark: rerank thật `BAAI/bge-reranker-v2-m3`**, thay bản giả Jaccard, đóng ô N8 "nDCG@5 có/không rerank" |
 | N16 | Giảm image < 400 MB, semantic cache, tối ưu độ trễ | **Bỏ.** Ô ngày này dùng cho **buổi đọc số liệu kỹ thuật** |
+| N18 | Triển khai 1 instance cloud HTTPS, test RLS ở môi trường triển khai, dữ liệu doanh nghiệp thật | **Hoãn** *(đổi lần hai)* — làm khi lên production |
 | N19 | Load test 10 người / 10 phút và 50 người / 15 phút | **Hoãn** |
+| N20 | Chạy lại toàn bộ bộ test + eval cuối trong một lượt, điền bảng chỉ số | **Hoãn** *(đổi lần hai)* — làm khi lên production |
 | N21 | Mốc M3: báo cáo cuối, ADR, ERD, sơ đồ, mục hạn chế | **Hoãn** |
 
-Thứ tự làm sau khi đổi: N13 → N14 → N15 (**rerank thật**, rồi benchmark) → **N16 đọc số** → N17 →
-N18 → N20.
+Thứ tự làm sau khi đổi: N13 → N14 → N15 (**rerank thật**, rồi benchmark) → **N16 đọc số** → **N17
+là ngày cuối của đợt**. Ngả (c) của N14 chạy bù khi có `router_model.onnx`.
+
+**Đổi lần hai, 10/10/2026 — người dùng chốt hoãn N18 và N20.** Sau N17, người dùng chuyển sang các
+service khác (java-core, gateway, web-dashboard, web-widget), nối và kiểm các UC AI đã làm **trên
+giao diện** cho tới khi chạy ổn. Lên production thì quay lại N18 rồi N20. Nội dung hai ngày giữ
+nguyên bên dưới.
 
 **Hệ quả:**
 
-- Ba ô của N19 ghi **"chưa đo (hoãn)"** ở N20: p95 `/v1/ai/chat` dưới tải, baseline 10 người, tải
-  mục tiêu 50 người. Đây là chỉ số §1.6 đầu tiên.
+- Ba ô của N19 ghi **"chưa đo (hoãn)"**: p95 `/v1/ai/chat` dưới tải, baseline 10 người, tải mục
+  tiêu 50 người. Đây là chỉ số §1.6 đầu tiên.
+- **Không có lượt eval cuối:** số recall@5 và độ phủ trích dẫn mới nhất vẫn là của N13 (và của N15
+  cho phần rerank). Bảng chỉ số và sheet xlsx chưa được điền phần N20.
+- **Chưa có môi trường triển khai:** chưa test RLS ở nơi thật sự chạy, chưa gọi chat qua HTTPS, chưa
+  nạp dữ liệu doanh nghiệp thật, chưa bật thanh toán Gemini (`cost_vnd` vẫn 0). Contract test của
+  Dev B ở N18 và phần chỉ số §1.6 Dev B điền ở N20 cũng lùi theo — báo Dev B.
 - Image `ai-service` vẫn **776 MB**, cổng CI dung lượng (ngưỡng 400 MB, ADR-0015/0017) không đạt.
 - Không có semantic cache, nên bài (2) "cách ly cache" của N17 ghi **"không áp dụng"** kèm lý do.
 - N15 nặng thêm một khối, nhiều khả năng tràn sang buổi thứ hai. Rerank không còn là mục cắt đầu
@@ -1306,7 +1318,11 @@ của B · kết quả grep PII = 0 · ảnh chụp `SELECT current_user` = `ai_
 
 ---
 
-## Ngày 18 — T5 08/10 — Triển khai gọn trên 1 instance cloud + dữ liệu doanh nghiệp thật
+## Ngày 18 — T5 08/10 — Triển khai gọn trên 1 instance cloud + dữ liệu doanh nghiệp thật · ⏸ HOÃN
+
+⏸ **HOÃN (đổi lần hai 10/10/2026, người dùng chốt):** không làm trong đợt này. Sau N17, người dùng
+chuyển sang nối và kiểm các UC AI trên giao diện; khi lên production thì làm ngày này trước N20. Nội
+dung giữ nguyên bên dưới.
 
 > **Mục tiêu:** gọi được endpoint chat qua HTTPS từ Internet, và test RLS xanh **ở nơi thật sự chạy**.
 
@@ -1381,7 +1397,10 @@ autoscaling; trên một instance đơn nó chỉ làm bão hoà CPU và cho ra 
 
 ---
 
-## Ngày 20 — T7 10/10 — [Nghiệm thu] Chạy lại toàn bộ bộ test và eval cuối
+## Ngày 20 — T7 10/10 — [Nghiệm thu] Chạy lại toàn bộ bộ test và eval cuối · ⏸ HOÃN
+
+⏸ **HOÃN (đổi lần hai 10/10/2026, người dùng chốt):** không làm trong đợt này, làm sau N18 khi lên
+production. Nội dung giữ nguyên bên dưới. Đợt này kết thúc ở N17.
 
 > **Mục tiêu:** **một ảnh chụp toàn bộ bộ test xanh TRONG MỘT LẦN CHẠY.**
 
@@ -1391,8 +1410,7 @@ autoscaling; trên một instance đơn nó chỉ làm bão hoà CPU và cho ra 
 
 - [ ] 🖐 **Chạy MỘT LƯỢT:** CI đầy đủ (gồm cổng chặn ML runtime **và** cổng dung lượng image) ·
       test RLS · eval RAG bằng lệnh đóng gói Ngày 13 · contract test.
-      *Đổi 10/10: cổng dung lượng sẽ đỏ vì Ngày 16 đã bỏ — ghi nhận, không sửa trong đợt này.
-      Ngày 21 hoãn nên đây là ngày cuối của đợt.*
+      *Đổi 10/10: cổng dung lượng sẽ đỏ vì Ngày 16 đã bỏ — ghi nhận, không sửa trong đợt này.*
 - [ ] 🖐 Ghi kết quả **có dấu thời gian** làm bằng chứng cuối.
 - [ ] 🖐 Xử lý mọi ca còn đỏ.
 - [ ] 🖐 Điền **phần Dev A** của bảng chỉ số nghiệm thu (bảng cuối file này + sheet xlsx). Ô của
@@ -1476,12 +1494,12 @@ ERD khớp 100% migration · bảng nghiệm thu 17/17 UC × trạng thái × s�
 |---|---|---|---|---|---|
 | 1 | p95 độ trễ endpoint chat | < 4.000 ms và **KHÔNG tăng dần** | N19 ⏸ | chưa đo (hoãn) | |
 | 2 | Tổng p95 phần suy luận CPU | < 480 ms (classify 60 + embed 120 + rerank 300) | N13, N15 | | |
-| 3 | recall@5 trên bộ vàng | **≥ 0,85** (bộ vàng ≥ 80 cặp) | N13, N20 | | |
-| 4 | Độ phủ trích dẫn | ≥ 0,80 | N13, N20 | | |
-| 5 | Rò rỉ dữ liệu giữa tenant | **0 trường hợp** | N1, N7, N17, N18 | | |
+| 3 | recall@5 trên bộ vàng | **≥ 0,85** (bộ vàng ≥ 80 cặp) | N13, N20 ⏸ | | |
+| 4 | Độ phủ trích dẫn | ≥ 0,80 | N13, N20 ⏸ | | |
+| 5 | Rò rỉ dữ liệu giữa tenant | **0 trường hợp** | N1, N7, N17, N18 ⏸ | | |
 | 6 | Flyway V201–V209 chạy sạch | 9 dòng history, 6 bảng, đủ chỉ mục | N1 | | |
 | 7 | Test cách ly tenant trong CI | **3/3 ca xanh** | N1 | | |
-| 8 | Dung lượng image `ai-service` | **< 400 MB** (đang 776 MB) | N1, N20 (N16 đã bỏ) | | |
+| 8 | Dung lượng image `ai-service` | **< 400 MB** (đang 776 MB) | N1, N20 ⏸ (N16 đã bỏ) | | |
 | 9 | Parity cosine INT8 vs fp32 (encoder base) | ≥ 0,995 | N2 | | |
 | 10 | Số chiều vector khớp lược đồ | **1024** — `INSERT` thật không lỗi | N2 | | |
 | 11 | Chênh lệch recall@5 (1 tenant vs 20 tenant) | < 3 điểm | N6 | | |
@@ -1492,17 +1510,17 @@ ERD khớp 100% migration · bảng nghiệm thu 17/17 UC × trạng thái × s�
 | 16 | Thời gian reindex toàn bộ chunk | Đo thật; **0 giây kho tri thức trống** | N7, N11 | | |
 | 17 | Cổng quyết định bật rerank | ≥ 5 điểm nDCG@5 **VÀ** p95 < 4 s | N8 → N15 | | |
 | 18 | 30 câu hỏi ngoài phạm vi trả rỗng đúng | **30/30** | N10 | | |
-| 19 | Eval harness tái lập được | Chạy 2 lần ra cùng con số; mỗi số kèm config | N13, N20 | | |
+| 19 | Eval harness tái lập được | Chạy 2 lần ra cùng con số; mỗi số kèm config | N13, N20 ⏸ | | |
 | 20 | Cách ly tenant qua **ĐƯỜNG NGÔN NGỮ** | Hỏi A về tài liệu B → phải **TỪ CHỐI** | N17 | | |
 | 21 | Cách ly bộ nhớ đệm ngữ nghĩa | 2 tenant → 2 câu trả lời từ 2 kho tri thức | N17 | không áp dụng — N16 đã bỏ, không có cache | |
 | 22 | PII trong log *(cùng Dev B)* | grep tự động = **0** | N17 | | |
-| 23 | Năm bài kiểm thử bảo mật *(cùng Dev B)* | 5/5 đạt (bài "quyền công cụ" ghi *không áp dụng*) | N17, N20 | | |
+| 23 | Năm bài kiểm thử bảo mật *(cùng Dev B)* | 5/5 đạt (bài "quyền công cụ" ghi *không áp dụng*) | N17, N20 ⏸ | | |
 | 24 | Baseline 10 người dùng / 10 phút | p95 < 2.500 ms, lỗi 0% | N19 ⏸ | chưa đo (hoãn) | |
 | 25 | Tải mục tiêu 50 người dùng / 15 phút | p95 < 4.000 ms, lỗi < 1%, KHÔNG tăng dần | N19 ⏸ | chưa đo (hoãn) | |
-| 26 | Nguồn dữ liệu thử nghiệm *(cùng Dev B)* | Ghi rõ tự soạn/công khai hay đã ẩn danh | N18, N21 ⏸ | | |
-| 27 | Số use case hoàn thành *(cùng Dev B)* | 17/17 UC | N20 | | |
+| 26 | Nguồn dữ liệu thử nghiệm *(cùng Dev B)* | Ghi rõ tự soạn/công khai hay đã ẩn danh | N18 ⏸, N21 ⏸ | | |
+| 27 | Số use case hoàn thành *(cùng Dev B)* | 17/17 UC | N20 ⏸ | | |
 
-⏸ = ngày đó đã hoãn (đổi 10/10/2026).
+⏸ = ngày đó đã hoãn (đổi 10/10/2026; N18 và N20 hoãn ở lần đổi thứ hai).
 
 ---
 
@@ -1547,7 +1565,7 @@ ERD khớp 100% migration · bảng nghiệm thu 17/17 UC × trạng thái × s�
       và `state.py`.
 - [ ] 🖐 **Ba tài khoản, theo hạn:** Kaggle xác minh số điện thoại **trước tối Ngày 4** (không
       verify thì không bật được GPU, đổ cả Ngày 5–7) · `ANTHROPIC_API_KEY` **trước Ngày 9** ·
-      instance cloud **cho Ngày 18**.
+      instance cloud **cho Ngày 18** (N18 đã hoãn 10/10 — chưa cần trong đợt này).
 - [ ] 🤖 Ghim phiên bản phụ thuộc bằng `uv pip compile --generate-hashes` (`base.txt` còn `>=`) ·
       ghim `ruff` trong CI (đang `pipx run ruff` không ghim — ruff ra bản mới là CI đỏ mà không
       ai sửa gì).

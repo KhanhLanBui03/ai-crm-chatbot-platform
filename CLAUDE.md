@@ -122,9 +122,14 @@ mất điểm trực tiếp.
 
 - **Bỏ** nội dung cũ của Ngày 16: semantic cache, giảm image < 400 MB, tối ưu độ trễ. Ô Ngày 16
   thành **buổi đọc số liệu kỹ thuật**.
-- **Hoãn** Ngày 19 (load test) và Ngày 21 (M3). Ngày 20 là ngày cuối của đợt.
+- **Hoãn** Ngày 19 (load test) và Ngày 21 (M3).
+- **Đổi lần hai, cùng ngày: hoãn thêm** Ngày 18 (triển khai cloud HTTPS + dữ liệu thật) và Ngày 20
+  (eval cuối). **Ngày 17 là ngày cuối của đợt.** Sau đó người dùng chuyển sang java-core, gateway,
+  web-dashboard, web-widget để kiểm các UC AI chạy ổn trên giao diện; lên production thì quay lại
+  N18 → N20.
 - **Hệ quả:** p95 `/v1/ai/chat` dưới tải ghi "chưa đo"; image vẫn 776 MB nên cổng CI dung lượng
-  đỏ; bài kiểm "cách ly cache" ghi "không áp dụng".
+  đỏ; bài kiểm "cách ly cache" ghi "không áp dụng"; chưa có lượt eval cuối (số mới nhất là của N13 và
+  N15); chưa có môi trường triển khai, dữ liệu thật hay thanh toán Gemini.
 
 **Trễ lịch được chấp nhận:** 11/10 chỉ là mốc nội bộ, hạn thật của đồ án là 31/12/2026. Khi
 trễ, báo rõ việc nào đang bị chặn và để người dùng quyết cắt gì. Thứ tự cắt cũ (rerank → semantic
