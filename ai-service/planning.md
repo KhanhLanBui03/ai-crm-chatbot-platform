@@ -985,18 +985,24 @@ dữ liệu đã xoá.
 
 **Việc:**
 
-- [ ] 🖐 **MỞ RỘNG bộ vàng v1 (40–50 cặp) lên ≥ 80 cặp.**
+- [x] 🖐 **MỞ RỘNG bộ vàng v1 (40–50 cặp) lên ≥ 80 cặp.**
       ⚠️ **GIỮ NGUYÊN 40–50 cặp cũ** để phần so sánh fine-tune vẫn dùng chung mẫu số; cặp mới
       chỉ dùng cho eval cuối.
-- [ ] 🖐 Đóng băng và ghi **hash mới** vào `DATA_HASHES.txt`, **giữ nguyên hash cũ** để so sánh
-      lịch sử vẫn hợp lệ.
-- [ ] 🤖 Đóng gói eval harness thành **MỘT LỆNH** sinh toàn bộ bảng số liệu (recall@5, nDCG@5,
+      → 100 cặp đã đạt từ 06/10 (ADR-0020), `golden_set.jsonl` không đổi. Mở rộng 10/10 là tệp MỚI
+      `tu_choi_mo_rong.jsonl` — 38 câu nên-từ-chối (12 → 50), viết từ mục lục, khoá trước lần đo. (AI viết 10/10)
+- [x] 🖐 Đóng băng và ghi **hash mới** vào `DATA_HASHES.txt`, **giữ nguyên hash cũ** để so sánh
+      lịch sử vẫn hợp lệ. → +1 dòng `bf44948e…`, commit `6dc0b24` trước lần đo đầu. (AI viết 10/10)
+- [x] 🤖 Đóng gói eval harness thành **MỘT LỆNH** sinh toàn bộ bảng số liệu (recall@5, nDCG@5,
       độ phủ trích dẫn, tỉ lệ từ chối, p95 từng tầng) ở dạng **CSV và PNG** — *verify: `ranx` đã
       có trong `dev.txt`, dùng thư viện thay vì tự cài đặt công thức; ghim **seed**.*
-- [ ] 🖐 Mỗi cấu hình thí nghiệm **một file** trong `tests/eval/configs/` (hiện chưa có file
+      → `python -m tests.eval.chay_tat_ca chay|tai-lap|tinh-lai`; `ranx` + công thức tự cài kiểm
+      chéo; seed 42. (AI viết 10/10)
+- [x] 🖐 Mỗi cấu hình thí nghiệm **một file** trong `tests/eval/configs/` (hiện chưa có file
       `.yaml` nào).
       *Một điểm Recall không kèm config là số **không dùng được** trong báo cáo.*
-- [ ] 🖐 **Chứng minh tái lập: chạy 2 lần ra cùng con số.**
+      → 4 tệp E3 (06/10) + `n13_nghiem_thu.yaml`. (AI viết 10/10)
+- [x] 🖐 **Chứng minh tái lập: chạy 2 lần ra cùng con số.** → truy hồi 300/300 top-k trùng; phần LLM
+      13/13 ô trong dung sai ±3 điểm % (khai trước); tính lại từ dữ liệu thô 52/52 ô. (AI viết 10/10)
 
 **File sẽ đụng:** `tests/eval/` · `tests/eval/configs/*.yaml` · `tests/eval/reports/` ·
 `artifacts/DATA_HASHES.txt`
@@ -1015,6 +1021,19 @@ Ngày 20 chạy nối nhau được. Bộ hồi quy đủ 17 UC vẫn hoãn — 
 - ✅ chạy 2 lần ra cùng con số
 
 ⚠️ *Ngưỡng recall là **0,85** theo §1.6, không phải 0,80.*
+
+→ Đo 10/10 (`docs/report/eval-ngay13-2026-10-10.md`), hai lượt độc lập:
+- ❌ recall@5 **0,740** (hybrid, ship) — trượt; dense 0,800. 23/26 câu trượt có đoạn đúng trong top-30;
+  câu không dấu 6/14; RRF dìm đoạn chỉ một làn thấy. **Người dùng chốt 10/10: ghi nợ, đi tiếp N14;
+  quay lại sau N15 khi rerank có số thật.**
+- ⚠️ độ phủ trích dẫn (theo câu) **0,797** lượt 1 · 0,805 lượt 2 — sát ngưỡng; 31/31 câu thiếu nguồn là câu
+  mời/xã giao/"chưa có thông tin". **Người dùng chốt 10/10: giữ định nghĩa, báo "sát ngưỡng".**
+- ⏸ tổng p95 ba service — chưa kết luận: classify thiếu `router_model.onnx`, rerank còn giả. ai-embed
+  ấm 55 ms nhưng nguội (sau ~4,5 s nghỉ) 259 ms — đưa vào Ngày 15.
+- ✅ chạy 2 lần ra cùng con số.
+
+Ngoài cổng: từ chối đúng 50/50 (38/38 câu mới), từ chối nhầm 23/100 (22 do truy hồi trượt), 30/30 câu
+ngoài phạm vi. Tổng lượt p95 1.743 ms (chưa có tải).
 
 **Minh chứng báo cáo:** recall@5 · độ phủ trích dẫn · bảng p95 tách 3 service · chứng minh tái lập.
 
