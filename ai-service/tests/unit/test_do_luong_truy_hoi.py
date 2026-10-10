@@ -1,5 +1,6 @@
 """Phép chấm và paired bootstrap của harness truy hồi (``tests/eval/danh_gia_truy_hoi.py``)."""
 
+import json
 import math
 from uuid import uuid4
 
@@ -7,7 +8,12 @@ import pytest
 
 from src.ai.rag.retrieve.hybrid import DoanTimDuoc
 from tests.eval.bo_vang import de_so
-from tests.eval.danh_gia_truy_hoi import bootstrap_cap, diem_cau, hang_dung_dau_tien
+from tests.eval.danh_gia_truy_hoi import (
+    bootstrap_cap,
+    chi_so_ranx,
+    diem_cau,
+    hang_dung_dau_tien,
+)
 
 
 def _doan(tep: str, noi_dung: str) -> DoanTimDuoc:
@@ -62,3 +68,32 @@ def test_bootstrap_tai_lap_theo_seed():
     a = [float(i % 3 == 0) for i in range(100)]
     b = [float(i % 2 == 0) for i in range(100)]
     assert bootstrap_cap(a, b) == bootstrap_cap(a, b)
+
+
+# ── ranx (Ngày 13) — thư viện ra đúng số của định nghĩa đã dùng từ Ngày 6 ─────
+
+
+def _dong(ma: str, hang: int | None, so_doan: int = 5) -> dict:
+    return {"id": ma, "hang_dung": hang or "",
+            "top_k": json.dumps([f"t#{i}" for i in range(so_doan)])}
+
+
+def test_ranx_khop_cong_thuc_tu_cai():
+    cac_hang = [1, 2, 5, None, 3, None, 1, 4]
+    dong = [_dong(f"G{i}", h) for i, h in enumerate(cac_hang)]
+    ra = chi_so_ranx(dong, 5)
+    for cot in ("trung", "ndcg", "rr"):
+        assert ra[cot] == pytest.approx(sum(diem_cau(h, 5)[cot] for h in cac_hang) / len(cac_hang))
+
+
+def test_ranx_doc_lai_tu_csv_cung_so():
+    """Dòng đọc lại từ CSV mang chuỗi — ``tinh-lai`` dựa vào việc hai đường cho cùng số."""
+    trong_bo_nho = [_dong("G1", 2), _dong("G2", None)]
+    tu_csv = [{k: str(v) for k, v in d.items()} for d in trong_bo_nho]
+    assert chi_so_ranx(trong_bo_nho, 5) == chi_so_ranx(tu_csv, 5)
+
+
+def test_ranx_kho_it_doan_hon_k():
+    assert chi_so_ranx([_dong("G1", 2, so_doan=3)], 5) == pytest.approx(
+        {"trung": 1.0, "ndcg": 1 / math.log2(3), "rr": 0.5}
+    )

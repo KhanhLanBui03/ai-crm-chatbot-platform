@@ -42,7 +42,7 @@ Báo cáo ghi đúng nguồn là AI, không gọi là "người gõ tay".
 | `python -m tests.eval.bo_vang doan` | toàn bộ đoạn theo tệp — để tìm câu trích |
 | `python -m tests.eval.bo_vang kiem` | kiểm định dạng + mỗi câu trích khớp đúng một đoạn + sha256 |
 | `python -m tests.eval.gieo_kho nap` / `nhan-ban` / `xoa` | kho đo: tenant gốc nhúng thật, nhân bản tới 20 tenant |
-| `python -m tests.eval.danh_gia_truy_hoi chay …` / `so-sanh …` | recall@5 · nDCG@5 · MRR@5 · paired bootstrap |
+| `python -m tests.eval.danh_gia_truy_hoi chay …` / `so-sanh …` | recall@5 · nDCG@5 · MRR@5 (`ranx`, từ 10/10) · paired bootstrap |
 
 Các trường `expected_route` / `expected_behavior` / `reference_answer` của kế hoạch cũ (150 câu)
 chưa dùng ở Ngày 6 — thêm khi đo định tuyến và độ bám nguồn.
@@ -67,6 +67,41 @@ Cổng ra Ngày 10: **30/30 trả rỗng đúng** (`refused` và `citations` r�
 | `python -m tests.eval.hieu_chinh_tu_choi chay --han-chot-s 60` | baseline không ngưỡng, LLM thật, 142 câu → JSONL điểm thô |
 | `python -m tests.eval.hieu_chinh_tu_choi quet <jsonl>` | quét lưới (sàn × bám nguồn) offline → bảng MD, CSV, PNG |
 | `python -m tests.eval.hieu_chinh_tu_choi kiem-30 --san … --bam-nguon …` | nghiệm thu thật 30 câu |
+
+## `tu_choi_mo_rong.jsonl` — 38 câu nên-từ-chối mở rộng (Ngày 13)
+
+Bộ vàng chỉ có 12 câu `can_cu: []` — đủ thấy hình dạng đường cong ngưỡng, không đủ một tỉ lệ có khoảng
+tin cậy hẹp (ADR-0029). Tệp MỚI, `golden_set.jsonl` giữ nguyên. Cùng khuôn dòng với bộ vàng, thêm
+`nhom` ∈ `gan_linh_vuc` (19) · `bay_thuoc_tinh` (10 — sản phẩm/chính sách CÓ trong kho, hỏi chi tiết kho
+không có) · `ngoai_linh_vuc` (9). Không trùng 12 câu cũ lẫn 30 câu `ngoai_pham_vi.jsonl`.
+
+Quy trình theo khuôn Ngày 6, AI làm (10/10):
+
+1. 50 ứng viên viết CHỈ từ mục lục, xáo seed 42, khoá sha256 `59b7da79…` trước khi mở nội dung đoạn
+   nào — danh sách ở [`docs/report/eval-ngay13-ung-vien.jsonl`](../../../docs/report/eval-ngay13-ung-vien.jsonl).
+2. Đọc toàn bộ đoạn, duyệt theo thứ tự đã xáo. **Loại** câu mà kho trả lời TRỰC TIẾP đúng thuộc tính
+   được hỏi, kể cả trả lời "không" (U26 "dịch vụ chuyển nhà" — kho ghi không di dời đồ đạc ngoài đơn).
+   Thông tin liên quan mà không trả lời đúng điều hỏi thì GIỮ (U36 nồi chiên "đủ cho nhà 5 người" — kho
+   có dung tích, không có khuyến nghị theo số người). Đủ 38 câu ở ứng viên thứ 39.
+3. Khoá sha256 `bf44948e…` vào `artifacts/DATA_HASHES.txt` (thêm đúng 1 dòng), commit TRƯỚC lần đo đầu.
+
+## `chay_tat_ca.py` — eval harness MỘT LỆNH (Ngày 13)
+
+Một tệp cấu hình ([`configs/n13_nghiem_thu.yaml`](configs/n13_nghiem_thu.yaml)) → toàn bộ bảng số: recall@5
+· nDCG@5 · MRR@5 (`ranx`, kiểm chéo công thức tự cài) · độ phủ trích dẫn (bốn định nghĩa, cổng là
+**theo câu**) · tỉ lệ từ chối · p50/p95 từng tầng · bảng ba service. Định nghĩa đầy đủ ở docstring.
+
+| Lệnh | Việc |
+|---|---|
+| `python -m tests.eval.chay_tat_ca chay <cấu hình> --nhan lan1` | đo + ghi đầu ra thô + tính `chi_so.csv`, `tong_hop.md`, 3 PNG vào `reports/n13_lan1/` (~165 lượt Gemini) |
+| `… chay <cấu hình> --nhan x --chi-truy-hoi` | bỏ lượt LLM — 0 lượt Gemini |
+| `… chay <cấu hình> --nhan khoi --gioi-han 5` | thử khói: 5 câu đầu mỗi tập |
+| `python -m tests.eval.chay_tat_ca tai-lap reports/n13_lan1 reports/n13_lan2` | hai lượt độc lập: top-k truy hồi khớp tuyệt đối, chỉ số LLM lệch ≤ 3 điểm % |
+| `python -m tests.eval.chay_tat_ca tinh-lai reports/n13_lan1` | tính lại từ đầu ra thô, so từng ô với `chi_so.csv` |
+
+Cần `AI_MODE=remote EMBED_URL=http://localhost:8091`, Postgres có kho đo của `gieo_kho.py`, key Gemini
+trong `.env` (lượt LLM luôn `LLM_MODE=remote`, không phụ thuộc `.env`). Lệnh `chay` từ chối ghi đè thư
+mục nhãn đã có.
 
 ## `minh_chung_uc020.py` — nạp lại bằng bản bóng trên hạ tầng thật (Ngày 11)
 

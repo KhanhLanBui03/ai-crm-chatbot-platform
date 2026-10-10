@@ -42,6 +42,11 @@ nhung:                         # danh tính ai-embed trả về; lệch thì har
 Hiện có: `e3_dense` · `e3_sparse` · `e3_hybrid` · `e3_hybrid_khong_quet_lap` (đối chứng ngược cho
 phép so 1 ↔ 20 tenant).
 
+`n13_nghiem_thu.yaml` khác khuôn trên: đó là cấu hình của **một lượt nghiệm thu** cho
+`tests/eval/chay_tat_ca.py` — trỏ tới ba cấu hình E3 (cấu hình ship `e3-hybrid` là số đem so cổng),
+khoá sha256 của ba tập đo, tham số lượt LLM và bảng ngưỡng §1.6, gồm cả dung sai tái lập phần LLM
+(±3 điểm %) khai trước khi chạy.
+
 ## Ba con số phải có bằng mọi giá (mục 8.2)
 
 1. **Truy hồi:** Recall@5 ≥ **0,85** (§1.6 — không phải 0,80) nhờ tìm kiếm lai và xếp hạng lại — mốc **M5, hạn 26/10**.

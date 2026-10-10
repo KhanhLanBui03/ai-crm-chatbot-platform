@@ -1,0 +1,40 @@
+# Ngày 13 — bảng số nghiệm thu một lệnh. Một file một cấu hình (rag-eval.md). [R&D]
+# Chạy: AI_MODE=remote EMBED_URL=http://localhost:8091 \
+#         python -m tests.eval.chay_tat_ca chay tests/eval/configs/n13_nghiem_thu.yaml --nhan lan1
+id: n13-nghiem-thu
+mo_ta: "Truy hồi E3 + trả lời bằng LLM thật trên bộ vàng, 38 câu nên-từ-chối mở rộng, 30 câu ngoài phạm vi"
+
+# Cấu hình truy hồi dùng lại của E3 — cái ĐẦU là baseline của paired bootstrap, `ship` là số đem
+# so cổng recall@5 (ADR-0006: hybrid là cấu hình ship).
+truy_hoi:
+  - e3_dense.yaml
+  - e3_sparse.yaml
+  - e3_hybrid.yaml
+ship: e3-hybrid
+
+# Ba tập + sha256 đã khoá. Lệch là harness dừng — một con số không kèm đúng tập đo là số vô nghĩa.
+tap:
+  bo_vang: ../golden_set.jsonl                 # 100 có đáp án + 12 nên từ chối, khoá 06/10
+  tu_choi_mo_rong: ../tu_choi_mo_rong.jsonl    # 38 nên từ chối, khoá 10/10
+  ngoai_pham_vi: ../ngoai_pham_vi.jsonl        # 30 câu nghiệm thu UC025, khoá 08/10
+sha256:
+  bo_vang: 323baf73db1bf28bfd30f598aae89e10310185654c4f9663e3286551765aba2f
+  tu_choi_mo_rong: bf44948e1e69a422229e0dedfef4123ac0c08e5f1f97e86cd81d1f16f44c3e91
+  ngoai_pham_vi: a1b6fd97cfd125a4a343b98702c626951c12fd85d0f2d2930e7728dfd8bdf394
+
+seed: 42             # paired bootstrap; Gemini KHÔNG nhận seed (ADR-0032) — chỉ temperature=0
+
+# Lượt trả lời: đúng RagAnswerer production, ngưỡng ship lấy từ Settings (ADR-0029: sàn 0, bám
+# nguồn 0) và ghi lại vào meta.json. Giãn giữa hai lượt gọi LLM vì Gemini có trần lượt/phút.
+tra_loi:
+  gian_s: 4.5
+  han_chot_s: 30     # production 10 s; nới để câu chậm không thành "suy giảm" — đo nội dung
+
+do_tre:
+  khoi_dong: 10      # lượt nhúng đầu không tính giờ (kết nối, bộ đệm)
+
+nguong:
+  recall_at_5: 0.85            # §1.6 — trên cấu hình ship
+  do_phu_trich_dan: 0.80       # §1.6 — định nghĩa THEO CÂU (chốt 10/10)
+  p95_ba_service_ms: 480       # §1.6 — classify + embed + rerank
+  dung_sai_llm: 0.03           # tái lập phần LLM: |lượt 1 − lượt 2| ≤ 3 điểm %, khai TRƯỚC khi chạy

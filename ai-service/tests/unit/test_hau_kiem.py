@@ -13,6 +13,8 @@ from uuid import uuid4
 import pytest
 
 from src.ai.rag.generate.hau_kiem import (
+    dem_cau_co_trich_dan,
+    dem_trich_dan_tho,
     do_bam_nguon,
     hau_kiem,
     khong_phai_tra_loi,
@@ -227,3 +229,33 @@ def test_hau_kiem_tinh_co_khong_phai_tra_loi():
                "Anh/chị cần em hỗ trợ tư vấn về sản phẩm nào khác thì cứ nhắn em nhé [1].")
     kq = hau_kiem(van_ban, ["Máy lạnh inverter tiết kiệm điện, bảo hành 24 tháng."])
     assert kq.groundedness_score == 0.0 and kq.khong_phai_tra_loi
+
+
+# ── Độ phủ trích dẫn (Ngày 13) — cùng tập câu với độ bám nguồn ──────────────
+
+
+def test_do_phu_theo_cau_dem_cau_co_trich_dan():
+    van_ban = ("Dạ. Máy lạnh được bảo hành 24 tháng [1]. Giao miễn phí trong 10 km. [2] "
+               "Anh/chị cần hỗ trợ thêm thì nhắn em nhé.")
+    # "Dạ." dưới 4 âm tiết: không vào mẫu số; trích sau dấu chấm gắn về câu trước; câu mời thì
+    # vẫn tính là câu thiếu nguồn — số đo nghiêng về phía thấp.
+    assert dem_cau_co_trich_dan(van_ban) == (2, 3)
+
+
+def test_do_phu_cung_mau_so_voi_bam_nguon():
+    van_ban = f"{BAO_HANH} [1] Cửa hàng còn nhiều ưu đãi khác cho anh chị."
+    _, so_cau_noi_dung = do_bam_nguon(van_ban, DOAN)
+    assert dem_cau_co_trich_dan(van_ban)[1] == so_cau_noi_dung == 2
+
+
+def test_do_phu_bien_the_bo_cau_chua_co_thong_tin():
+    van_ban = ("Máy lạnh được bảo hành 24 tháng [1]. "
+               "Về gói bảo hiểm rơi vỡ thì cửa hàng chưa có thông tin ạ.")
+    assert dem_cau_co_trich_dan(van_ban) == (1, 2)
+    assert dem_cau_co_trich_dan(van_ban, bo_cau_chua_co=True) == (1, 1)
+
+
+def test_trich_dan_tho_dem_ca_so_ngoai_khoang_va_so_lap():
+    # Master Plan §5.12 — đếm TRƯỚC khi lọc; sau lọc thì luôn 100%.
+    assert dem_trich_dan_tho("A [1][7]. B [2, 2]. C [0].", 3) == (3, 5)
+    assert dem_trich_dan_tho("Không trích gì cả.", 3) == (0, 0)
