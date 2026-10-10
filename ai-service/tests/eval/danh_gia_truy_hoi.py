@@ -24,6 +24,16 @@ câu trích của căn cứ đó.
 - **MRR@5** — ``1 / hạng đoạn đúng đầu tiên``.
 - Câu ``can_cu: []`` KHÔNG vào mẫu số (dành cho UC025).
 
+TÍNH BẰNG ``ranx`` (Ngày 13), CÔNG THỨC TỰ CÀI GIỮ LÀM KIỂM CHÉO
+----------------------------------------------------------------
+Số in ra là của ``ranx`` (``hit_rate@k`` · ``ndcg@k`` · ``mrr@k``). Mã hoá theo LỚP TƯƠNG ĐƯƠNG: mỗi
+câu có đúng MỘT tài liệu liên quan tên ``DUNG``, đặt ở hạng của đoạn đúng đầu tiên; các đoạn còn lại
+mang mã riêng không liên quan. Cách này khớp định nghĩa "trúng một căn cứ là đủ, IDCG = 1" ở trên.
+Đưa MỌI đoạn khớp căn cứ vào qrels thì ``ranx`` sẽ tính IDCG trên nhiều tài liệu liên quan — nDCG
+khác định nghĩa đã dùng từ Ngày 6 và không còn so được với số cũ. ``diem_cau`` vẫn chạy song song:
+lệch quá ``SAI_SO_KIEM_CHEO`` là dừng — hai cách tính khác nhau ra hai số khác nhau là lỗi, không
+phải chọn số đẹp hơn.
+
 PAIRED BOOTSTRAP
 ----------------
 Hai cấu hình chạy trên CÙNG bộ câu → so theo cặp: rút có hoàn lại N câu, B = 10.000 lần, seed cố
@@ -71,6 +81,8 @@ THU_MUC_BAO_CAO = Path(__file__).resolve().parent / "reports"
 CHE_DO = ("dense", "sparse", "hybrid")
 SO_LAN_BOOTSTRAP = 10_000
 SEED = 42
+DUNG = "DUNG"  # tài liệu liên quan duy nhất của mỗi câu trong qrels của ranx
+SAI_SO_KIEM_CHEO = 1e-9
 
 
 # ── Cấu hình và bộ vàng ─────────────────────────────────────────────────────
@@ -147,6 +159,44 @@ def diem_cau(hang: int | None, k: int) -> dict[str, float]:
     return {"trung": 1.0, "ndcg": 1 / math.log2(1 + hang), "rr": 1 / hang}
 
 
+def _hang(gia_tri: object) -> int | None:
+    """``hang_dung`` của một dòng — ``int`` khi còn trong bộ nhớ, chuỗi khi đọc lại từ CSV."""
+    return int(gia_tri) if str(gia_tri) else None
+
+
+def chi_so_ranx(dong: list[dict], k: int) -> dict[str, float]:
+    """``{"trung", "ndcg", "rr"}`` trung bình các câu — tính bằng ``ranx``, kiểm chéo ``diem_cau``.
+
+    ``dong`` là các dòng CSV từng câu (trong bộ nhớ hoặc đọc lại từ tệp — cùng kết quả).
+    """
+    import warnings
+
+    from ranx import Qrels, Run, evaluate
+
+    run: dict[str, dict[str, float]] = {}
+    for d in dong:
+        so_doan, hang = len(json.loads(d["top_k"])), _hang(d["hang_dung"])
+        # Điểm giảm dần theo hạng ⇒ ranx xếp lại đúng thứ tự đã truy hồi.
+        run[d["id"]] = {
+            (DUNG if h == hang else f"{d['id']}#{h}"): float(so_doan + 1 - h)
+            for h in range(1, so_doan + 1)
+        }
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # numba: ép kiểu uint64→int64 ở hit_rate, vô hại
+        m = evaluate(
+            Qrels({d["id"]: {DUNG: 1} for d in dong}),
+            Run(run),
+            [f"hit_rate@{k}", f"ndcg@{k}", f"mrr@{k}"],
+            make_comparable=True,
+        )
+    ra = {"trung": m[f"hit_rate@{k}"], "ndcg": m[f"ndcg@{k}"], "rr": m[f"mrr@{k}"]}
+    for cot, gia_tri in ra.items():
+        tu_cai = statistics.fmean(diem_cau(_hang(d["hang_dung"]), k)[cot] for d in dong)
+        if abs(float(gia_tri) - tu_cai) > SAI_SO_KIEM_CHEO:
+            raise RuntimeError(f"ranx {cot}={gia_tri} lệch công thức tự cài {tu_cai}")
+    return {cot: float(v) for cot, v in ra.items()}
+
+
 def bootstrap_cap(
     a: list[float], b: list[float], *, so_lan: int = SO_LAN_BOOTSTRAP, seed: int = SEED
 ) -> tuple[float, float, float]:
@@ -174,6 +224,9 @@ class KetQuaCauHinh:
 
     def trung_binh(self, cot: str) -> float:
         return statistics.fmean(float(d[cot]) for d in self.dong)
+
+    def ranx(self) -> dict[str, float]:
+        return chi_so_ranx(self.dong, self.cau_hinh.k)
 
 
 async def _nhung_cau_hoi(
@@ -340,13 +393,14 @@ def tong_hop(
         "|---|---|---|---|---|---|---|---|",
     ]
     for kq in cac_ket_qua:
-        ch, ms = kq.cau_hinh, [float(d["ms"]) for d in kq.dong]
+        ch, ms, r = kq.cau_hinh, [float(d["ms"]) for d in kq.dong], kq.ranx()
         dong.append(
-            f"| `{ch.id}` | {ch.che_do} | {kq.trung_binh('trung'):.3f} | "
-            f"{kq.trung_binh('ndcg'):.3f} | {kq.trung_binh('rr'):.3f} | "
+            f"| `{ch.id}` | {ch.che_do} | {r['trung']:.3f} | "
+            f"{r['ndcg']:.3f} | {r['rr']:.3f} | "
             f"{_phan_vi(ms, 0.5):.1f} | {_phan_vi(ms, 0.95):.1f} | "
             f"{kq.trung_binh('dung_hnsw') * 100:.0f}% |"
         )
+    dong += ["", f"recall@{k} · nDCG@{k} · MRR@{k} tính bằng `ranx`, kiểm chéo công thức tự cài."]
     if len(cac_ket_qua) > 1:
         goc = cac_ket_qua[0]
         dong += [

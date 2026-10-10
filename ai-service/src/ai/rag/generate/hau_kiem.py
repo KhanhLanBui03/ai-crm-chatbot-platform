@@ -194,6 +194,42 @@ def do_bam_nguon(van_ban: str, cac_doan: Sequence[str]) -> tuple[float, int]:
     return so_cau_bam / so_cau_noi_dung, so_cau_noi_dung
 
 
+def dem_cau_co_trich_dan(van_ban: str, *, bo_cau_chua_co: bool = False) -> tuple[int, int]:
+    """(số câu có trích dẫn, số câu nội dung) — tử và mẫu của độ phủ trích dẫn THEO CÂU (§1.6).
+
+    Cùng cách tách câu và cùng luật "câu dưới ``SO_AM_TIET_TOI_THIEU`` âm tiết là câu xã giao" với
+    ``do_bam_nguon``, nên hai đại lượng đo trên CÙNG một tập câu: độ phủ hỏi "câu có gắn nguồn
+    không", groundedness hỏi thêm "và nguồn đó có chứa câu không". Chạy trên câu trả lời ĐÃ hậu
+    kiểm thì mọi ``[k]`` còn lại đều hợp lệ.
+
+    ``bo_cau_chua_co`` bỏ câu "chưa có thông tin" khỏi mẫu số: lời nhắc CẤM gắn trích dẫn ở câu đó
+    (``loi_nhac.py``), nên tính nó là "câu thiếu nguồn" là phạt mô hình vì làm đúng lời nhắc. Câu
+    mời ("cần gì thêm anh/chị cứ nhắn") thì không dò được bằng luật — vẫn nằm trong mẫu số của cả
+    hai biến thể, nên số đo nghiêng về phía THẤP hơn thực tế, không thổi phồng.
+    """
+    so_co_trich = so_noi_dung = 0
+    for cau in _tach_cau(van_ban):
+        sach = _TRICH_DAN.sub(" ", cau)
+        if len(_am_tiet(sach)) < SO_AM_TIET_TOI_THIEU:
+            continue
+        if bo_cau_chua_co and _CHUA_CO_THONG_TIN.search(_bo_dau(sach)):
+            continue
+        so_noi_dung += 1
+        so_co_trich += bool(_TRICH_DAN.search(cau))
+    return so_co_trich, so_noi_dung
+
+
+def dem_trich_dan_tho(van_ban: str, so_doan: int) -> tuple[int, int]:
+    """(số trích dẫn trỏ vào đoạn đã cấp, tổng số trích dẫn) trong đầu ra THÔ của mô hình.
+
+    Định nghĩa độ phủ trích dẫn của Master Plan §5.12 ("mọi trích dẫn có nằm trong chunk đã lấy về
+    không") — đếm TRƯỚC ``loc_trich_dan``: sau bước lọc thì theo định nghĩa luôn bằng 1. Đếm mọi lần
+    xuất hiện, kể cả số lặp lại trong cùng nhóm ``[1, 1]``.
+    """
+    cac_so = [n for m in _TRICH_DAN.finditer(van_ban) for n in _so_trong(m.group(1))]
+    return sum(1 <= n <= so_doan for n in cac_so), len(cac_so)
+
+
 def _khoa_pii(gia_tri: str) -> str:
     """So PII theo dạng chuẩn: email viết thường; số thì chỉ giữ chữ số, +84 → 0."""
     if "@" in gia_tri:

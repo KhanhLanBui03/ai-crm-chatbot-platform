@@ -116,7 +116,8 @@ class _LLMGhiLai:
         await self._b.aclose()
 
 
-def _dung_answerer(settings: Settings, han_chot_s: float = 10.0):
+def dung_answerer(settings: Settings, han_chot_s: float = 10.0):
+    """``RagAnswerer`` production + LLM ghi nguyên văn đầu ra — dùng chung với ``chay_tat_ca``."""
     lan_cuoi: list[DoanTimDuoc] = []
 
     async def truy_hoi_ghi_lai(tenant_id: str, cau_hoi: str, nhung: KetQuaNhung, k: int):
@@ -140,7 +141,13 @@ def _dung_answerer(settings: Settings, han_chot_s: float = 10.0):
     return tra_loi, llm, lan_cuoi
 
 
-async def _hoi_mot_cau(tra_loi, llm, lan_cuoi, cau: dict, so_lan_thu: int = 3) -> dict:
+async def hoi_mot_cau(tra_loi, llm, lan_cuoi, cau: dict, so_lan_thu: int = 3) -> dict:
+    """Một câu qua ``RagAnswerer`` → một dòng điểm thô. Suy giảm thì chờ 30 s, thử lại.
+
+    Ba trường cuối thêm ở Ngày 13 cho ``chay_tat_ca`` (``quet`` không đọc): đầu ra THÔ của LLM
+    (định nghĩa §5.12 đếm trích dẫn trước khi lọc), cosine của top-k (biết bao nhiêu đoạn vào lời
+    nhắc) và ``latency_breakdown`` (p95 từng tầng).
+    """
     for lan in range(so_lan_thu):
         llm.lan_cuoi = None
         lan_cuoi.clear()
@@ -179,6 +186,9 @@ async def _hoi_mot_cau(tra_loi, llm, lan_cuoi, cau: dict, so_lan_thu: int = 3) -
         "answer": kq.answer,
         "tong_ms": tong_ms,
         "generate_ms": kq.latency_breakdown.get("generate_ms"),
+        "llm_raw": llm.lan_cuoi,
+        "cosine_top_k": [d.do_tuong_dong for d in lan_cuoi],
+        "latency_breakdown": kq.latency_breakdown,
     }
 
 
@@ -187,7 +197,7 @@ async def chay(
 ) -> Path:
     settings = Settings(llm_mode="remote", rag_san_toan_tap=san, rag_nguong_bam_nguon=bam_nguon)
     cac_cau = [c for c in _cac_cau() if chi_tap is None or c["tap"] == chi_tap]
-    tra_loi, llm, lan_cuoi = _dung_answerer(settings, han_chot_s)
+    tra_loi, llm, lan_cuoi = dung_answerer(settings, han_chot_s)
     BAO_CAO.mkdir(exist_ok=True)
     nhan = datetime.now().strftime("%Y%m%d-%H%M%S")
     ten = "kiem-30" if chi_tap == "ngoai_30" else "hieu-chinh"
@@ -203,7 +213,7 @@ async def chay(
         with duong.open("w", encoding="utf-8") as f:
             f.write(json.dumps(meta, ensure_ascii=False) + "\n")
             for i, cau in enumerate(cac_cau):
-                dong = await _hoi_mot_cau(tra_loi, llm, lan_cuoi, cau)
+                dong = await hoi_mot_cau(tra_loi, llm, lan_cuoi, cau)
                 f.write(json.dumps(dong, ensure_ascii=False) + "\n")
                 f.flush()
                 trang_thai = dong["refusal_reason"] or (
