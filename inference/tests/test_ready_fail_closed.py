@@ -104,6 +104,28 @@ def test_embed_ready_fail_closed_on_model_mismatch(monkeypatch):
     assert any("BẤT BIẾN 1 VI PHẠM" in v for v in data["violations"])
 
 
+def test_rerank_ready_fail_closed_khi_thieu_model(monkeypatch, tmp_path):
+    """FAIL-CLOSED, Ngày 15: thiếu cross-encoder thì /ready 503 và /v1/rerank 503 — KHÔNG lùi về
+    điểm Jaccard giả. ai-service có đường suy giảm riêng: giữ thứ hạng RRF (§3.8.1)."""
+    monkeypatch.setenv("MODEL_ROLE", "rerank")
+    monkeypatch.setenv("OMP_NUM_THREADS", "2")
+    monkeypatch.delenv("EXPECTED_MODEL_ID", raising=False)
+    monkeypatch.setenv("RERANK_MODEL_PATH", str(tmp_path / "khong-co.onnx"))
+
+    client = TestClient(_get_create_app()())
+
+    assert client.get("/health").status_code == 200
+    res_ready = client.get("/ready")
+    assert res_ready.status_code == 503
+    assert any("CHƯA NẠP ĐƯỢC CROSS-ENCODER" in v for v in res_ready.json()["violations"])
+    res = client.post(
+        "/v1/rerank",
+        json={"query": "bảo hành bao lâu", "candidates": [{"chunk_id": "a", "text": "24 tháng"}]},
+    )
+    assert res.status_code == 503
+    assert client.get("/v1/model").json()["status"] == "NOT_READY"
+
+
 def test_classify_ready_and_endpoints(monkeypatch):
     monkeypatch.setenv("MODEL_ROLE", "classify")
     monkeypatch.setenv("OMP_NUM_THREADS", "2")

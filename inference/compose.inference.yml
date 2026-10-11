@@ -62,6 +62,11 @@ services:
       <<: *inference-env
       MODEL_ROLE: rerank
       OMP_NUM_THREADS: "2"
+    # bge-reranker-v2-m3-int8.onnx (+ .onnx.data) và bge-reranker-v2-m3-tokenizer.json ở
+    # artifacts/models/ — sinh ở notebooks/07, mount, không COPY vào image. Thiếu file thì
+    # /ready = 503 (rerank.check_invariants), KHÔNG lùi về điểm Jaccard giả (Ngày 15).
+    volumes:
+      - ../artifacts:/app/artifacts:ro
     deploy:
       resources:
         limits: { cpus: "2", memory: 4G }
