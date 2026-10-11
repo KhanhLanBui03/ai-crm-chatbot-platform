@@ -109,9 +109,10 @@ Một lượt gọi ai-rerank (gồm HTTP), một luồng yêu cầu, máy dev A
 | 2 (cấu hình ship) | 30 | 5,7 / 9,0 s | 10,7 / 13,0 s |
 | 4 | 100 | 9,2 / 14,9 s | 15,5 / 36,2 s |
 
-Mỗi cặp 0,15–3 s tuỳ độ dài. 4 vCPU không nhanh hơn 2 vCPU trên M1 (giả thuyết: luồng rơi vào nhân tiết
-kiệm điện; chưa chứng minh vì hai lượt chạy ở hai mức tải nền khác nhau). Thứ hạng không đổi theo số
-luồng: top-5 trùng 30/30 câu. Trên Kaggle CPU (x86): INT8 772 ms/cặp, fp32 1.158 ms/cặp — chỉ tỉ lệ
+Mỗi cặp 0,15–3 s tuỳ độ dài. ~~4 vCPU không nhanh hơn 2 vCPU trên M1~~ — **đính chính Ngày 15 Khối B**:
+đo trực tiếp cùng điều kiện, hai lượt mỗi mức, **4 vCPU nhanh hơn** — 20 cặp p50 7,8 / 9,0 s, p95 10,3 /
+10,5 s so với 11,1 / 12,5 s và 13,8 / 18,6 s ở 2 vCPU; ai-rerank chốt **4 vCPU** ([ADR-0034](adr/0034-chot-cap-vcpu-ai-embed-ai-rerank.md),
+`docs/report/benchmark-ngay15-2026-10-11.md`). Thứ hạng không đổi theo số luồng: top-5 trùng 30/30 câu. Trên Kaggle CPU (x86): INT8 772 ms/cặp, fp32 1.158 ms/cặp — chỉ tỉ lệ
 ~1,5 lần là dùng được, con số tuyệt đối không tái lập.
 
 ---

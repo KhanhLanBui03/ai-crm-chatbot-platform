@@ -1182,7 +1182,8 @@ ngân sách §5.3 thì ghi rõ vào bảng, không giấu.
       Vượt thì thử đòn bẩy và ghi số từng đòn: giảm ứng viên · cắt `max_length` 512 → 256 · chỉ chạy
       khi mơ hồ.
       → p50 / p95 một lượt: **12 cặp 5,7 / 9,0 s · 20 cặp 10,7 / 13,0 s ở 2 vCPU** (30 câu — người dùng
-      chốt rút gọn); 9,2 / 14,9 s · 15,5 / 36,2 s ở 4 vCPU (100 câu). **4 vCPU không nhanh hơn trên M1**;
+      chốt rút gọn); 9,2 / 14,9 s · 15,5 / 36,2 s ở 4 vCPU (100 câu). ~~4 vCPU không nhanh hơn trên M1~~ —
+      *đính chính Khối B: đo cùng điều kiện thì 4 vCPU nhanh hơn ~25–30% (ADR-0034)*;
       top-5 trùng 30/30 câu giữa hai mức. Ước lượng ~1,2 s / ~2 s thấp hơn thật 5–8 lần. **Không thử đòn
       bẩy:** người dùng chốt 11/10 độ trễ chưa là cổng (memory `do-tre-chua-la-cong`); hai đòn bẩy
       "giảm ứng viên" và "chỉ khi mơ hồ" vẫn có số từ bảng 5 cấu hình. p95 `/v1/ai/chat` với LLM thật:
@@ -1223,49 +1224,119 @@ vượt 0,85 của §1.6.** Nợ để lại: cổng mơ hồ 93% chưa hiệu c
 **Minh chứng báo cáo (Khối A):** bảng có/không rerank (recall@5 · nDCG@5 · KTC) · bảng trần theo số
 ứng viên · tỉ lệ lượt mơ hồ · p95 rerank · dòng `MODEL_REGISTRY.md`.
 
-**Khối B — Benchmark rút gọn + chốt cấp vCPU (nội dung cũ)**
+**Khối B — Benchmark rút gọn + chốt cấp vCPU**
 
-**Điều kiện vào:** Khối A xong — có cross-encoder thật. `inference/src/bench_cpu.py` hiện là khung
-rỗng (39 dòng docstring) — **phải viết code thật trước khi chạy.**
+*Sửa 11/10/2026 cho khớp hệ thống thật: mỗi vai chỉ có **một** model (`artifacts/MODEL_REGISTRY.md`),
+không có ứng viên nào để so rồi loại; độ trễ chưa là cổng (memory `do-tre-chua-la-cong`); kỷ luật ghim
+luồng đã có sẵn trong code. Nội dung cũ giả định ma trận nhiều ứng viên của Master Plan.*
+
+**Điều kiện vào:** ✅ Khối A đóng 11/10 — có cross-encoder thật.
+
+**Đã có, không làm lại:**
+- `inference/src/session.py` (Dev B, `870b150`) đã ghim `intra_op = OMP_NUM_THREADS`, `inter_op = 1`;
+  `/ready` kiểm bất biến 3 (`OMP_NUM_THREADS` khớp cgroup, lệch thì 503).
+- Khối A đã đo rerank qua HTTP trên cùng 30 câu (G001–G033): 20 cặp p50/p95 **10,7 / 13,0 s ở 2 vCPU**
+  · **13,0 / 16,8 s ở 4 vCPU** (`docs/report/rerank-ngay15-2026-10-11.md` §3). Hai lượt chạy ở hai thời
+  điểm, lượt 4 vCPU lúc tải nền ~4 ⇒ giả thuyết "luồng rơi vào nhân E của M1" **chưa chứng minh**. Khối B
+  đo lại cả hai mức trong cùng điều kiện.
+
+**Chỗ đặt và nhãn của bench — chốt 11/10/2026:** `inference/bench/bench_cpu.py`, nhãn **`[R&D]`**.
+Bench không phục vụ request nên không phải `[PRODUCTION]`; mà `[R&D]` thì phải **không vào image nào** —
+để ở `inference/src/` thì Dockerfile (`COPY src/ src/`) chép nó vào image. Đặt ngoài `src/` là cách duy
+nhất để nhãn đúng cả hai vế, giống harness đo `ai-service/tests/eval/*.py` (đều `[R&D]`, ngoài image).
+Lúc đo thì mount vào container `ai-inference:dev` ⇒ vẫn chạy bằng đúng onnxruntime và `session.py` của
+image ship; sửa bench không phải build lại image. Lệch Master Plan §3.9.2 (`inference/src/bench_cpu.py`)
+— ghi vào ADR-0034.
 
 **Việc (Khối B):**
 
-- [ ] 🤖 Viết `bench_cpu.py` thật — *verify: đo p50/p95/RSS, có warm-up, số lần lặp đủ lớn để
-      p95 ổn định.*
-- [ ] 🖐 Chạy bản rút gọn: **3 model** (encoder `bge-m3` INT8 ở `ai-embed` · cross-encoder
-      `bge-reranker-v2-m3` INT8 ở `ai-rerank` · router ý định ở `ai-classify`) × **2 mức vCPU**
-      (2 và 4).
-      ⚠️ **CHẠY TỪNG SERVICE MỘT, không song song** — chạy song song thì các service tranh CPU
-      và **mọi con số đều vô nghĩa**.
-      ⏳ **Router chờ `artifacts/router_model.onnx` của Dev B** (kiểm 11/10: chưa có). Chưa có file
-      thì đo hai model kia trước, router đo bù khi có. Router cũng là **model nhỏ duy nhất** —
-      điều (1) bên dưới phải chờ nó.
+- [x] 🤖 Viết `inference/bench/bench_cpu.py` **[R&D]** thật, xoá khung rỗng ở `inference/src/bench_cpu.py`
+      (docstring còn ma trận cũ `e5-small` · `e5-base` · `ce-MiniLM` · `PhoRanker`, "Ngày 20/21").
+      — *verify:*
+      - chạy **bên trong image `ai-inference`** (image duy nhất có onnxruntime) bằng mount, nạp session
+        trực tiếp, không qua HTTP;
+      - hai chế độ: **ghim** (`make_session` của `session.py`) và **mặc định** (`SessionOptions` không
+        đặt số luồng, dựng ngay trong bench, **không sửa `session.py`**); ghi số luồng ORT thật sự tạo;
+      - đầu vào thật, không PII: embed lấy câu hỏi `ai-service/tests/eval/golden_set.jsonl` (chỉ đọc —
+        tệp đóng băng); rerank lấy **30 dòng đầu** `ai-service/tests/eval/rerank_cap_100x20.jsonl`
+        (G001–G033, đúng 30 câu của Khối A — người dùng chốt 11/10), mỗi lượt 20 cặp, lô 1 như `rerank.py`;
+      - warm-up bỏ khỏi số đo; đo p50/p95 + RSS; ghi kèm điều kiện đo (vCPU, số luồng, load average);
+      - xuất Markdown vào `reports/eval/` (đã gitignore — số chép sang `docs/report/`);
+      - thêm `bench` vào bước "Cú pháp" của job `inference` trong `.github/workflows/ci.yml`
+        (hiện chỉ `compileall src`) · sửa cây thư mục `README.md` gốc.
+      → Xong 11/10. Gọi đúng `BoNhung.nhung` / `BoXepHang.cham` của production, chỉ thay hàm dựng session;
+      ghi thêm `cpu.stat` của cgroup (tỉ lệ chu kỳ bị chặn, lõi dùng TB). Thêm tải **"đoạn"** cho embed
+      (`--tai doan`, 152 đoạn thật) — ai-embed còn phục vụ worker nạp kho UC019, chỉ đo câu hỏi thì chưa đủ
+      căn cứ chốt vCPU. `ruff` sạch; CI `compileall -q src bench`.
+- [x] 🖐 **Chạy bản rút gọn:** `bge-m3` INT8 (`ai-embed`) và `bge-reranker-v2-m3` INT8 (`ai-rerank`)
+      × **2 và 4 vCPU** × **ghim / mặc định** — rerank 30 câu, ước ~25–40 phút cho 4 cấu hình.
+      ⚠️ **CHẠY TỪNG MODEL MỘT, không song song** — tranh CPU thì **mọi con số đều vô nghĩa**.
+      `ai-embed` + `ai-rerank` **không cần dừng** (sửa 11/10: bench nạp model trong container riêng,
+      không gọi chúng; lúc rảnh chúng dùng ~0,3% CPU, `/ready` không chạy model) — chỉ cần không chạy
+      `ai-service` hay harness eval trong lúc đo. Tắt bớt ứng dụng trên máy, ghi load average trước mỗi lượt.
+      Cấp vCPU bằng `docker run --cpus N -e OMP_NUM_THREADS=N` — không cần file override compose.
+      ⏳ **Router (`ai-classify`) đo bù khi Dev B gửi `artifacts/router_model.onnx`** (kiểm 11/10: chưa có).
       *(Ma trận đầy đủ đã cắt — xem sheet "Phạm vi cắt & làm sau".)*
-      *Sửa 11/10/2026: bản trước ghi "encoder S, encoder M" — chữ sót từ Master Plan (`e5-small`,
-      `e5-base`). Hai model đó chưa từng có trong repo; hệ thống chỉ có một encoder là `bge-m3`
-      (`artifacts/MODEL_REGISTRY.md`).*
-- [ ] 🖐 **Chứng minh 2 điều:**
-      (1) với model nhỏ, **tăng vCPU KHÔNG cải thiện p95**;
-      (2) `OMP_NUM_THREADS` phải **BẰNG số CPU được cấp** — để mặc định thì ONNX Runtime đọc số
-      CPU của **node** chứ không đọc limits của container, p95 có thể tệ gấp 3 lần mà không log
-      nào báo.
-- [ ] 🖐 Chốt cấp vCPU: `OMP_NUM_THREADS = limits.cpu`, `inter_op_num_threads = 1`.
-- [ ] 🖐 **ADR chốt cấp vCPU.** Với model bị loại, ghi rõ **đã thử đòn bẩy nào và SỐ ĐO**.
-      *Một dòng "quá chậm" không kèm bảng số là KHÔNG ĐỦ để loại một model trong báo cáo.*
+      → Xong 11/10 21:11–22:22: 15 lượt (câu hỏi · đoạn · rerank × 2/4 vCPU × ghim/mặc định + 3 lượt lặp
+      kiểm trôi). Tải máy chủ 2,5 → 7,9 trong buổi; độ trôi giữa hai lượt cùng cấu hình tới +35% p95.
+      Số: `docs/report/benchmark-ngay15-2026-10-11.md`.
+- [ ] 🖐 **Chứng minh 2 điều:** — (2) ✅ · (1) ⏳ chờ router (cổng ra cho phép mở)
+      (1) với model nhỏ, **tăng vCPU KHÔNG cải thiện p95** — ⏳ **chờ router**: router là model nhỏ
+      duy nhất (LogisticRegression trên vector băm n-gram, ADR-0019 mục 0); bge-m3 và reranker đều
+      ~568 triệu tham số, không dùng để chứng minh điều này được;
+      (2) `OMP_NUM_THREADS` phải **BẰNG số CPU được cấp** — để mặc định thì ONNX Runtime đọc số CPU
+      của **node** chứ không đọc limits của container. Trên máy dev, "node" là VM Docker Desktop
+      (8 CPU): container `--cpus 2` để mặc định sẽ tạo luồng theo 8 CPU. Chứng minh bằng bảng
+      ghim/mặc định ở trên — **làm được ngay**, không chờ router.
+      → (2) **ĐÃ CHỨNG MINH:** để mặc định ORT tạo **8 luồng** ở cả `--cpus 2` lẫn `--cpus 4`, cgroup bị chặn
+      99–100% chu kỳ, p95 chậm **× 2,2 – × 13,3** (câu hỏi 2 vCPU: 68 → 906 ms). (1) chưa có model nhỏ;
+      bằng chứng gián tiếp: câu hỏi 13 token trên bge-m3 cho p95 68 ms (2 vCPU) ≈ 69 ms (4 vCPU).
+- [x] 🖐 **Chốt số vCPU cho từng service bằng bảng số:** `ai-embed` (đang tạm 4) · `ai-rerank` (đang
+      tạm 2) · `ai-classify` (giữ tạm 2, chốt khi có router). Sửa `inference/compose.inference.yml`
+      (cả comment "chốt ở Ngày 21") và cột *Cấp vCPU* + *p95 đo thật* của `bge-m3-int8` trong
+      `artifacts/MODEL_REGISTRY.md`.
+      → **Người dùng chốt 11/10: ai-embed 4 (giữ) · ai-rerank 4 (từ 2)** · ai-classify giữ tạm 2. Rerank 4 vCPU
+      p50 7,8 / 9,0 s so với 11,1 / 12,5 s ở 2 vCPU (hai lượt mỗi mức) — **đính chính Khối A** ("4 vCPU không
+      nhanh hơn"). Embed: câu hỏi 2 ≈ 4, đoạn 4 nhanh hơn ~30%. Compose đã sửa; `ai-rerank` chạy lại ở 4 vCPU,
+      `/ready` xanh, một lượt `/v1/rerank` thật HTTP 200.
+- [x] 🖐 **ADR-0034 chốt cấp vCPU.** Chốt bằng bảng số, không bằng ngưỡng.
+      - **Không model nào bị loại ở Ngày 15** — ghi đúng một dòng như vậy kèm lý do (mỗi vai một model;
+        độ trễ chưa là cổng). Trường hợp duy nhất bị loại vì độ trễ là router nhánh B XLM-R: p95
+        **72,4 ms INT8** > 60 ms, số đo thật 05/10 — dẫn ADR-0019 **mục 0** (số 168,2 ms ở thân
+        ADR-0019 đã bị thu hồi, không dẫn).
+      - **Rerank vượt ngưỡng kế hoạch 300 ms mà vẫn bật** ⇒ ghi từng cách đã thử kèm số: 12 / 20 ứng
+        viên · mọi câu / chỉ khi mơ hồ · 2 / 4 vCPU · ghim / mặc định. Cách nào chưa thử (vd. cắt
+        `max_length` 512 → 256) thì ghi **"chưa thử"**, không bỏ trống.
+      - Phạm vi: số đo trên **Apple M1** (ARM, 4 nhân P + 4 nhân E) chỉ chốt cho máy dev; x86 đo lại ở
+        N20 (hoãn).
+      → `docs/adr/0034-chot-cap-vcpu-ai-embed-ai-rerank.md` — bốn phương án (A giữ tạm · **B embed 4 + rerank
+      4** · C embed 2 + rerank 4 · D không ghim), bảng năm đòn bẩy §5.4.1 (`max_length 256`, hiệu chỉnh cổng
+      mơ hồ, distil: **chưa thử**). Phát hiện thêm: bất biến 3 chỉ kiểm biến môi trường, không kiểm số luồng
+      thật của session — báo Dev B.
 
-**File sẽ đụng (Khối B):** `inference/src/bench_cpu.py` · `inference/compose.inference.yml` · `docs/adr/`
+**File sẽ đụng (Khối B):** `inference/bench/bench_cpu.py` (mới) · `inference/src/bench_cpu.py` (xoá) ·
+`inference/compose.inference.yml` · `.github/workflows/ci.yml` · `README.md` · `artifacts/MODEL_REGISTRY.md` ·
+`docs/adr/0034-*.md` · `docs/report/benchmark-ngay15-*.md` · `docs/on-tap/ngay-15-*.md`
 
-**Chạm Dev B:** Dev B làm UC039 (mô hình đọc báo cáo) cùng ngày. Không giao cắt.
+**Chạm Dev B (Khối B):** `session.py` của Dev B — bench chỉ gọi, không sửa (docstring còn ghi "chốt ở
+Ngày 21", báo trong mô tả PR). Router đo bù phụ thuộc `router_model.onnx`.
 
 **Phải giải thích được:**
 - Vì sao `inter_op_num_threads = 1`?
-- Vì sao chạy benchmark từng service một? Nếu chạy song song thì số sai theo hướng nào?
+- Vì sao chạy benchmark từng model một? Nếu chạy song song thì số sai theo hướng nào?
 - Vì sao model nhỏ tăng vCPU không nhanh hơn?
+- Vì sao số đo trên M1 không dùng thẳng cho máy x86 lúc lên production?
 
-**Cổng ra (DoD) cả ngày:** Cổng ra Khối A · có bảng benchmark đầy đủ · ADR chốt vCPU cho 3 service.
+**Cổng ra (DoD) cả ngày:** Cổng ra Khối A ✅ · bảng benchmark embed + rerank × 2/4 vCPU × ghim/mặc
+định · ADR-0034 chốt vCPU cho `ai-embed` và `ai-rerank`; `ai-classify` giữ cấp tạm, đo bù khi có router
+(điều (1) mở tới lúc đó).
+→ ✅ **Đạt 11/10** — bảng benchmark (thêm tải "đoạn" + 3 lượt lặp), ADR-0034 (embed 4 · rerank 4), compose +
+`MODEL_REGISTRY.md` đã sửa. Còn mở đúng như cổng cho phép: điều (1) và vCPU `ai-classify` chờ router. Ôn tập:
+`docs/on-tap/ngay-15-khoi-b-benchmark-vcpu.md`.
 
-**Minh chứng báo cáo:** bảng benchmark rút gọn (model × vCPU × threads × p50 × p95 × RSS ×
-đạt/không) · **bảng chênh lệch p95 khi ghim luồng và khi để mặc định** · ADR chốt cấp vCPU.
+**Minh chứng báo cáo:** bảng benchmark rút gọn (model × vCPU × số luồng × p50 × p95 × RSS × so với
+ngưỡng kế hoạch §5.3 — embed 120 / rerank 300 / classify 60 ms, *chưa áp dụng*) · **bảng chênh lệch
+p95 khi ghim luồng và khi để mặc định** · ADR-0034.
 
 ---
 
