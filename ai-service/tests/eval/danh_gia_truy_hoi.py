@@ -48,6 +48,24 @@ cách duy nhất ``ai_app`` thấy quy mô kho khi RLS che các tenant khác) ·
 không · tỉ lệ câu mà kế hoạch truy vấn dùng HNSW · p50/p95 thời gian SQL (không gồm nhúng câu hỏi).
 Căn cứ nào không có trong kho của tenant đo thì in cảnh báo: câu đó không thể trúng, con số của
 nó vô nghĩa.
+
+XẾP LẠI — NGÀY 15
+-----------------
+Cấu hình có khối ``rerank:`` thì lấy ``ung_vien`` đoạn đầu của RRF, gửi ai-rerank xếp lại rồi mới
+cắt top-k — ``khi: moi_cau`` xếp lại mọi câu, ``khi: mo_ho`` chỉ khi ``needs_rerank`` (đúng đường
+production). Danh tính ai-rerank (``/v1/model``) phải khớp ``rerank.model``/``rerank.version``, lệch
+là dừng. Báo cáo thêm: tỉ lệ lượt mơ hồ · p50/p95 thời gian một lượt xếp lại (gồm HTTP) · trần
+recall@k khi xếp hoàn hảo · số câu trần mà cổng mơ hồ bỏ qua · số câu cứu được / bị đẩy ra.
+
+    AI_MODE=remote EMBED_URL=http://localhost:8091 INFERENCE_RERANK_URL=http://localhost:8082 \\
+    python -m tests.eval.danh_gia_truy_hoi chay --nhan n15 tests/eval/configs/e3_hybrid.yaml \\
+        tests/eval/configs/n15_rerank_12_moi_cau.yaml ...
+
+``xuat-cap`` ghi tệp cặp cho cổng parity của cross-encoder (notebook 07): mỗi câu có đáp án một
+dòng, ``--ung-vien`` đoạn đầu của RRF đúng thứ tự kèm nhãn ``dung``.
+
+    python -m tests.eval.danh_gia_truy_hoi xuat-cap tests/eval/configs/e3_hybrid.yaml \\
+        --ung-vien 20 --ra tests/eval/rerank_cap_100x20.jsonl
 """
 
 import argparse
@@ -65,13 +83,20 @@ from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
+import httpx
 import yaml
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.ai.config import get_settings
 from src.ai.db import session as db_session
-from src.ai.inference.clients import EmbedClient, tao_embed_client
+from src.ai.inference.clients import (
+    EmbedClient,
+    RemoteRerankClient,
+    RerankClient,
+    tao_embed_client,
+)
+from src.ai.rag.rerank import quyet_dinh
 from src.ai.rag.retrieve import hybrid
 from src.ai.rag.retrieve.hybrid import DoanTimDuoc
 from src.ai.rag.tsquery import build_tsquery
@@ -79,6 +104,7 @@ from tests.eval.bo_vang import de_so
 
 THU_MUC_BAO_CAO = Path(__file__).resolve().parent / "reports"
 CHE_DO = ("dense", "sparse", "hybrid")
+KHI_XEP_LAI = ("moi_cau", "mo_ho")
 SO_LAN_BOOTSTRAP = 10_000
 SEED = 42
 DUNG = "DUNG"  # tài liệu liên quan duy nhất của mỗi câu trong qrels của ranx
@@ -86,6 +112,17 @@ SAI_SO_KIEM_CHEO = 1e-9
 
 
 # ── Cấu hình và bộ vàng ─────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class XepLai:
+    """Khối ``rerank:`` — ``ung_vien`` đoạn đầu của RRF đưa vào ai-rerank, ``khi`` thuộc
+    ``KHI_XEP_LAI``. ``model``/``version`` là danh tính ai-rerank phải trả ở ``/v1/model``."""
+
+    ung_vien: int
+    khi: str
+    model: str
+    version: str
 
 
 @dataclass(frozen=True)
@@ -101,6 +138,7 @@ class CauHinh:
     ung_vien: int = hybrid.UNG_VIEN_MOI_LAN
     ef_search: int = hybrid.EF_SEARCH
     quet_lap: str = "relaxed_order"
+    xep_lai: XepLai | None = None
     nguon: Path = field(default=Path(), compare=False)
 
 
@@ -109,14 +147,26 @@ def doc_cau_hinh(duong_dan: Path) -> CauHinh:
     if d.get("che_do") not in CHE_DO:
         raise ValueError(f"{duong_dan}: che_do phải thuộc {CHE_DO}, nhận {d.get('che_do')!r}")
     nhung = d.pop("nhung")
+    xl = d.pop("rerank", None)
     return CauHinh(
         **{k: v for k, v in d.items() if k not in ("bo_vang", "tenant")},
         bo_vang=(duong_dan.parent / d["bo_vang"]).resolve(),
         tenant=UUID(str(d["tenant"])),
         model=nhung["model"],
         version=nhung["version"],
+        xep_lai=_doc_xep_lai(duong_dan, xl, d.get("k", 5)) if xl else None,
         nguon=duong_dan,
     )
+
+
+def _doc_xep_lai(duong_dan: Path, xl: dict, k: int) -> XepLai:
+    if xl.get("khi") not in KHI_XEP_LAI:
+        raise ValueError(
+            f"{duong_dan}: rerank.khi phải thuộc {KHI_XEP_LAI}, nhận {xl.get('khi')!r}"
+        )
+    if int(xl["ung_vien"]) <= k:
+        raise ValueError(f"{duong_dan}: rerank.ung_vien ({xl['ung_vien']}) phải lớn hơn k ({k})")
+    return XepLai(int(xl["ung_vien"]), xl["khi"], xl["model"], str(xl["version"]))
 
 
 @dataclass(frozen=True)
@@ -266,15 +316,33 @@ async def _kiem_can_cu_trong_kho(
     ]
 
 
+def _vector_tsquery(
+    ch: CauHinh, cau_hoi: str, vector: list[float] | None
+) -> tuple[list[float] | None, str | None]:
+    """Đầu vào của hai làn theo ``che_do`` — tắt một làn bằng cách truyền ``None``."""
+    return (
+        vector if ch.che_do != "sparse" else None,
+        build_tsquery(cau_hoi) if ch.che_do != "dense" else None,
+    )
+
+
 async def chay_cau_hinh(
     factory: async_sessionmaker,
     ch: CauHinh,
     cac_cau: list[CauVang],
     vectors: list[list[float]] | None,
+    rerank: RerankClient | None = None,
 ) -> KetQuaCauHinh:
+    xl = ch.xep_lai
+    if xl and rerank is None:
+        raise ValueError(f"{ch.id} có khối rerank nhưng không có client ai-rerank")
+    # Có xếp lại thì lấy đủ ứng viên cho cross-encoder; top-k cắt SAU khi xếp lại.
+    so_lay = xl.ung_vien if xl else ch.k
+
     async def mot_cau(i: int) -> tuple[list[DoanTimDuoc], float, bool]:
-        vector = vectors[i] if ch.che_do != "sparse" else None
-        tsquery = build_tsquery(cac_cau[i].question) if ch.che_do != "dense" else None
+        vector, tsquery = _vector_tsquery(
+            ch, cac_cau[i].question, vectors[i] if vectors else None
+        )
         async with db_session.get_tenant_session(str(ch.tenant), factory) as s:
             dau = time.perf_counter()
             ket_qua = await hybrid.tim_kiem_lai(
@@ -283,7 +351,7 @@ async def chay_cau_hinh(
                 tsquery=tsquery,
                 embedding_model=ch.model,
                 embedding_version=ch.version,
-                k=ch.k,
+                k=so_lay,
                 ung_vien=ch.ung_vien,
                 ef_search=ch.ef_search,
                 quet_lap=ch.quet_lap,
@@ -293,16 +361,36 @@ async def chay_cau_hinh(
             ke_hoach = await s.execute(
                 text("EXPLAIN " + hybrid._SQL_TIM_LAI.text),
                 hybrid.tham_so_cau_lenh(
-                    vector, tsquery, ch.model, ch.version, ch.k, ch.ung_vien
+                    vector, tsquery, ch.model, ch.version, so_lay, ch.ung_vien
                 ),
             )
             dung_hnsw = any("ix_chunk_embedding" in r[0] for r in ke_hoach)
         return ket_qua, ms, dung_hnsw
 
-    await mot_cau(0)  # làm nóng: kết nối, nạp thư viện pgvector, bộ đệm — không tính giờ
+    # Làm nóng: kết nối, nạp thư viện pgvector, bộ đệm — không tính giờ. Có xếp lại thì làm nóng
+    # cả ai-rerank: lượt đầu của nó gồm thời gian nạp model.
+    lam_nong, _, _ = await mot_cau(0)
+    if xl:
+        await quyet_dinh.xep_lai(rerank, cac_cau[0].question, lam_nong, xl.ung_vien)
     dong = []
     for i, cau in enumerate(cac_cau):
         ket_qua, ms, dung_hnsw = await mot_cau(i)
+        them: dict = {}
+        if xl:
+            hang_truoc = hang_dung_dau_tien(ket_qua, cau.can_cu)
+            mo_ho = quyet_dinh.needs_rerank(ket_qua)
+            rerank_ms = None
+            if xl.khi == "moi_cau" or mo_ho:
+                dau = time.perf_counter()
+                ket_qua = await quyet_dinh.xep_lai(rerank, cau.question, ket_qua, xl.ung_vien)
+                rerank_ms = (time.perf_counter() - dau) * 1000
+            ket_qua = ket_qua[: ch.k]
+            them = {
+                "hang_truoc_rerank": hang_truoc or "",
+                "mo_ho": int(mo_ho),
+                "da_rerank": int(rerank_ms is not None),
+                "rerank_ms": "" if rerank_ms is None else round(rerank_ms, 2),
+            }
         hang = hang_dung_dau_tien(ket_qua, cau.can_cu)
         doan_dung = ket_qua[hang - 1] if hang else None
         dong.append(
@@ -315,9 +403,41 @@ async def chay_cau_hinh(
                 "ms": round(ms, 2),
                 "dung_hnsw": int(dung_hnsw),
                 "top_k": json.dumps([f"{d.file_name}#{d.chunk_index}" for d in ket_qua]),
+                **them,
             }
         )
     return KetQuaCauHinh(ch, dong, await _kiem_can_cu_trong_kho(factory, ch, cac_cau))
+
+
+def thong_ke_xep_lai(kq: KetQuaCauHinh) -> dict[str, float | int | None]:
+    """Các con số Ngày 15 của một cấu hình có xếp lại — đọc được cả dòng trong bộ nhớ lẫn CSV.
+
+    ``tran`` = số câu có đoạn đúng ở hạng k+1..``ung_vien`` TRƯỚC khi xếp lại: xếp hoàn hảo thì cứu
+    được, nên ``tran_recall`` = (đã trúng sẵn + ``tran``) / N là trần recall@k của cấu hình.
+    ``tran_bo_qua`` = trong số đó, bao nhiêu câu cổng mơ hồ không cho xếp lại.
+    """
+    xl, k = kq.cau_hinh.xep_lai, kq.cau_hinh.k
+    if xl is None:
+        raise ValueError(f"{kq.cau_hinh.id} không có khối rerank")
+    truoc = [_hang(d["hang_truoc_rerank"]) for d in kq.dong]
+    trung_truoc = [h is not None and h <= k for h in truoc]
+    tran = [i for i, h in enumerate(truoc) if h is not None and k < h <= xl.ung_vien]
+    ms = [float(d["rerank_ms"]) for d in kq.dong if str(d["rerank_ms"])]
+    return {
+        "ti_le_mo_ho": statistics.fmean(int(d["mo_ho"]) for d in kq.dong),
+        "so_da_xep_lai": len(ms),
+        "p50_ms": _phan_vi(ms, 0.5) if ms else None,
+        "p95_ms": _phan_vi(ms, 0.95) if ms else None,
+        "tran": len(tran),
+        "tran_recall": (sum(trung_truoc) + len(tran)) / len(kq.dong),
+        "tran_bo_qua": sum(1 for i in tran if not int(kq.dong[i]["da_rerank"])),
+        "cuu_duoc": sum(
+            1 for d, t in zip(kq.dong, trung_truoc, strict=True) if not t and float(d["trung"])
+        ),
+        "bi_day_ra": sum(
+            1 for d, t in zip(kq.dong, trung_truoc, strict=True) if t and not float(d["trung"])
+        ),
+    }
 
 
 async def _thong_tin_kho(factory: async_sessionmaker, tenant: UUID) -> dict[str, str]:
@@ -401,6 +521,26 @@ def tong_hop(
             f"{kq.trung_binh('dung_hnsw') * 100:.0f}% |"
         )
     dong += ["", f"recall@{k} · nDCG@{k} · MRR@{k} tính bằng `ranx`, kiểm chéo công thức tự cài."]
+    co_xep_lai = [kq for kq in cac_ket_qua if kq.cau_hinh.xep_lai]
+    if co_xep_lai:
+        dong += [
+            "",
+            "Xếp lại — p50/p95 là thời gian một lượt gọi ai-rerank (gồm HTTP), chỉ tính lượt "
+            f"đã xếp lại; trần = câu có đoạn đúng ở hạng {k + 1}..N trước khi xếp lại:",
+            "",
+            "| Cấu hình | N | khi | mơ hồ | đã xếp lại | p50 ms | p95 ms | trần (câu) "
+            f"| trần recall@{k} | trần bị cổng bỏ qua | cứu được | bị đẩy ra |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|",
+        ]
+        for kq in co_xep_lai:
+            xl, t = kq.cau_hinh.xep_lai, thong_ke_xep_lai(kq)
+            p50 = "—" if t["p50_ms"] is None else f"{t['p50_ms']:.0f}"
+            p95 = "—" if t["p95_ms"] is None else f"{t['p95_ms']:.0f}"
+            dong.append(
+                f"| `{kq.cau_hinh.id}` | {xl.ung_vien} | {xl.khi} | {t['ti_le_mo_ho'] * 100:.0f}% "
+                f"| {t['so_da_xep_lai']} | {p50} | {p95} | {t['tran']} | {t['tran_recall']:.2f} "
+                f"| {t['tran_bo_qua']} | {t['cuu_duoc']} | {t['bi_day_ra']} |"
+            )
     if len(cac_ket_qua) > 1:
         goc = cac_ket_qua[0]
         dong += [
@@ -415,10 +555,16 @@ def tong_hop(
     dong += ["", "Cấu hình đầy đủ:", ""]
     for kq in cac_ket_qua:
         ch = kq.cau_hinh
+        xl = ch.xep_lai
         dong.append(
             f"- `{ch.id}` ({ch.nguon.name}): {ch.mo_ta} — tenant `{ch.tenant}`, "
             f"{ch.model}/{ch.version}, k={ch.k}, ứng viên={ch.ung_vien}, "
             f"ef_search={ch.ef_search}, iterative_scan={ch.quet_lap}"
+            + (
+                f", xếp lại {xl.ung_vien} ứng viên khi={xl.khi} bằng {xl.model}/{xl.version}"
+                if xl
+                else ""
+            )
         )
         if kq.thieu_can_cu:
             dong.append(f"  - ⚠️ căn cứ KHÔNG có trong kho, không thể trúng: {kq.thieu_can_cu}")
@@ -432,6 +578,8 @@ async def chay(
     factory: async_sessionmaker,
     embed: EmbedClient,
     thu_muc: Path = THU_MUC_BAO_CAO,
+    rerank: RerankClient | None = None,
+    gioi_han: int | None = None,
 ) -> tuple[list[KetQuaCauHinh], str]:
     cac_cau_hinh = [doc_cau_hinh(p) for p in cac_duong_dan]
     if len({ch.bo_vang for ch in cac_cau_hinh}) != 1:
@@ -439,6 +587,10 @@ async def chay(
     cac_cau, khong_dap_an, sha = doc_bo_vang(cac_cau_hinh[0].bo_vang)
     if not cac_cau:
         raise ValueError(f"{cac_cau_hinh[0].bo_vang} chưa có câu nào có đáp án.")
+    # N câu ĐẦU theo thứ tự tệp — cố định, chạy lại ra đúng tập đó. Chỉ dùng cho phép đo độ trễ
+    # rút gọn (Ngày 15, 2 vCPU); số chất lượng báo cáo luôn lấy từ lượt đủ câu.
+    if gioi_han is not None:
+        cac_cau = cac_cau[:gioi_han]
 
     vector_theo_model: dict[tuple[str, str], list[list[float]]] = {}
     cac_ket_qua = []
@@ -447,14 +599,15 @@ async def chay(
         if ch.che_do != "sparse" and khoa not in vector_theo_model:
             vector_theo_model[khoa] = await _nhung_cau_hoi(embed, cac_cau, *khoa)
         cac_ket_qua.append(
-            await chay_cau_hinh(factory, ch, cac_cau, vector_theo_model.get(khoa))
+            await chay_cau_hinh(factory, ch, cac_cau, vector_theo_model.get(khoa), rerank)
         )
 
     meta = {
         "nhan": nhan,
         "thời điểm": datetime.now().isoformat(timespec="seconds"),
         "commit": _commit_git(),
-        "bộ vàng": f"{cac_cau_hinh[0].bo_vang.name} · sha256 `{sha}`",
+        "bộ vàng": f"{cac_cau_hinh[0].bo_vang.name} · sha256 `{sha}`"
+        + (f" · RÚT GỌN {len(cac_cau)} câu đầu" if gioi_han is not None else ""),
         **await _thong_tin_kho(factory, cac_cau_hinh[0].tenant),
     }
     bao_cao = tong_hop(cac_ket_qua, meta, khong_dap_an)
@@ -480,18 +633,107 @@ def so_sanh(a: Path, b: Path) -> str:
     )
 
 
+async def xuat_cap(
+    factory: async_sessionmaker, embed: EmbedClient, ch: CauHinh, ung_vien: int
+) -> list[dict]:
+    """Tệp cặp cho cổng parity của cross-encoder (notebook 07). [R&D]
+
+    Mỗi câu CÓ đáp án một dòng: ``ung_vien`` đoạn đầu của RRF đúng thứ tự cấu hình ``ch`` trả về,
+    nhãn ``dung`` theo đúng ``dung()`` của harness, ``mo_ho`` theo ``needs_rerank``. Chữ của đoạn là
+    ``content`` trong kho — đúng chuỗi production gửi ai-rerank — nên chỉ có chữ của ``kb_samples``.
+    """
+    cac_cau, _, _ = doc_bo_vang(ch.bo_vang)
+    vectors = await _nhung_cau_hoi(embed, cac_cau, ch.model, ch.version)
+    ra = []
+    for cau, v in zip(cac_cau, vectors, strict=True):
+        vector, tsquery = _vector_tsquery(ch, cau.question, v)
+        async with db_session.get_tenant_session(str(ch.tenant), factory) as s:
+            ket_qua = await hybrid.tim_kiem_lai(
+                s,
+                vector=vector,
+                tsquery=tsquery,
+                embedding_model=ch.model,
+                embedding_version=ch.version,
+                k=ung_vien,
+                ung_vien=ch.ung_vien,
+                ef_search=ch.ef_search,
+                quet_lap=ch.quet_lap,
+            )
+        ra.append(
+            {
+                "id": cau.id,
+                "question": cau.question,
+                "hang_dung_rrf": hang_dung_dau_tien(ket_qua, cau.can_cu),
+                "mo_ho": quyet_dinh.needs_rerank(ket_qua),
+                "ung_vien": [
+                    {
+                        "ma": f"{d.file_name}#{d.chunk_index}",
+                        "text": d.content,
+                        "dung": dung(d, cau.can_cu),
+                    }
+                    for d in ket_qua
+                ],
+            }
+        )
+    return ra
+
+
+async def kiem_danh_tinh_rerank(base_url: str, cac_cau_hinh: list[CauHinh]) -> str:
+    """``model_id/model_version`` ai-rerank đang phục vụ phải khớp MỌI khối ``rerank:`` — lệch là
+    đang đo một model khác cái cấu hình ghi, con số không gắn được vào model nào."""
+    async with httpx.AsyncClient(base_url=base_url) as c:
+        # Lượt đầu có thể gồm thời gian nạp model (~vài giây) — nới hạn chờ.
+        tt = (await c.get("/v1/model", timeout=120.0)).raise_for_status().json()
+    dang_chay = (tt.get("model_id"), tt.get("model_version"))
+    for ch in cac_cau_hinh:
+        xl = ch.xep_lai
+        if xl and dang_chay != (xl.model, xl.version):
+            raise RuntimeError(
+                f"ai-rerank đang phục vụ {dang_chay[0]}/{dang_chay[1]}, cấu hình {ch.id} ghi "
+                f"{xl.model}/{xl.version}"
+            )
+    return f"{dang_chay[0]}/{dang_chay[1]}"
+
+
 async def _main(args: argparse.Namespace) -> None:
     engine = db_session.tao_engine(args.dsn)
     embed = tao_embed_client(get_settings())
     try:
+        factory = db_session.tao_session_factory(engine)
+        if args.lenh == "xuat-cap":
+            await _main_xuat_cap(args, factory, embed)
+            return
+        rerank = None
+        if any(doc_cau_hinh(p).xep_lai for p in args.cau_hinh):
+            # Hạn chờ rộng: đây là phép ĐO độ trễ — cắt ở 15 s như production là mất đuôi phân bố.
+            rerank = RemoteRerankClient(timeout_s=300.0)
+            print("ai-rerank:", await kiem_danh_tinh_rerank(
+                rerank.base_url, [doc_cau_hinh(p) for p in args.cau_hinh]
+            ))
         _, bao_cao = await chay(
-            args.cau_hinh, nhan=args.nhan, factory=db_session.tao_session_factory(engine),
-            embed=embed,
+            args.cau_hinh, nhan=args.nhan, factory=factory, embed=embed, rerank=rerank,
+            gioi_han=args.gioi_han,
         )
         print(bao_cao)
     finally:
         await embed.aclose()
         await engine.dispose()
+
+
+async def _main_xuat_cap(args: argparse.Namespace, factory, embed) -> None:
+    ch = doc_cau_hinh(args.cau_hinh)
+    ra = await xuat_cap(factory, embed, ch, args.ung_vien)
+    noi_dung = "".join(json.dumps(d, ensure_ascii=False) + "\n" for d in ra)
+    args.ra.write_text(noi_dung, encoding="utf-8")
+    so_cap = sum(len(d["ung_vien"]) for d in ra)
+    print(
+        f"{args.ra}: {len(ra)} câu · {so_cap} cặp · "
+        f"có đoạn đúng trong {args.ung_vien} ứng viên: "
+        f"{sum(1 for d in ra if d['hang_dung_rrf'])} câu · "
+        f"mơ hồ: {sum(1 for d in ra if d['mo_ho'])} câu\n"
+        f"cấu hình {ch.id} ({ch.nguon.name}) · {ch.model}/{ch.version} · tenant {ch.tenant}\n"
+        f"commit {_commit_git()} · sha256 {hashlib.sha256(noi_dung.encode()).hexdigest()}"
+    )
 
 
 def main() -> None:
@@ -501,9 +743,15 @@ def main() -> None:
     p_chay.add_argument("cau_hinh", nargs="+", type=Path)
     p_chay.add_argument("--nhan", default=datetime.now().strftime("%Y%m%d-%H%M%S"))
     p_chay.add_argument("--dsn", help="DSN postgresql+psycopg:// của ai_app (mặc định: .env)")
+    p_chay.add_argument("--gioi-han", type=int, help="chỉ chạy N câu có đáp án đầu tiên")
     p_ss = lenh.add_parser("so-sanh", help="paired bootstrap giữa hai CSV kết quả")
     p_ss.add_argument("a", type=Path)
     p_ss.add_argument("b", type=Path)
+    p_cap = lenh.add_parser("xuat-cap", help="tệp cặp cho parity cross-encoder (notebook 07)")
+    p_cap.add_argument("cau_hinh", type=Path)
+    p_cap.add_argument("--ung-vien", type=int, default=20)
+    p_cap.add_argument("--ra", type=Path, required=True)
+    p_cap.add_argument("--dsn", help="DSN postgresql+psycopg:// của ai_app (mặc định: .env)")
     args = ap.parse_args()
     if args.lenh == "so-sanh":
         print(so_sanh(args.a, args.b))

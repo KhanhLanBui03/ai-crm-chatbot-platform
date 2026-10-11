@@ -83,7 +83,7 @@ from tests.eval import hieu_chinh_tu_choi as hctc
 THU_MUC = Path(__file__).resolve().parent
 BAO_CAO = THU_MUC / "reports"
 NHAN_TRUY_HOI = "n13"
-TANG = ("embed_ms", "retrieve_ms", "generate_ms", "postguard_ms")
+TANG = ("embed_ms", "retrieve_ms", "rerank_ms", "generate_ms", "postguard_ms")
 COT = ("nhom", "chi_so", "cau_hinh", "gia_tri", "tu_so", "mau_so", "nguong", "ket_luan", "tai_lap",
        "ghi_chu")
 
@@ -470,6 +470,11 @@ def tinh_chi_so(thu_muc: Path) -> list[dict]:
 
     embed = [float(d["ms"]) for d in _doc_csv(thu_muc / "do_tre_embed.csv")]
     p95_embed = _p(embed, 0.95)
+    rerank = [
+        float(d["latency_breakdown"]["rerank_ms"])
+        for d in (_jsonl(thu_muc / "tra_loi.jsonl") if (thu_muc / "tra_loi.jsonl").exists() else [])
+        if "rerank_ms" in (d.get("latency_breakdown") or {})
+    ]
     cac_dong += [
         _o("do_tre", "p50 ai-embed, đo riêng (ms)", _p(embed, 0.5), mau_so=len(embed),
            dang="{:.1f}"),
@@ -478,8 +483,10 @@ def tinh_chi_so(thu_muc: Path) -> list[dict]:
         _o("ba_service", "p95 ai-embed (ms)", p95_embed, mau_so=len(embed), dang="{:.1f}",
            ghi_chu=f"gọi LIỀN NHAU (ấm), bỏ {ch.khoi_dong} lượt khởi động. Lượt thật có khoảng nghỉ"
                    " ⇒ xem p95 tầng embed: ai-embed nguội sau ~4,5 s nghỉ (đo 10/10)"),
-        _o("ba_service", "p95 ai-rerank (ms)", None,
-           ghi_chu="chưa đo — RERANK_ENABLED tắt, ai-rerank còn giả Jaccard"),
+        _o("ba_service", "p95 ai-rerank (ms)", _p(rerank, 0.95), mau_so=len(rerank),
+           dang="{:.1f}",
+           ghi_chu="tầng rerank của lượt trả lời (gồm HTTP), chỉ lượt mơ hồ — 20 cặp/lượt"
+           if rerank else "chưa đo — lượt trả lời không bật rerank (xem meta rag.rerank_enabled)"),
         _o("ba_service", "tổng p95 ba service (ms)", None, nguong=ch.nguong["p95_ba_service_ms"],
            nho_hon=True, ghi_chu="chưa kết luận — 1/3 service đo được"),
     ]
@@ -655,7 +662,7 @@ def _ve(thu_muc: Path, cac_dong: list[dict], ch: CauHinhN13) -> None:
 
     # 3. Độ trễ: hai panel (tầng CPU · tầng có LLM) thay vì trục log — mỗi panel một thang.
     panel = [("Tầng không gọi LLM", ["embed", "retrieve", "postguard"]),
-             ("Tầng có LLM", ["generate", "tổng lượt"])]
+             ("Tầng chậm (rerank · LLM)", ["rerank", "generate", "tổng lượt"])]
     if _so(_tim(cac_dong, "p95 tầng generate (ms)")) is not None:
         fig, cac_ax = plt.subplots(1, 2, figsize=(7.2, 3.2), facecolor=NEN,
                                    gridspec_kw={"width_ratios": [3, 2]})
