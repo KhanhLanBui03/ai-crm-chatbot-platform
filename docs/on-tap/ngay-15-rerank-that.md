@@ -6,7 +6,7 @@
 > `ai-service/src/ai/rag/rerank/quyet_dinh.py` · `notebooks/07_export_reranker.py`.
 >
 > **Trạng thái:** Khối A xong — rerank **BẬT**, 20 ứng viên (người dùng chốt). Khối B (benchmark, ADR
-> vCPU) chưa làm.
+> vCPU) xong cùng ngày: [`ngay-15-khoi-b-benchmark-vcpu.md`](ngay-15-khoi-b-benchmark-vcpu.md).
 
 ## 1. Ba con số phải nhớ
 
@@ -56,7 +56,8 @@ chỉ có lợi, và bảng số phải ghi cả cột "bị đẩy ra".
 1. **Cổng "mơ hồ" đánh dấu 93% câu**, không phải 30–40%. Cổng so cosine hạng 1 với hạng 3, nhưng thứ tự
    là của RRF chứ không phải của cosine, nên hiệu thường nhỏ hoặc âm. Hệ quả: "chỉ khi mơ hồ" gần như
    bằng "mọi câu". Chưa sửa — sửa là đổi chất lượng lấy độ trễ.
-2. **4 vCPU không nhanh hơn 2 vCPU trên M1.** Cùng 30 câu, 12 cặp: p50 8,2 s (4 vCPU) so với 5,7 s
+2. ~~**4 vCPU không nhanh hơn 2 vCPU trên M1.**~~ **Đính chính ở Khối B:** đo cùng điều kiện thì 4 vCPU
+   nhanh hơn ~25–30% — xem [`ngay-15-khoi-b-benchmark-vcpu.md`](ngay-15-khoi-b-benchmark-vcpu.md). Ghi chép gốc: Cùng 30 câu, 12 cặp: p50 8,2 s (4 vCPU) so với 5,7 s
    (2 vCPU). Giả thuyết: luồng rơi vào nhân tiết kiệm điện, bước song song chờ luồng chậm nhất. Chưa chứng
    minh — hai lượt chạy ở hai mức tải nền khác nhau. Đây là đầu vào của Khối B.
 3. **Ước lượng độ trễ trước khi đo sai 5–8 lần** (~1,2 s → thật 5,7 s cho 12 cặp). Ước lượng suy từ thông
