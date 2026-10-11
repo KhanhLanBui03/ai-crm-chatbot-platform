@@ -25,7 +25,7 @@ Không có Model Card thì artifact không được coi là đã bàn giao (§6.
 >
 > Đối chiếu: 4 `sha256` ở trên **trùng khít** giữa hai lượt chạy độc lập ⇒ artifact tái lập
 > được từng byte, chỉ có phép đo thời gian là không.
-| _(chưa có)_ | cross-encoder | `ai-rerank` | UC023 | S hoặc M | | — | ngân sách 300 ms | Chưa bắt đầu |
+| `bge-reranker-v2-m3-int8` | cross-encoder | `ai-rerank` | UC023 | 2 vCPU (đo 11/10: 4 vCPU không nhanh hơn trên M1) | `93cd7fb0…c1c0fde2` (.onnx)<br>`db41e6b7…e33eff97` (.onnx.data)<br>`69564b69…bf379c15` (tokenizer) | **ĐẠT** — nDCG@5 INT8 − fp32: +0,54 (N12) / −0,23 (N20) điểm, ngưỡng < 1 | 20 cặp: p50 10,7 s / p95 13,0 s (2 vCPU, 30 câu, macOS ARM) — ngưỡng 300 ms là số kế hoạch, chưa áp dụng | 🟢 **Ship 11/10, BẬT, 20 ứng viên** — nDCG@5 +12,1 điểm, recall@5 0,74 → 0,87; [ADR-0006](../docs/adr/0006-hybrid-search-rrf-rerank.md) cập nhật 11/10 · [Model Card](../docs/MODEL_CARD_reranker.md) |
 | _(chưa có)_ | intent router | `ai-classify` | UC022 | S | | — | ngân sách 60 ms | Chưa bắt đầu |
 | _(chưa có)_ | lead scorer | `ai-classify` | UC030 | S | | < 1e-4 | < 1.000 ms | Chưa bắt đầu |
 | _(chưa có)_ | K-Means + PCA | CronJob riêng | UC038 | — | | — | không trên đường request | Chưa bắt đầu |

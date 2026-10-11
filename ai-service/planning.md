@@ -706,11 +706,15 @@ luật viết cho trường hợp trễ lịch. Ô ❌ #3 là kết quả kỹ t
       `hybrid_search(pool=30)` → `needs_rerank()` kiểm **`AMBIGUITY_GAP`**: chênh điểm RRF giữa
       **hạng 1 và hạng 3 < 0,15** thì mới gọi cross-encoder.
 - [x] 🖐 Rerank trên **12 ứng viên đầu** (**KHÔNG phải 20**) · **5 đoạn** vào lời nhắc ·
+      *(Ngày 15, 11/10: đo xong, đổi thành **20** — trần recall@5 của 12 ứng viên chỉ 0,83; ADR-0006.)*
       **sàn liên quan toàn tập 0,25** và **sàn từng đoạn 0,15**. (AI viết 08/10 — sàn theo cosine.
       ⚠️ Câu ngoài phạm vi vẫn có cosine 0,35–0,46 với bge-m3 ⇒ sàn 0,25 gần như không chặn gì;
       lớp chặn thật hiện là LLM trả `KHONG_DU_CAN_CU`. Hiệu chỉnh ở Ngày 10.)
 - [x] 🖐 **RERANK ĐẶT SAU FEATURE FLAG VÀ MẶC ĐỊNH TẮT.** (`RERANK_ENABLED=false`, AI viết 08/10)
-- [ ] 🖐 Đo nDCG@5 **có/không rerank MỘT LẦN** làm căn cứ cho ADR bật/tắt. ⏳ **Khối 2:**
+      *(Ngày 15, 11/10: người dùng chốt **BẬT** — `RERANK_ENABLED` mặc định `true`.)*
+- [x] 🖐 Đo nDCG@5 **có/không rerank MỘT LẦN** làm căn cứ cho ADR bật/tắt. ✅ **Đóng ở Ngày 15 (11/10):**
+      nDCG@5 0,631 → 0,752 (+12,1 điểm, KTC [+6,2; +18,5]) với 20 ứng viên — `docs/report/rerank-ngay15-2026-10-11.md`.
+      ⏳ **Khối 2 (ghi chú cũ):**
       `inference/src/roles/rerank.py` vẫn là bản giả Jaccard của Dev B, chưa có ONNX reranker.
       → **Chuyển sang Ngày 15, Khối A** (đổi 10/10), model `BAAI/bge-reranker-v2-m3`.
       **Cổng bật production:** ≥ **5 điểm nDCG@5** VÀ p95 chat vẫn **< 4 s**. Không đạt → giữ TẮT.
@@ -1139,37 +1143,60 @@ ngân sách §5.3 thì ghi rõ vào bảng, không giấu.
 
 **Việc (Khối A):**
 
-- [ ] 🤖 `notebooks/07_export_reranker.{ipynb,py}` **[R&D]** — Kaggle, **không bật GPU** (cùng lý do
+- [x] 🤖 `notebooks/07_export_reranker.{ipynb,py}` **[R&D]** — Kaggle, **không bật GPU** (cùng lý do
       notebook 06). Export `BAAI/bge-reranker-v2-m3` (ghim revision) sang ONNX rồi INT8 đúng cách
       notebook 06, ghi `sha256`, ghép cặp jupytext. — *verify: đầu vào là **cặp** (câu hỏi, đoạn) mã
       hoá chung một chuỗi, không phải hai chuỗi riêng; đầu ra là **một logit** mỗi cặp; `max_length`
       khớp lúc chạy; tokenizer lấy từ repo của reranker, không dùng lại `tokenizer.json` của bge-m3.*
-- [ ] 🖐 **Cổng parity cho cross-encoder — đo THỨ HẠNG, không đo cosine.** Rerank chỉ dùng điểm để
+      → AI viết 11/10, người dùng chạy Kaggle 11/10 (lượt Commit 4.085 s). Revision `953dc6f6`; INT8
+      `int8-93cd7fb0`, nhỏ hơn fp32 3,98 lần. Tokenizer khớp HF từng token (kể cả cặp phải cắt).
+- [x] 🖐 **Cổng parity cho cross-encoder — đo THỨ HẠNG, không đo cosine.** Rerank chỉ dùng điểm để
       sắp xếp: lệch thang điểm không sao, đảo thứ tự mới hỏng. Trên cặp thật (100 câu bộ vàng × 20
       ứng viên hybrid kèm nhãn đoạn đúng, xuất từ máy dev — chỉ có chữ của `data/kb_samples`, không
       có PII), so fp32 với INT8 **ngay trong notebook**: Spearman trung bình theo từng câu + độ trùng
       top-5. Phân xử theo cổng `artifacts/MODEL_REGISTRY.md`: nDCG@5 sau rerank của INT8 so với fp32
       chênh **< 1 điểm**. Trượt thì ship fp32 hoặc loại model — người dùng quyết, như ADR-0021.
-- [ ] 🤖 Thay bản Jaccard trong `inference/src/roles/rerank.py` bằng ONNX session thật, theo khuôn
+      → ✅ **ĐẠT:** chênh +0,54 (N12) / −0,23 (N20) điểm · Spearman mean 0,982 / min 0,893 · trùng top-5
+      mean 0,922. Tệp cặp `ai-service/tests/eval/rerank_cap_100x20.jsonl` (sha `1f6c77ad…`, người dùng
+      chốt chỗ lưu: cạnh bộ vàng, commit). 167/2000 cặp bị cắt ở 512 token.
+- [x] 🤖 Thay bản Jaccard trong `inference/src/roles/rerank.py` bằng ONNX session thật, theo khuôn
       `embed.py`: artifact mount từ `artifacts/models/` (không COPY vào image) · `model_version` tính
       từ `sha256` của `.onnx` · thiếu file thì `/ready` = 503, **không** lùi về Jaccard · đổi
       `DEFAULT_MODEL_ID` sang `BAAI/bge-reranker-v2-m3` · thêm `volumes` cho `ai-rerank` trong
       `inference/compose.inference.yml` (hiện chưa mount). — *verify: mỗi cặp một lượt chạy (lô 1),
       cùng lý do `embed.py`: `DynamicQuantizeLinear` tính thang trên cả tensor, ghép lô thì điểm của
       một cặp phụ thuộc cặp đi cùng. Test khoá thứ tự trên một ví dụ chấm tay.*
-- [ ] 🖐 **Đo chất lượng — đóng ô Ngày 8 "nDCG@5 có/không rerank".** Chạy harness Ngày 13 với config
+      → AI viết 11/10: `inference/tests/test_rerank_that.py` 7/7 (gồm ví dụ chấm tay, không phụ thuộc
+      cặp đi cùng) + test fail-closed 503 khi thiếu model; đã kiểm 503 trong container. Đã báo Dev B.
+      **Vá kèm:** ai-rerank lỗi thì `answerer.py` giữ thứ hạng RRF (§3.8.1) — trước đó hỏng cả lượt chat.
+- [x] 🖐 **Đo chất lượng — đóng ô Ngày 8 "nDCG@5 có/không rerank".** Chạy harness Ngày 13 với config
       mới trong `tests/eval/configs/`, năm cấu hình: không rerank (mốc) · {12, 20} ứng viên × {mọi câu,
       chỉ khi mơ hồ}. Báo recall@5 · nDCG@5 · MRR · KTC paired bootstrap so với mốc · **tỉ lệ lượt mơ
       hồ** (kỳ vọng 30–40%) · trong 23 câu cứu được về lý thuyết, bao nhiêu câu bị cổng mơ hồ bỏ qua.
-- [ ] 🖐 **Đo độ trễ** — p95 rerank cho 12 và 20 cặp, gộp vào ma trận Khối B (2 và 4 vCPU, từng
+      → Harness `danh_gia_truy_hoi` thêm khối `rerank:` + 4 config `n15_rerank_*`. recall@5 / nDCG@5:
+      mốc 0,740 / 0,631 · 12 ứng viên 0,800 / 0,705 · **20 ứng viên 0,880 / 0,757 (mọi câu), 0,870 / 0,752
+      (chỉ khi mơ hồ)**; mọi Δ có KTC không chứa 0. **Tỉ lệ mơ hồ 93%**, không phải 30–40%; cổng bỏ qua
+      1/21 câu trần ở 20 ứng viên, 0/9 ở 12.
+- [x] 🖐 **Đo độ trễ** — p95 rerank cho 12 và 20 cặp, gộp vào ma trận Khối B (2 và 4 vCPU, từng
       service một). Thêm p95 `/v1/ai/chat` đơn luồng khi bật rerank (dưới tải: chưa đo, N19 hoãn).
       Vượt thì thử đòn bẩy và ghi số từng đòn: giảm ứng viên · cắt `max_length` 512 → 256 · chỉ chạy
       khi mơ hồ.
-- [ ] 🖐 **Quyết định bật/tắt** theo cổng ADR-0006: **≥ 5 điểm nDCG@5 VÀ p95 chat < 4 s**. Ghi vào
+      → p50 / p95 một lượt: **12 cặp 5,7 / 9,0 s · 20 cặp 10,7 / 13,0 s ở 2 vCPU** (30 câu — người dùng
+      chốt rút gọn); 9,2 / 14,9 s · 15,5 / 36,2 s ở 4 vCPU (100 câu). **4 vCPU không nhanh hơn trên M1**;
+      top-5 trùng 30/30 câu giữa hai mức. Ước lượng ~1,2 s / ~2 s thấp hơn thật 5–8 lần. **Không thử đòn
+      bẩy:** người dùng chốt 11/10 độ trễ chưa là cổng (memory `do-tre-chua-la-cong`); hai đòn bẩy
+      "giảm ứng viên" và "chỉ khi mơ hồ" vẫn có số từ bảng 5 cấu hình. p95 `/v1/ai/chat` với LLM thật:
+      **chưa đo** (tránh tốn hạn mức Gemini) — một lượt đầu-cuối LLM giả: rerank 12,0 s, cả lượt 13,2 s.
+- [x] 🖐 **Quyết định bật/tắt** theo cổng ADR-0006: **≥ 5 điểm nDCG@5 VÀ p95 chat < 4 s**. Ghi vào
       ADR-0006, mục cập nhật mới. Bật với 20 ứng viên thì sửa `SO_UNG_VIEN_RERANK` và docstring của
       `quyet_dinh.py`. Không đạt thì giữ **TẮT**, vẫn ghi đủ số, model vào bảng "Model bị loại" của
       `MODEL_REGISTRY.md` kèm đòn bẩy đã thử. ⚠️ Bật rerank là **đổi cấu hình ship** — người dùng chốt.
-- [ ] 🤖 Dòng `bge-reranker-v2-m3-int8` trong `artifacts/MODEL_REGISTRY.md` + Model Card.
+      → ✅ **Người dùng chốt 11/10: BẬT, 20 ứng viên** (đường "chỉ khi mơ hồ" giữ nguyên). Nửa độ trễ của
+      cổng không áp dụng. Đổi: `rerank_enabled=True`, `SO_UNG_VIEN_RERANK=20`, `rerank_timeout_s=60`;
+      compose: `INFERENCE_RERANK_URL` (tên cũ `RERANK_URL` không ai đọc), java-core `AI_CHAT_TIMEOUT=90s`.
+      Kiểm đầu-cuối: lượt chat có rerank và lượt ai-rerank tắt (giữ RRF) đều HTTP 200. ADR-0006 cập nhật 11/10.
+- [x] 🤖 Dòng `bge-reranker-v2-m3-int8` trong `artifacts/MODEL_REGISTRY.md` + Model Card.
+      → `docs/MODEL_CARD_reranker.md` (AI viết 11/10).
 
 **File sẽ đụng (Khối A):** `notebooks/07_export_reranker.{ipynb,py}` · `artifacts/models/` ·
 `artifacts/MODEL_REGISTRY.md` · `inference/src/roles/rerank.py` · `inference/compose.inference.yml` ·
@@ -1187,6 +1214,11 @@ ngân sách §5.3 thì ghi rõ vào bảng, không giấu.
 
 **Cổng ra Khối A:** `rerank.py` chạy model thật, không còn Jaccard · bảng 5 cấu hình kèm config ·
 p95 rerank 12/20 cặp ở 2 và 4 vCPU · quyết định bật/tắt đã ghi vào ADR-0006.
+
+→ ✅ **Khối A ĐÓNG 11/10/2026** — đủ bốn ý của cổng (p95 ở 2 vCPU trên 30 câu, người dùng chốt rút gọn).
+Minh chứng: `docs/report/rerank-ngay15-2026-10-11.md`. **recall@5 cấu hình ship 0,740 → 0,870 — lần đầu
+vượt 0,85 của §1.6.** Nợ để lại: cổng mơ hồ 93% chưa hiệu chỉnh · p95 chat với LLM thật chưa đo ·
+`CLASSIFY_URL` trong compose lệch tên biến (phần Dev B, đã ghi để báo).
 
 **Minh chứng báo cáo (Khối A):** bảng có/không rerank (recall@5 · nDCG@5 · KTC) · bảng trần theo số
 ứng viên · tỉ lệ lượt mơ hồ · p95 rerank · dòng `MODEL_REGISTRY.md`.
