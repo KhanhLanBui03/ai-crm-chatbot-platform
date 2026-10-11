@@ -1,0 +1,23 @@
+# Ngày 15 Khối A — xếp lại bằng cross-encoder thật. Một file một cấu hình (rag-eval.md). [R&D]
+# Mốc so sánh: e3_hybrid.yaml (không xếp lại) — đặt ĐẦU lệnh chạy để paired bootstrap so theo cặp:
+#   AI_MODE=remote EMBED_URL=http://localhost:8091 INFERENCE_RERANK_URL=http://localhost:8082 \
+#   python -m tests.eval.danh_gia_truy_hoi chay --nhan n15 tests/eval/configs/e3_hybrid.yaml \
+#       tests/eval/configs/n15_rerank_12_moi_cau.yaml tests/eval/configs/n15_rerank_12_mo_ho.yaml \
+#       tests/eval/configs/n15_rerank_20_moi_cau.yaml tests/eval/configs/n15_rerank_20_mo_ho.yaml
+id: n15-rerank-20-mo-ho
+mo_ta: "Hybrid RRF, xếp lại 20 ứng viên đầu — chỉ khi mơ hồ (needs_rerank — đúng đường production)"
+bo_vang: ../golden_set.jsonl
+che_do: hybrid
+tenant: eeeeeeee-0000-0000-0000-000000000001   # tenant gốc của tests/eval/gieo_kho.py
+k: 5
+ung_vien: 30        # mỗi làn (ADR-0006) — giữ y hệt e3-hybrid, chỉ khác bước xếp lại
+ef_search: 100
+quet_lap: relaxed_order
+nhung:
+  model: BAAI/bge-m3
+  version: int8-71e2aa91
+rerank:
+  ung_vien: 20    # số đoạn đầu của RRF đưa vào cross-encoder (production: SO_UNG_VIEN_RERANK)
+  khi: mo_ho
+  model: BAAI/bge-reranker-v2-m3
+  version: int8-93cd7fb0   # model_version ai-rerank trả ở /v1/model — 8 ký tự đầu sha256 .onnx (notebook 07)

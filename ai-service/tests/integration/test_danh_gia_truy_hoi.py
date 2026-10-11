@@ -177,3 +177,60 @@ async def test_harness_tu_choi_khi_ai_embed_lech_danh_tinh(factory, kho_mau, tmp
             [cau_hinh], nhan="t", factory=factory, embed=MockEmbedClient(1024),
             thu_muc=tmp_path,
         )
+
+
+class _RerankBietTruoc:
+    """Cross-encoder giả "biết trước": đoạn chứa ``dau_hieu`` lên đầu, còn lại giữ thứ tự RRF.
+
+    Đủ để khoá đường ống Ngày 15 (lấy N ứng viên → xếp lại → MỚI cắt top-k), không đo chất lượng.
+    """
+
+    def __init__(self, dau_hieu: str) -> None:
+        self.dau_hieu = de_so(dau_hieu)
+        self.so_ung_vien: list[int] = []
+
+    async def rerank(self, query, candidates):
+        self.so_ung_vien.append(len(candidates))
+        n = len(candidates)
+        diem = [
+            1.0 if self.dau_hieu in de_so(c["text"]) else (n - i) / (n + 1)
+            for i, c in enumerate(candidates)
+        ]
+        return [{"chunk_id": c["chunk_id"], "score": d, "rank": 0}
+                for c, d in zip(candidates, diem, strict=True)]
+
+
+async def test_harness_xep_lai_lay_n_ung_vien_roi_moi_cat_top_k(factory, kho_mau, tmp_path):
+    await gieo_kho.nap_tenant_goc(factory, MockEmbedClient(1024), kho_mau, co_lo=8)
+    trich = _cau_trich(kho_mau.doan["faq-thanh-toan.txt"][1].content)
+    # Câu hỏi KHÔNG chứa câu trích ⇒ làn từ khoá không tự kéo được đoạn đúng lên; chỉ xếp lại cứu.
+    (tmp_path / "golden_set.jsonl").write_text(
+        json.dumps({"id": "G1", "question": "khách hỏi chuyện thanh toán",
+                    "can_cu": [{"file": "faq-thanh-toan.txt", "quote": trich}]},
+                   ensure_ascii=False),
+        encoding="utf-8",
+    )
+    xl = {"ung_vien": 30, "khi": "moi_cau", "model": "gia/biet-truoc", "version": "v0"}
+    rr = _RerankBietTruoc(trich)
+    (goc, xep), bao_cao = await harness.chay(
+        [_cau_hinh(tmp_path, "hybrid"), _cau_hinh(tmp_path, "hybrid", id="test-xep", rerank=xl)],
+        nhan="n15",
+        factory=factory,
+        embed=MockEmbedClient(1024),
+        thu_muc=tmp_path / "reports",
+        rerank=rr,
+    )
+    # Một lượt làm nóng + một câu; kho mẫu ít đoạn hơn 30 nên ai-rerank nhận MỌI đoạn READY —
+    # đoạn đúng chắc chắn nằm trong tập ứng viên.
+    assert len(rr.so_ung_vien) == 2 and rr.so_ung_vien[0] == rr.so_ung_vien[1] > 5
+    assert xep.dong[0]["da_rerank"] == 1 and xep.dong[0]["hang_dung"] == 1
+    assert len(json.loads(xep.dong[0]["top_k"])) == 5  # cắt top-k SAU khi xếp lại
+    assert "hang_truoc_rerank" not in goc.dong[0]  # cấu hình không xếp lại giữ nguyên cột cũ
+    assert "| `test-xep` | 30 | moi_cau |" in bao_cao
+    assert "xếp lại 30 ứng viên khi=moi_cau bằng gia/biet-truoc/v0" in bao_cao
+
+    with pytest.raises(ValueError, match="không có client ai-rerank"):
+        await harness.chay(
+            [_cau_hinh(tmp_path, "hybrid", id="test-xep", rerank=xl)], nhan="t",
+            factory=factory, embed=MockEmbedClient(1024), thu_muc=tmp_path / "reports",
+        )

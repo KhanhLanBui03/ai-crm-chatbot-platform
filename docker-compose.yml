@@ -246,6 +246,10 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:-changeme-dev}
       # Dự phòng khi ai-service chưa tự đăng ký Eureka — LoadBalancer hỏi Eureka trước.
       AI_SERVICE_URL: http://ai-service:8000
+      # UC010 — hạn chờ ai-service trả lời một lượt chat. Mặc định của java-core là 10 s, nhưng từ
+      # Ngày 15 rerank 20 ứng viên mất ~11 s (p50, 2 vCPU máy dev); hạn chờ rerank của ai-service là
+      # 60 s ⇒ ở đây phải lớn hơn nữa (chuỗi timeout tăng dần, §3.10.2).
+      AI_CHAT_TIMEOUT: ${AI_CHAT_TIMEOUT:-90s}
       # UC009 — mã nhúng widget. Hai địa chỉ do TRÌNH DUYỆT CỦA KHÁCH truy cập (không phải tên
       # service nội bộ): nơi tải widget.js và gateway công khai.
       WIDGET_SCRIPT_URL: ${WIDGET_SCRIPT_URL:-http://localhost:5174/widget.js}
@@ -338,7 +342,9 @@ services:
       # AI_MODE=mock để stack local chạy được khi chưa bật (C) — §3.4.1.
       AI_MODE: ${AI_MODE:-mock}
       EMBED_URL: ${EMBED_URL:-}
-      RERANK_URL: ${RERANK_URL:-}
+      # Tên biến PHẢI khớp clients.py (INFERENCE_RERANK_URL) — bản cũ ghi RERANK_URL, không ai đọc.
+      # ai-rerank chạy ở compose riêng (inference/), ra máy chủ cổng 8082. Rerank bật từ Ngày 15.
+      INFERENCE_RERANK_URL: ${INFERENCE_RERANK_URL:-http://host.docker.internal:8082}
       CLASSIFY_URL: ${CLASSIFY_URL:-}
       # ADR-0002: bề mặt DUY NHẤT để chạm dữ liệu nghiệp vụ
       JAVA_CORE_URL: http://java-core:8081

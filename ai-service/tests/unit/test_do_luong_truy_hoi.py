@@ -5,14 +5,20 @@ import math
 from uuid import uuid4
 
 import pytest
+import yaml
 
 from src.ai.rag.retrieve.hybrid import DoanTimDuoc
 from tests.eval.bo_vang import de_so
 from tests.eval.danh_gia_truy_hoi import (
+    CauHinh,
+    KetQuaCauHinh,
+    XepLai,
     bootstrap_cap,
     chi_so_ranx,
     diem_cau,
+    doc_cau_hinh,
     hang_dung_dau_tien,
+    thong_ke_xep_lai,
 )
 
 
@@ -97,3 +103,58 @@ def test_ranx_kho_it_doan_hon_k():
     assert chi_so_ranx([_dong("G1", 2, so_doan=3)], 5) == pytest.approx(
         {"trung": 1.0, "ndcg": 1 / math.log2(3), "rr": 0.5}
     )
+
+
+# ── Xếp lại — Ngày 15 ────────────────────────────────────────────────────────
+
+
+def _yaml_cau_hinh(tmp_path, rerank: dict):
+    p = tmp_path / "c.yaml"
+    p.write_text(
+        yaml.safe_dump(
+            {"id": "x", "mo_ta": "x", "bo_vang": "g.jsonl", "che_do": "hybrid",
+             "tenant": str(uuid4()), "k": 5, "nhung": {"model": "m", "version": "v"},
+             "rerank": rerank}
+        ),
+        encoding="utf-8",
+    )
+    return p
+
+
+def test_doc_cau_hinh_co_khoi_rerank(tmp_path):
+    xl = {"ung_vien": 20, "khi": "mo_ho", "model": "r", "version": "int8-1"}
+    ch = doc_cau_hinh(_yaml_cau_hinh(tmp_path, xl))
+    assert ch.xep_lai == XepLai(20, "mo_ho", "r", "int8-1")
+
+
+@pytest.mark.parametrize(
+    ("rerank", "loi"),
+    [({"ung_vien": 12, "khi": "luon_luon", "model": "r", "version": "v"}, "rerank.khi"),
+     ({"ung_vien": 5, "khi": "moi_cau", "model": "r", "version": "v"}, "lớn hơn k")],
+)
+def test_khoi_rerank_sai_thi_dung_ngay(tmp_path, rerank, loi):
+    with pytest.raises(ValueError, match=loi):
+        doc_cau_hinh(_yaml_cau_hinh(tmp_path, rerank))
+
+
+def test_thong_ke_xep_lai_dem_tran_cuu_duoc_bi_day_ra():
+    ch = CauHinh("x", "x", None, "hybrid", uuid4(), "m", "v", k=5,
+                 xep_lai=XepLai(12, "mo_ho", "r", "v"))
+    # (hạng trước, mơ hồ, đã xếp, trúng sau, ms) — đọc như từ CSV: chuỗi rỗng = không có
+    tho = [
+        (1, 1, 1, 1.0, 900.0),   # trúng sẵn, giữ
+        (8, 1, 1, 1.0, 1000.0),  # trần, cứu được
+        (10, 0, 0, 0.0, ""),     # trần nhưng cổng mơ hồ bỏ qua
+        (3, 1, 1, 0.0, 1100.0),  # trúng sẵn, bị đẩy ra
+        (15, 1, 1, 0.0, 950.0),  # ngoài 12 ứng viên — không thuộc trần
+        ("", 0, 0, 0.0, ""),     # ngoài top-N
+    ]
+    dong = [{"id": f"G{i}", "trung": str(t), "hang_truoc_rerank": str(h), "mo_ho": str(m),
+             "da_rerank": str(d), "rerank_ms": str(ms)}
+            for i, (h, m, d, t, ms) in enumerate(tho)]
+    t = thong_ke_xep_lai(KetQuaCauHinh(ch, dong, []))
+    assert t["tran"] == 2 and t["tran_bo_qua"] == 1
+    assert t["tran_recall"] == pytest.approx(4 / 6)  # 2 trúng sẵn + 2 trần
+    assert (t["cuu_duoc"], t["bi_day_ra"]) == (1, 1)
+    assert t["so_da_xep_lai"] == 4 and t["ti_le_mo_ho"] == pytest.approx(4 / 6)
+    assert t["p95_ms"] == 1100.0

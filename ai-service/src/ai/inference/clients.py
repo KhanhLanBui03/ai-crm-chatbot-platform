@@ -209,12 +209,18 @@ async def _post(
 
 
 class RemoteRerankClient:
-    def __init__(self, base_url: str | None = None) -> None:
-        self.base_url = base_url or os.getenv("INFERENCE_RERANK_URL", "http://ai-rerank:8080")
+    def __init__(self, base_url: str | None = None, timeout_s: float = 60.0) -> None:
+        # ``or`` thay vì mặc định của getenv: compose đặt ``${INFERENCE_RERANK_URL:-}`` thì biến tồn
+        # tại nhưng RỖNG, getenv trả "" và client gọi vào địa chỉ rỗng.
+        self.base_url = base_url or os.getenv("INFERENCE_RERANK_URL") or "http://ai-rerank:8080"
+        # Đo 11/10 (Ngày 15): cross-encoder thật mất 0,15–3 s MỖI cặp ở 2 vCPU trên máy dev — một
+        # lượt 20 cặp p50 ~11 s. Production lấy hạn từ Settings.rerank_timeout_s (60 s); quá hạn ⇒
+        # answerer giữ thứ hạng RRF. Harness đo nới rộng hơn để lấy trọn đuôi phân bố.
+        self.timeout_s = timeout_s
 
     async def rerank(self, query: str, candidates: list[dict[str, str]]) -> list[dict[str, Any]]:
         payload = {"query": query, "candidates": candidates}
-        return (await _post(self.base_url, "/v1/rerank", payload, 15.0))["results"]
+        return (await _post(self.base_url, "/v1/rerank", payload, self.timeout_s))["results"]
 
 
 class RemoteClassifyClient:
@@ -286,7 +292,7 @@ def get_ai_mode() -> str:
 def get_rerank_client() -> RerankClient:
     if get_ai_mode() == "mock":
         return MockRerankClient()
-    return RemoteRerankClient()
+    return RemoteRerankClient(timeout_s=get_settings().rerank_timeout_s)
 
 
 def get_classify_client() -> ClassifyClient:

@@ -55,7 +55,7 @@ from pathlib import Path
 
 from src.ai.config import Settings
 from src.ai.guardrails import normalize_vietnamese_text
-from src.ai.inference.clients import KetQuaNhung, tao_embed_client
+from src.ai.inference.clients import KetQuaNhung, get_rerank_client, tao_embed_client
 from src.ai.integrations.llm import CircuitBreaker, LLMChiuLoi, tao_llm_client
 from src.ai.rag.answerer import RagAnswerer, truy_hoi_csdl
 from src.ai.rag.generate.hau_kiem import khong_phai_tra_loi
@@ -135,6 +135,8 @@ def dung_answerer(settings: Settings, han_chot_s: float = 10.0):
         # Phép đo này đo NỘI DUNG (ngưỡng), không đo độ trễ — độ trễ đo ở thu_llm.py và Ngày 13.
         llm=LLMChiuLoi(llm, CircuitBreaker(nguong_hong=100), han_chot_s=han_chot_s),
         settings=settings,
+        # Đúng như service.py: cấu hình ship bật rerank (Ngày 15) thì lượt đo cũng xếp lại.
+        rerank=get_rerank_client() if settings.rerank_enabled else None,
         truy_hoi=truy_hoi_ghi_lai,
         dem_tu_choi=chua_tu_choi_lan_nao,
     )

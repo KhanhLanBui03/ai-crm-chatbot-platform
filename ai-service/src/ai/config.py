@@ -127,8 +127,14 @@ class Settings(BaseSettings):
     rag_tu_choi_lap_lai_chuyen_giao: int = Field(default=2, ge=1)
     # Số đoạn đưa vào lời nhắc.
     rag_so_doan_loi_nhac: int = Field(default=5, ge=1)
-    # Xếp hạng lại — MẶC ĐỊNH TẮT (rag-eval.md). Bật khi nDCG@5 tăng ≥ 5 điểm VÀ p95 < 4 s.
-    rerank_enabled: bool = False
+    # Xếp hạng lại — BẬT từ 11/10/2026 (Ngày 15, người dùng chốt; ADR-0006 cập nhật 11/10).
+    # bge-reranker-v2-m3 INT8 xếp lại 20 ứng viên đầu của RRF: nDCG@5 +12,1 điểm [KTC +6,2; +18,5],
+    # recall@5 0,74 → 0,87 trên bộ vàng. Nửa độ trễ của cổng cũ (p95 chat < 4 s) KHÔNG áp dụng —
+    # người dùng chốt độ trễ chưa là cổng; đo: một lượt 20 cặp p50 ~11 s ở 2 vCPU máy dev.
+    rerank_enabled: bool = True
+    # Hạn chờ ai-rerank. Quá hạn ⇒ answerer giữ thứ hạng RRF (§3.8.1). Chuỗi tăng dần (§3.10.2):
+    # 60 s < AI_CHAT_TIMEOUT của java-core (phải ≥ 90 s khi bật rerank) < idle_timeout ALB 120 s.
+    rerank_timeout_s: float = Field(default=60.0, gt=0)
 
     # ── Bộ chấm tự động — UC027 bước 6, chạy nền trong worker ─────────────
     # Chỉ chạy khi LLM_MODE=remote: giám khảo giả cho nhãn giả, làm bẩn đúng tỉ lệ cần đo.

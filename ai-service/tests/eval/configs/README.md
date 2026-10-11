@@ -42,6 +42,20 @@ nhung:                         # danh tính ai-embed trả về; lệch thì har
 Hiện có: `e3_dense` · `e3_sparse` · `e3_hybrid` · `e3_hybrid_khong_quet_lap` (đối chứng ngược cho
 phép so 1 ↔ 20 tenant).
 
+**E4 — xếp lại (Ngày 15):** `n15_rerank_{12,20}_{moi_cau,mo_ho}` — bốn biến thể so với mốc
+`e3_hybrid`. Khác `e3_hybrid` đúng một khối:
+
+```yaml
+rerank:
+  ung_vien: 12          # số đoạn đầu của RRF đưa vào cross-encoder; top-k cắt SAU khi xếp lại
+  khi: mo_ho            # moi_cau | mo_ho (needs_rerank — đúng đường production)
+  model: BAAI/bge-reranker-v2-m3
+  version: int8-xxxxxxxx   # ai-rerank /v1/model phải trả đúng chuỗi này, lệch là dừng
+```
+
+Tệp cặp cho cổng parity của notebook 07 (`../rerank_cap_100x20.jsonl`) xuất từ `e3_hybrid` bằng
+`python -m tests.eval.danh_gia_truy_hoi xuat-cap … --ung-vien 20`.
+
 `n13_nghiem_thu.yaml` khác khuôn trên: đó là cấu hình của **một lượt nghiệm thu** cho
 `tests/eval/chay_tat_ca.py` — trỏ tới ba cấu hình E3 (cấu hình ship `e3-hybrid` là số đem so cổng),
 khoá sha256 của ba tập đo, tham số lượt LLM và bảng ngưỡng §1.6, gồm cả dung sai tái lập phần LLM
