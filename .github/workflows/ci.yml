@@ -116,7 +116,8 @@ jobs:
 
       - name: Cú pháp
         working-directory: inference
-        run: python -m compileall -q src
+        # bench/ là [R&D], không vào image — nhưng vẫn phải biên dịch được (ADR-0034)
+        run: python -m compileall -q src bench
 
       - name: Build image
         run: docker build -t ai-inference:ci inference/

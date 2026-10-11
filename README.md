@@ -178,8 +178,9 @@ Sau khi chốt, mỗi bên tự dựng bản giả lập của bên kia và làm
 │       └── eval/           golden_set · adversarial · configs · reports
 │
 ├── inference/              TẦNG SUY LUẬN — nơi DUY NHẤT có onnxruntime
-│   ├── src/{entrypoint, session, bench_cpu}.py
+│   ├── src/{entrypoint, session}.py
 │   ├── src/roles/          embed · rerank · classify
+│   ├── bench/bench_cpu.py  [R&D] đo CPU — ngoài src/ nên không vào image, mount lúc đo
 │   └── compose.inference.yml    chạy ở môi trường (C) Cloud CPU
 │
 ├── notebooks/              R&D Kaggle — torch, sklearn, xgboost ở đây
