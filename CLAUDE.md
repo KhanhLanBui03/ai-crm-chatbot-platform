@@ -127,6 +127,8 @@ mất điểm trực tiếp.
   (eval cuối). **Ngày 17 là ngày cuối của đợt.** Sau đó người dùng chuyển sang java-core, gateway,
   web-dashboard, web-widget để kiểm các UC AI chạy ổn trên giao diện; lên production thì quay lại
   N18 → N20.
+- **Đổi lần ba, 11/10: hoãn luôn Ngày 16** (buổi đọc số liệu kỹ thuật), chưa định ngày. Đợt còn
+  **Ngày 17**, cộng ngả chuyển giao của N14 khi có `router_model.onnx`.
 - **Hệ quả:** p95 `/v1/ai/chat` dưới tải ghi "chưa đo"; image vẫn 776 MB nên cổng CI dung lượng
   đỏ; bài kiểm "cách ly cache" ghi "không áp dụng"; chưa có lượt eval cuối (số mới nhất là của N13 và
   N15); chưa có môi trường triển khai, dữ liệu thật hay thanh toán Gemini.
