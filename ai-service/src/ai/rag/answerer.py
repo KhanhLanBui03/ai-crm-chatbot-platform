@@ -184,7 +184,14 @@ class RagAnswerer:
 
         mo_ho = needs_rerank(cac_doan)
         if self._rerank and mo_ho:
-            cac_doan = await xep_lai(self._rerank, cau_hoi, cac_doan)
+            try:
+                cac_doan = await xep_lai(self._rerank, cau_hoi, cac_doan)
+            except Exception as loi:
+                # Ma trận suy giảm §3.8.1 (``inference/remote.py``): ai-rerank chết — 503 khi thiếu
+                # model (Ngày 15 bỏ đường lùi về Jaccard), timeout, mất kết nối — thì bỏ bước xếp
+                # lại, giữ thứ hạng RRF. Không đánh cờ degraded: đoạn vẫn là đoạn truy hồi được,
+                # chỉ mất phần tinh chỉnh thứ hạng.
+                logger.warning("ai-rerank lỗi, giữ thứ hạng RRF: %s: %s", type(loi).__name__, loi)
             dong_ho.ghi("rerank_ms")
         sang = search_or_abstain(
             cac_doan[: s.rag_so_doan_loi_nhac],

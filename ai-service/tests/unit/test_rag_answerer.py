@@ -6,7 +6,9 @@ Câu hội đồng sẽ hỏi → test làm bằng chứng:
 - LLM sập thì khách thấy gì? → ``test_llm_sap_tra_cau_suy_giam_khong_nem_loi``
 - Số điện thoại của khách có ra nhà cung cấp ngoài không?
   → ``test_che_pii_cau_hoi_truoc_khi_gui_llm``
-- Rerank tắt thì có lấy 12 ứng viên không? → ``test_rerank_tat_chi_lay_5_doan``
+- Rerank tắt thì có lấy 20 ứng viên không? → ``test_rerank_tat_chi_lay_5_doan``
+- ai-rerank sập thì khách thấy gì?
+  → ``test_ai_rerank_loi_thi_giu_thu_hang_rrf_khong_hong_luot_chat``
 - (UC025) Câu sinh ra không bám nguồn thì sao? → ``test_khong_bam_nguon_thi_huy_cau_da_sinh``
 - (UC025) Câu dò dữ liệu có tốn lượt nhúng/LLM không? → ``test_do_tim_tu_choi_truoc_khi_nhung``
 - (UC025) Khách bị từ chối liên tiếp thì sao? → ``test_tu_choi_lan_hai_lien_tiep_thi_chuyen_giao``
@@ -15,6 +17,8 @@ Câu hội đồng sẽ hỏi → test làm bằng chứng:
 import asyncio
 import uuid
 from uuid import uuid4
+
+import httpx
 
 from src.ai.config import Settings
 from src.ai.inference.clients import KetQuaNhung, MockEmbedClient
@@ -193,12 +197,12 @@ def test_truy_hoi_dung_cau_goc_qua_normalize_vi_va_dung_tenant():
 
 
 def test_rerank_tat_chi_lay_5_doan():
-    a, _, truy_hoi = _answerer([_doan(BAO_HANH, 0.7)] * 12)
+    a, _, truy_hoi = _answerer([_doan(BAO_HANH, 0.7)] * 20, rerank_enabled=False)
     _hoi(a)
     assert truy_hoi.goi[0][2] == 5
 
 
-def test_rerank_bat_va_mo_ho_thi_xep_lai_tren_12_ung_vien():
+def test_rerank_bat_va_mo_ho_thi_xep_lai_tren_20_ung_vien():
     class _RerankDaoNguoc:
         def __init__(self) -> None:
             self.so_ung_vien = 0
@@ -209,7 +213,7 @@ def test_rerank_bat_va_mo_ho_thi_xep_lai_tren_12_ung_vien():
             return [{"chunk_id": c["chunk_id"], "score": i / n, "rank": n - i}
                     for i, c in enumerate(candidates)]
 
-    cac_doan = [_doan(f"{BAO_HANH} bản {i}", 0.70 - i * 0.01) for i in range(12)]
+    cac_doan = [_doan(f"{BAO_HANH} bản {i}", 0.70 - i * 0.01) for i in range(25)]
     rr = _RerankDaoNguoc()
     llm = _LLMGhiLai("Máy lạnh bảo hành chính hãng 24 tháng [1].")
     settings = Settings(llm_mode="mock", rerank_enabled=True)
@@ -222,10 +226,32 @@ def test_rerank_bat_va_mo_ho_thi_xep_lai_tren_12_ung_vien():
         dem_tu_choi=_dem(0),
     )
     kq = _hoi(a)
-    assert rr.so_ung_vien == 12
-    # Rerank đảo ngược thứ tự ⇒ đoạn cuối của RRF lên đầu lời nhắc và là [1]
-    assert kq.citations[0].chunk_id == cac_doan[11].chunk_id
+    assert rr.so_ung_vien == 20  # Ngày 15: 20 ứng viên, không phải 12
+    # Rerank đảo ngược thứ tự ⇒ đoạn thứ 20 của RRF lên đầu lời nhắc và là [1]
+    assert kq.citations[0].chunk_id == cac_doan[19].chunk_id
     assert "rerank_ms" in kq.latency_breakdown
+
+
+def test_ai_rerank_loi_thi_giu_thu_hang_rrf_khong_hong_luot_chat():
+    """§3.8.1: ai-rerank 503 (thiếu model) hay mất kết nối thì bỏ bước xếp lại, vẫn trả lời."""
+
+    class _RerankSap:
+        async def rerank(self, query, candidates):
+            raise httpx.ConnectError("ai-rerank không phân giải được")
+
+    cac_doan = [_doan(f"{BAO_HANH} bản {i}", 0.70 - i * 0.01) for i in range(12)]
+    a = RagAnswerer(
+        embed=MockEmbedClient(1024),
+        llm=LLMChiuLoi(_LLMGhiLai("Máy lạnh bảo hành chính hãng 24 tháng [1]."), CircuitBreaker(),
+                       han_chot_s=2.5),
+        settings=Settings(llm_mode="mock", rerank_enabled=True),
+        rerank=_RerankSap(),
+        truy_hoi=_TruyHoiGia(cac_doan),
+        dem_tu_choi=_dem(0),
+    )
+    kq = _hoi(a)
+    assert not kq.refused and not kq.degraded
+    assert kq.citations[0].chunk_id == cac_doan[0].chunk_id  # thứ hạng RRF giữ nguyên
 
 
 # ── UC025 — từ chối khi không đủ căn cứ (Ngày 10) ────────────────────────────
