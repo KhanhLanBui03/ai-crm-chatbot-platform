@@ -12,9 +12,12 @@ Không có Model Card thì artifact không được coi là đã bàn giao (§6.
 
 | model_id | Vai trò | Service | UC | Cấp vCPU | sha256 | parity | p95 đo thật | Trạng thái |
 |---|---|---|---|---|---|---|---|---|
-| `bge-m3-int8` | encoder | `ai-embed` | UC019, UC023 | chốt Ngày 15 | `71e2aa91…2723510` (.onnx)<br>`65925f1e…3f2703` (.onnx.data) | **0,98476 — TRƯỢT, chưa phân xử** | ⚠️ chưa đo (thông lượng lô 1: 9,8 đoạn/s, 4 luồng, macOS) | 🟢 **Ship 06/10** — lô 1, image `ai-inference:dev` 383 MB; recall@5 hybrid 0,740 / dense 0,800 trên bộ vàng v1 — [ADR-0021](../docs/adr/0021-cong-parity-int8-truot-phan-xu-bang-recall.md) |
+| `bge-m3-int8` | encoder | `ai-embed` | UC019, UC023 | **4 vCPU** ([ADR-0034](../docs/adr/0034-chot-cap-vcpu-ai-embed-ai-rerank.md)) | `71e2aa91…2723510` (.onnx)<br>`65925f1e…3f2703` (.onnx.data) | **0,98476 — TRƯỢT, chưa phân xử** | câu hỏi: p50 24 / p95 **69 ms** · đoạn: p50 192 / p95 **638 ms**, 3,99 đoạn/s — 4 vCPU ghim luồng, Docker trên M1 (11/10); ngưỡng 120 ms là số kế hoạch | 🟢 **Ship 06/10** — lô 1, image `ai-inference:dev` 383 MB; recall@5 hybrid 0,740 / dense 0,800 trên bộ vàng v1 — [ADR-0021](../docs/adr/0021-cong-parity-int8-truot-phan-xu-bang-recall.md) |
 | `bge-m3-fp32` | encoder (đối chứng) | — | — | — | `ff81fec3…415fa5f` (.onnx)<br>`303112e4…d8e1f0` (.data) | — (mốc gốc) | — | ⚪ **Bỏ đo đối chứng 06/10** — `.data` không có trên máy dev, không tải (ADR-0021 cập nhật 2) |
 
+> **Đã đo Ngày 15 (11/10)** trên đúng cấu hình triển khai — `inference/bench/bench_cpu.py`, số đầy đủ ở
+> `docs/report/benchmark-ngay15-2026-10-11.md`. Ghi chú gốc bên dưới giữ lại để biết vì sao số Kaggle không dùng.
+>
 > **Cột `p95 đo thật` cố ý để trống tới Ngày 15.** Đã đo thử trên Kaggle nhưng **con số không
 > tái lập**: cùng một notebook, hai lượt chạy cho `fp32 124,5 / 63,8 ms` và `76,5 / 37,2 ms`
 > — chênh 1,6 lần, vì máy batch sạch hơn máy của phiên tương tác. Ghi con số đó vào cột này là
@@ -25,7 +28,7 @@ Không có Model Card thì artifact không được coi là đã bàn giao (§6.
 >
 > Đối chiếu: 4 `sha256` ở trên **trùng khít** giữa hai lượt chạy độc lập ⇒ artifact tái lập
 > được từng byte, chỉ có phép đo thời gian là không.
-| `bge-reranker-v2-m3-int8` | cross-encoder | `ai-rerank` | UC023 | 2 vCPU (đo 11/10: 4 vCPU không nhanh hơn trên M1) | `93cd7fb0…c1c0fde2` (.onnx)<br>`db41e6b7…e33eff97` (.onnx.data)<br>`69564b69…bf379c15` (tokenizer) | **ĐẠT** — nDCG@5 INT8 − fp32: +0,54 (N12) / −0,23 (N20) điểm, ngưỡng < 1 | 20 cặp: p50 10,7 s / p95 13,0 s (2 vCPU, 30 câu, macOS ARM) — ngưỡng 300 ms là số kế hoạch, chưa áp dụng | 🟢 **Ship 11/10, BẬT, 20 ứng viên** — nDCG@5 +12,1 điểm, recall@5 0,74 → 0,87; [ADR-0006](../docs/adr/0006-hybrid-search-rrf-rerank.md) cập nhật 11/10 · [Model Card](../docs/MODEL_CARD_reranker.md) |
+| `bge-reranker-v2-m3-int8` | cross-encoder | `ai-rerank` | UC023 | **4 vCPU** ([ADR-0034](../docs/adr/0034-chot-cap-vcpu-ai-embed-ai-rerank.md); Khối A ghi "4 không nhanh hơn" — đã đính chính) | `93cd7fb0…c1c0fde2` (.onnx)<br>`db41e6b7…e33eff97` (.onnx.data)<br>`69564b69…bf379c15` (tokenizer) | **ĐẠT** — nDCG@5 INT8 − fp32: +0,54 (N12) / −0,23 (N20) điểm, ngưỡng < 1 | 20 cặp: p50 7,8 s / p95 **10,3 s** (4 vCPU, 30 câu, ghim luồng, Docker trên M1); 2 vCPU: 11,1 / 13,8 s — ngưỡng 300 ms là số kế hoạch, chưa áp dụng | 🟢 **Ship 11/10, BẬT, 20 ứng viên** — nDCG@5 +12,1 điểm, recall@5 0,74 → 0,87; [ADR-0006](../docs/adr/0006-hybrid-search-rrf-rerank.md) cập nhật 11/10 · [Model Card](../docs/MODEL_CARD_reranker.md) |
 | _(chưa có)_ | intent router | `ai-classify` | UC022 | S | | — | ngân sách 60 ms | Chưa bắt đầu |
 | _(chưa có)_ | lead scorer | `ai-classify` | UC030 | S | | < 1e-4 | < 1.000 ms | Chưa bắt đầu |
 | _(chưa có)_ | K-Means + PCA | CronJob riêng | UC038 | — | | — | không trên đường request | Chưa bắt đầu |

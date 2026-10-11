@@ -14,8 +14,9 @@
 #
 # ⚠️ cpus và OMP_NUM_THREADS phải BẰNG NHAU. Lệch thì /ready trả 503 (bất biến 3, §3.4.2).
 #
-# Cấp vCPU dưới đây là GIÁ TRỊ TẠM cho tới khi chốt ở Ngày 21 dựa trên bảng benchmark
-# §5.6. Đừng coi đây là con số đã quyết.
+# Cấp vCPU chốt Ngày 15 bằng bảng benchmark (ADR-0034, docs/report/benchmark-ngay15-2026-10-11.md):
+#     ai-embed 4 · ai-rerank 4 · ai-classify 2 — ai-classify còn TẠM, đo bù khi có router_model.onnx.
+# Số đo trên máy dev Apple M1 (ARM). Lên cloud x86 thì đo lại (N20) trước khi coi là số production.
 
 name: ai-inference
 
@@ -38,7 +39,7 @@ services:
     environment:
       <<: *inference-env
       MODEL_ROLE: embed
-      OMP_NUM_THREADS: "4"        # PHẢI bằng cpus bên dưới
+      OMP_NUM_THREADS: "4"        # PHẢI bằng cpus bên dưới — giữ 4: nhúng đoạn nhanh hơn ~30% (ADR-0034)
     # bge-m3-int8.onnx (+ .onnx.data, 541 MB) và tokenizer.json ở artifacts/models/ — mount, không
     # COPY vào image. Thiếu file thì /ready = 503 (embed.check_invariants), không trả vector giả.
     volumes:
@@ -61,7 +62,7 @@ services:
     environment:
       <<: *inference-env
       MODEL_ROLE: rerank
-      OMP_NUM_THREADS: "2"
+      OMP_NUM_THREADS: "4"        # PHẢI bằng cpus bên dưới — 4 vCPU: p50 −25–30% so với 2 (ADR-0034)
     # bge-reranker-v2-m3-int8.onnx (+ .onnx.data) và bge-reranker-v2-m3-tokenizer.json ở
     # artifacts/models/ — sinh ở notebooks/07, mount, không COPY vào image. Thiếu file thì
     # /ready = 503 (rerank.check_invariants), KHÔNG lùi về điểm Jaccard giả (Ngày 15).
@@ -69,8 +70,8 @@ services:
       - ../artifacts:/app/artifacts:ro
     deploy:
       resources:
-        limits: { cpus: "2", memory: 4G }
-        reservations: { cpus: "2", memory: 4G }
+        limits: { cpus: "4", memory: 4G }
+        reservations: { cpus: "4", memory: 4G }
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/ready"]
       interval: 10s
