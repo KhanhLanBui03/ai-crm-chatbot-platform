@@ -20,19 +20,24 @@ Phần này **cố ý lệch xlsx**, xlsx chưa sửa theo.
 |---|---|---|
 | N14 | Mốc M2: chạy luồng chat, video 3 luồng, biểu đồ `latency_breakdown`, viết báo cáo 6 UC, bảng 7 chỉ số giữa kỳ | **Chỉ chạy trọn luồng chat.** Bốn việc còn lại hoãn cùng N21 |
 | N15 | Benchmark rút gọn + chốt cấp vCPU | **Thêm Khối A trước benchmark: rerank thật `BAAI/bge-reranker-v2-m3`**, thay bản giả Jaccard, đóng ô N8 "nDCG@5 có/không rerank" |
-| N16 | Giảm image < 400 MB, semantic cache, tối ưu độ trễ | **Bỏ.** Ô ngày này dùng cho **buổi đọc số liệu kỹ thuật** |
+| N16 | Giảm image < 400 MB, semantic cache, tối ưu độ trễ | **Bỏ.** Ô ngày này dùng cho **buổi đọc số liệu kỹ thuật** — buổi đọc số cũng **hoãn** *(đổi lần ba, 11/10)* |
 | N18 | Triển khai 1 instance cloud HTTPS, test RLS ở môi trường triển khai, dữ liệu doanh nghiệp thật | **Hoãn** *(đổi lần hai)* — làm khi lên production |
 | N19 | Load test 10 người / 10 phút và 50 người / 15 phút | **Hoãn** |
 | N20 | Chạy lại toàn bộ bộ test + eval cuối trong một lượt, điền bảng chỉ số | **Hoãn** *(đổi lần hai)* — làm khi lên production |
 | N21 | Mốc M3: báo cáo cuối, ADR, ERD, sơ đồ, mục hạn chế | **Hoãn** |
 
-Thứ tự làm sau khi đổi: N13 → N14 → N15 (**rerank thật**, rồi benchmark) → **N16 đọc số** → **N17
+Thứ tự làm sau khi đổi: N13 → N14 → N15 (**rerank thật**, rồi benchmark) → ~~N16 đọc số~~ → **N17
 là ngày cuối của đợt**. Ngả (c) của N14 chạy bù khi có `router_model.onnx`.
 
 **Đổi lần hai, 10/10/2026 — người dùng chốt hoãn N18 và N20.** Sau N17, người dùng chuyển sang các
 service khác (java-core, gateway, web-dashboard, web-widget), nối và kiểm các UC AI đã làm **trên
 giao diện** cho tới khi chạy ổn. Lên production thì quay lại N18 rồi N20. Nội dung hai ngày giữ
 nguyên bên dưới.
+
+**Đổi lần ba, 11/10/2026 — người dùng chốt hoãn N16 (buổi đọc số liệu kỹ thuật).** Xong N15 Khối B thì
+sang thẳng **N17**. Buổi đọc số chưa định ngày; nội dung giữ nguyên bên dưới. N17 không phụ thuộc N16.
+Hệ quả: chưa có lượt rà lại toàn bộ con số N1–N15 trước bảo vệ, và tài liệu đọc
+`docs/on-tap/ngay-16-doc-so-lieu-ky-thuat.md` chưa soạn — soạn khi người dùng mở lại ngày này.
 
 **Hệ quả:**
 
@@ -1340,7 +1345,10 @@ p95 khi ghim luồng và khi để mặc định** · ADR-0034.
 
 ---
 
-## Ngày 16 — T3 06/10 — 📖 Buổi đọc số liệu kỹ thuật
+## Ngày 16 — T3 06/10 — 📖 Buổi đọc số liệu kỹ thuật — ⏸ HOÃN (11/10)
+
+⏸ **Đổi 11/10/2026 — người dùng chốt hoãn cả buổi đọc số**, chưa định ngày. Nội dung dưới đây giữ nguyên
+để làm khi mở lại; đợt này đi thẳng từ N15 sang N17.
 
 > **Mục tiêu:** hiểu từng con số đã đo là gì, đo bằng kỹ thuật nào và đọc nó ra sao, đủ để tự
 > trả lời hội đồng bằng số của chính mình mà không cần mở tài liệu.
