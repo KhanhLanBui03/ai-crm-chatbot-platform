@@ -46,6 +46,7 @@ class EntityMappingIntegrationTest extends EngagementIntegrationTestBase {
     @Autowired ConversationRepository conversations;
     @Autowired MessageRepository messages;
     @Autowired AuditLogRepository auditLogs;
+    @Autowired com.thesis.crm.common.audit.AuditLogWriter writer;
 
     @BeforeEach
     void seedChannel() throws Exception {
@@ -156,6 +157,42 @@ class EntityMappingIntegrationTest extends EngagementIntegrationTestBase {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(new AuditLog(TENANT_A, ActorType.SYSTEM, null, "X", "Y", null, null).getSeverity())
                 .isEqualTo(AuditSeverity.INFO);
+    }
+
+    @Test
+    void auditLogWriter_ngayGioLaChuoiIso_giuGiaTriNull_mucDoTuChuoi() throws Exception {
+        UUID entity = UUID.randomUUID();
+        java.time.Instant moc = java.time.Instant.parse("2026-10-14T03:00:00Z");
+        Map<String, Object> du = new java.util.HashMap<>();
+        du.put("dueAt", moc);
+        du.put("fromUserId", null);
+        trongTenant(TENANT_A, () -> {
+            writer.recordUserAction(TENANT_A, USER_A, "TEST_JSON", "LEAD", entity, du);
+            writer.recordSystemAction(TENANT_A, "TEST_SYS", "LEAD", entity, "WARNING", Map.of("k", 1));
+            return null;
+        });
+
+        assertThat(motCot("SELECT after_data->>'dueAt' FROM platform.audit_logs WHERE entity_id = ? AND action = 'TEST_JSON'", entity))
+                .isEqualTo("2026-10-14T03:00:00Z");
+        // Khoá vẫn có mặt với giá trị null — "đổi người phụ trách từ không ai" khác "không ghi người cũ"
+        assertThat(motCot("SELECT jsonb_exists(after_data, 'fromUserId') AND after_data->'fromUserId' = 'null'::jsonb"
+                + " FROM platform.audit_logs WHERE entity_id = ? AND action = 'TEST_JSON'", entity)).isEqualTo("t");
+        assertThat(motCot("SELECT actor_type || '/' || severity FROM platform.audit_logs WHERE entity_id = ? AND action = 'TEST_SYS'", entity))
+                .isEqualTo("SYSTEM/WARNING");
+        assertThat(motCot("SELECT count(DISTINCT created_at) FROM platform.audit_logs WHERE entity_id = ?", entity))
+                .as("cùng một transaction → cùng một mốc now()").isEqualTo("1");
+    }
+
+    @Test
+    void auditLogWriter_thaoTacRollback_khongDeLaiNhatKy() throws Exception {
+        UUID entity = UUID.randomUUID();
+        assertThatThrownBy(() -> trongTenant(TENANT_A, () -> {
+            writer.recordUserAction(TENANT_A, USER_A, "TEST_ROLLBACK", "LEAD", entity, Map.of());
+            throw new IllegalStateException("nghiệp vụ hỏng sau khi đã ghi nhật ký");
+        })).hasMessageContaining("nghiệp vụ hỏng");
+        assertThat(motCot("SELECT count(*) FROM platform.audit_logs WHERE entity_id = ?", entity)).isEqualTo("0");
+        assertThatThrownBy(() -> writer.recordSystemAction(TENANT_A, "X", "Y", null, null, null))
+                .hasMessageContaining("@Transactional");
     }
 
     @Test
