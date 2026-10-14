@@ -55,7 +55,7 @@ export function AdminShell() {
           <div className="flex-1" />
 
           {/* Badge nhận diện Super Admin */}
-          <div className="bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[11px] font-semibold px-2.5 py-1 rounded-full uppercase tracking-wide">
+          <div className="bg-primary/10 text-primary text-[11px] font-semibold px-2.5 py-1 rounded-full uppercase tracking-wide">
             Super Admin
           </div>
 
@@ -70,7 +70,7 @@ export function AdminShell() {
 
           <Separator orientation="vertical" className="h-4" />
 
-          <div className="bg-violet-600 text-white flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold shadow-xs">
+          <div className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold shadow-xs">
             {nguoiDung ? chuCaiDau(nguoiDung.fullName) : 'A'}
           </div>
         </header>

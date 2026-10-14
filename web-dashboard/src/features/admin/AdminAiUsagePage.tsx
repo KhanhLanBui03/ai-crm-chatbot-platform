@@ -2,7 +2,7 @@ import {
   Activity,
   DollarSign,
   Gauge,
-  Sparkles,
+  Cpu,
   TrendingUp,
 } from 'lucide-react'
 
@@ -66,8 +66,8 @@ export function AdminAiUsagePage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center gap-3 pb-2">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400">
-              <Sparkles className="size-5" />
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <Cpu className="size-5" />
             </div>
             <div>
               <CardDescription className="text-xs">Tổng token tiêu thụ</CardDescription>
@@ -78,7 +78,7 @@ export function AdminAiUsagePage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center gap-3 pb-2">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
               <DollarSign className="size-5" />
             </div>
             <div>
@@ -90,7 +90,7 @@ export function AdminAiUsagePage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center gap-3 pb-2">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
               <Activity className="size-5" />
             </div>
             <div>
@@ -102,7 +102,7 @@ export function AdminAiUsagePage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center gap-3 pb-2">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
               <Gauge className="size-5" />
             </div>
             <div>

@@ -5,7 +5,7 @@ import {
   FileText,
   Globe,
   MessageSquare,
-  Sparkles,
+  Cpu,
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -35,12 +35,6 @@ function dinhDangSo(so: number): string {
   return new Intl.NumberFormat('vi-VN').format(so)
 }
 
-const MAU_GOI: Record<string, string> = {
-  TRIAL: 'from-slate-500 to-slate-600',
-  STARTER: 'from-blue-500 to-blue-600',
-  GROWTH: 'from-emerald-500 to-emerald-600',
-  PRO: 'from-violet-500 to-violet-600',
-}
 
 /** Trang quản lý gói dịch vụ — xem và chỉnh sửa giá/hạn mức. */
 export function AdminPlansPage() {
@@ -101,8 +95,6 @@ export function AdminPlansPage() {
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {dsGoi?.map((goi) => (
           <Card key={goi.code} className="relative overflow-hidden flex flex-col">
-            {/* Header gradient */}
-            <div className={`h-2 bg-gradient-to-r ${MAU_GOI[goi.code] ?? 'from-gray-500 to-gray-600'}`} />
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">{goi.name}</CardTitle>
@@ -131,7 +123,7 @@ export function AdminPlansPage() {
                   <span>{dinhDangSo(goi.maxConversationsPerMonth)} hội thoại/tháng</span>
                 </div>
                 <div className="flex items-center gap-2.5">
-                  <Sparkles className="size-4 text-muted-foreground shrink-0" />
+                  <Cpu className="size-4 text-muted-foreground shrink-0" />
                   <span>{dinhDangSo(goi.maxTokensPerMonth)} token AI/tháng</span>
                 </div>
                 <div className="flex items-center gap-2.5">
