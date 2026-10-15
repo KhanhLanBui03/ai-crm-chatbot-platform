@@ -109,6 +109,14 @@ mục nhãn đã có.
 lại, hỏi kho liên tục trong lúc nạp lại — in số lần kho trống (phải 0) và số lần thấy hai bản (phải 0).
 Tenant riêng `dddddddd-…-d020`, không đụng kho đo. ADR-0031.
 
+## `danh_gia_dinh_tuyen.py` — so các luật định tuyến câu dưới τ (15/10)
+
+`python -m tests.eval.danh_gia_dinh_tuyen` (chỉ cần ai-classify :8083). Mỗi câu gọi ai-classify đúng một lần,
+rồi chấm mọi phương án (R0 · A hiện tại · B · D · E · F\*) trên cùng bảy xác suất. Dữ liệu: tập người thật
+`data/intent_test_human.jsonl` (tập chính), bộ vàng tách 100 có đáp án / 12 không, `ngoai_pham_vi`,
+`tu_choi_mo_rong` — tất cả chỉ đọc. Không gọi LLM, không ghi CSDL. Cách đo chốt trước khi chạy và kết quả:
+[`docs/report/dinh-tuyen-duoi-nguong-2026-10-15.md`](../../../docs/report/dinh-tuyen-duoi-nguong-2026-10-15.md).
+
 ## `adversarial.jsonl` — 60–80 kịch bản tấn công
 
 Dùng cho **E9**. Chạy trên môi trường **cô lập, dữ liệu giả** (mục 8.1).

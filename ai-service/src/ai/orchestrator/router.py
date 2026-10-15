@@ -4,16 +4,33 @@ Hai việc, tách riêng để quyết định nhánh test được mà không c
 
 1. ``classify_with_retry`` — gọi ai-classify, hạn chờ 1.000 ms, thử lại một lần.
    Vẫn hỏng thì coi confidence = 0 và đi nhánh truy hồi (mã CLASSIFIER_TIMEOUT).
-2. ``decide_route`` — thuần hàm: (ý định, confidence) -> nhánh.
+2. ``decide_route`` — thuần hàm: (bảy xác suất) -> nhánh.
 
-THỨ TỰ QUYẾT ĐỊNH (đặc tả UC022)
---------------------------------
+CỘNG XÁC SUẤT THEO Ô (ADR-0035)
+-------------------------------
+Router chỉ cần chọn đúng Ô, không cần đúng ý định: phân vân giữa "khiếu nại" và "tra cứu" không
+sao, vì cả hai cùng đi RAG. Bảy ý định dẫn về ba ô; xác suất một ô = tổng xác suất các ý định
+trong ô.
+
+    ô chuyển giao   HANDOFF_HUMAN · BUYING_INTENT
+    ô mẫu câu       GREETING
+    ô tra tri thức  mọi ý định còn lại (KB_SEARCH · PRICING_POLICY · COMPLAINT_SUPPORT · TECH_ERROR)
+
+THỨ TỰ QUYẾT ĐỊNH (đặc tả UC022, ngưỡng theo ô từ ADR-0035)
+----------------------------------------------------------
     phân loại hỏng                       -> RAG       (luồng phụ CLASSIFIER_TIMEOUT)
-    HANDOFF_HUMAN, conf >= τ             -> HANDOFF   (luồng phụ 6.1, UC014)
-    conf < τ                             -> CLARIFY   (luồng phụ 5.1 — hỏi lại, không đoán)
-    ý định đi nhanh, conf >= 0,85        -> SMALL_TALK (bước 6 — mẫu câu, 0 LLM)
-    BUYING_INTENT                        -> TOOL_CALL (chuyển giao: cần duyệt thao tác ghi)
-    còn lại                              -> RAG       (bước 7, UC023)
+    ô chuyển giao >= τ                   -> HANDOFF   (luồng phụ 6.1, UC014), nếu HANDOFF_HUMAN
+                                                      >= BUYING_INTENT; ngược lại TOOL_CALL
+                                                      (chuyển giao: cần duyệt thao tác ghi)
+    ô mẫu câu >= 0,85                    -> SMALL_TALK (bước 6 — mẫu câu, 0 LLM)
+    ô tra tri thức >= τ                  -> RAG       (bước 7, UC023)
+    ô mẫu câu >= τ                       -> RAG       (giữ hành vi cũ: chào chưa đủ chắc thì đi RAG)
+    không ô nào đạt                      -> CLARIFY   (luồng phụ 5.1 — hỏi lại, không đoán)
+
+Với τ > 0,5 không thể có hai ô cùng >= τ, nên thứ tự các dòng không đổi kết quả; và mọi câu mà
+luật cũ (ngưỡng trên ý định đứng đầu) đã quyết thì luật mới quyết y hệt — luật mới chỉ cứu những câu
+luật cũ hỏi lại. Đo 15/10: hỏi lại trên 200 câu người thật 40% -> 14%; bộ vàng có đáp án tới RAG
+14 -> 60.
 
 ``TOOL_CALL`` giữ nguyên trong telemetry dù nhóm MCP (UC021/024/028) đã hoãn: bỏ nhánh
 khỏi taxonomy 7 nhánh là làm lệch toàn bộ số liệu. Trong phạm vi đồ án nó được thực thi
@@ -24,7 +41,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 from src.ai.inference.clients import ClassifyClient
@@ -45,8 +63,12 @@ class Branch(StrEnum):
     EXTRACTION = "EXTRACTION"
 
 
-# Nhóm đi nhanh: ý định trả được bằng mẫu câu soạn sẵn mà không mất thông tin.
+# Nhóm đi nhanh: ý định trả được bằng mẫu câu soạn sẵn mà không mất thông tin — cũng là ô mẫu câu.
 FAST_PATH_INTENTS = frozenset({"GREETING"})
+# Ô chuyển giao (ADR-0035). Ý định không thuộc ô này hay ô mẫu câu tính vào ô tra tri thức — giữ
+# đúng mặc định "còn lại đi RAG" của luật cũ, kể cả khi router sau này thêm ý định mới.
+HANDOFF_INTENTS = frozenset({"HANDOFF_HUMAN", "BUYING_INTENT"})
+_NGOAI_O_TRI_THUC = HANDOFF_INTENTS | FAST_PATH_INTENTS
 
 # Bảy nhánh chiếu xuống bốn giá trị route của hợp đồng (ChatResponse.route).
 # SUMMARY và EXTRACTION chạy bất đồng bộ từ Kafka, không bao giờ đi qua /v1/ai/chat.
@@ -66,6 +88,9 @@ class Classification:
     model_id: str | None
     # None khi gọi thành công; mã lỗi theo đặc tả UC022 khi hỏng
     error_code: str | None = None
+    # Bảy xác suất ai-classify trả về, để cộng theo ô (ADR-0035). None khi client không trả (bản
+    # giả) — khi đó coi như chỉ có ý định đứng đầu, kết quả trùng luật cũ.
+    probabilities: Mapping[str, float] | None = field(default=None, hash=False)
 
 
 @dataclass(frozen=True)
@@ -93,6 +118,7 @@ async def classify_with_retry(
                 intent=str(res["intent"]),
                 confidence=conf,
                 model_id=res.get("model_id"),
+                probabilities=_doc_xac_suat(res.get("probabilities")),
             )
         except TimeoutError:
             last_error = "CLASSIFIER_TIMEOUT"
@@ -103,25 +129,43 @@ async def classify_with_retry(
     return Classification(intent=None, confidence=0.0, model_id=None, error_code=last_error)
 
 
+def _doc_xac_suat(raw: object) -> dict[str, float] | None:
+    """Bảy xác suất từ ai-classify. Thiếu hay hỏng định dạng thì bỏ — định tuyến vẫn chạy được
+    bằng ý định đứng đầu, không biến một trường phụ thành lỗi phân loại."""
+    if not isinstance(raw, Mapping) or not raw:
+        return None
+    try:
+        return {str(k): min(1.0, max(0.0, float(v))) for k, v in raw.items()}
+    except (TypeError, ValueError):
+        return None
+
+
 def decide_route(
     c: Classification,
     *,
     fast_path_threshold: float,
     abstention_threshold: float,
 ) -> RouteDecision:
-    """Chọn nhánh từ kết quả phân loại. Thuần hàm, không I/O."""
+    """Chọn nhánh bằng xác suất của từng Ô (ADR-0035). Thuần hàm, không I/O."""
 
     def _d(branch: Branch, reason: str) -> RouteDecision:
         return RouteDecision(branch=branch, route=BRANCH_TO_ROUTE[branch], reason=reason)
 
     if c.error_code is not None:
         return _d(Branch.RAG, c.error_code)
-    if c.intent == "HANDOFF_HUMAN" and c.confidence >= abstention_threshold:
-        return _d(Branch.HANDOFF, "CUSTOMER_REQUESTED_HUMAN")
-    if c.confidence < abstention_threshold:
-        return _d(Branch.CLARIFY, "BELOW_ABSTENTION_THRESHOLD")
-    if c.intent in FAST_PATH_INTENTS and c.confidence >= fast_path_threshold:
-        return _d(Branch.SMALL_TALK, "FAST_PATH")
-    if c.intent == "BUYING_INTENT":
+
+    p = c.probabilities or ({c.intent: c.confidence} if c.intent else {})
+    o_chuyen_giao = sum(v for k, v in p.items() if k in HANDOFF_INTENTS)
+    o_mau_cau = sum(v for k, v in p.items() if k in FAST_PATH_INTENTS)
+    o_tri_thuc = sum(v for k, v in p.items() if k not in _NGOAI_O_TRI_THUC)
+
+    if o_chuyen_giao >= abstention_threshold:
+        if p.get("HANDOFF_HUMAN", 0.0) >= p.get("BUYING_INTENT", 0.0):
+            return _d(Branch.HANDOFF, "CUSTOMER_REQUESTED_HUMAN")
         return _d(Branch.TOOL_CALL, "WRITE_APPROVAL_REQUIRED")
-    return _d(Branch.RAG, "KNOWLEDGE_QUERY")
+    if o_mau_cau >= fast_path_threshold:
+        return _d(Branch.SMALL_TALK, "FAST_PATH")
+    # Câu chào đủ τ nhưng chưa đủ ngưỡng đi nhanh vẫn đi RAG — giữ đúng hành vi của luật cũ.
+    if o_tri_thuc >= abstention_threshold or o_mau_cau >= abstention_threshold:
+        return _d(Branch.RAG, "KNOWLEDGE_QUERY")
+    return _d(Branch.CLARIFY, "BELOW_ABSTENTION_THRESHOLD")

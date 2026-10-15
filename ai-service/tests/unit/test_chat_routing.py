@@ -51,6 +51,78 @@ def test_decide_route(c: Classification, branch: Branch, route: str):
     assert d.route == route
 
 
+# ── Cộng xác suất theo ô (ADR-0035) — số lấy từ đầu ra thật của ai-classify ngày 15/10 ──────────
+
+
+def _p(**xac_suat: float) -> Classification:
+    dau = max(xac_suat, key=xac_suat.get)
+    return Classification(dau, xac_suat[dau], "test", probabilities=xac_suat)
+
+
+# (a) M2 "mất hóa đơn rồi thì còn được bảo hành không": ý định đầu 0,554 nhưng ô tri thức 0,698
+_CAU_A = _p(COMPLAINT_SUPPORT=0.5541, GREETING=0.1819, KB_SEARCH=0.1021, HANDOFF_HUMAN=0.0763,
+            BUYING_INTENT=0.0443, PRICING_POLICY=0.0278, TECH_ERROR=0.0135)
+# (b) M2 "có dịch vụ vệ sinh sofa và rèm cửa tại nhà không": ý định đầu 0,393, ô tri thức 0,672
+_CAU_B = _p(KB_SEARCH=0.3931, GREETING=0.1903, PRICING_POLICY=0.1292, HANDOFF_HUMAN=0.1092,
+            COMPLAINT_SUPPORT=0.1081, TECH_ERROR=0.0421, BUYING_INTENT=0.0279)
+
+
+@pytest.mark.parametrize("c, branch", [
+    (_CAU_A, Branch.RAG),
+    (_CAU_B, Branch.RAG),
+    # Ô như câu "Co ai truc tong dai truc tiep khong a": nghiêng chuyển giao (0,582) nhưng chưa đủ τ
+    # ⇒ hỏi lại, KHÔNG đẩy sang RAG — không để bot tự trả lời người có thể đang xin gặp nhân viên.
+    (_p(HANDOFF_HUMAN=0.40, BUYING_INTENT=0.182, KB_SEARCH=0.379, GREETING=0.039), Branch.CLARIFY),
+    # Ô chuyển giao đủ τ nhờ cộng hai ý định: nhãn lớn hơn trong ô quyết định nhánh
+    (_p(HANDOFF_HUMAN=0.40, BUYING_INTENT=0.30, KB_SEARCH=0.30), Branch.HANDOFF),
+    (_p(BUYING_INTENT=0.40, HANDOFF_HUMAN=0.30, KB_SEARCH=0.30), Branch.TOOL_CALL),
+    # Rải đều ba ô, không ô nào đủ τ ⇒ hỏi lại
+    (_p(KB_SEARCH=0.30, PRICING_POLICY=0.20, HANDOFF_HUMAN=0.30, GREETING=0.20), Branch.CLARIFY),
+    # Ô mẫu câu: ≥ 0,85 mới đi nhanh; đủ τ mà chưa đủ 0,85 thì RAG như luật cũ
+    (_p(GREETING=0.90, KB_SEARCH=0.10), Branch.SMALL_TALK),
+    (_p(GREETING=0.70, KB_SEARCH=0.30), Branch.RAG),
+    # Ý định lạ (router sau này thêm nhãn) tính vào ô tri thức — giữ mặc định "còn lại đi RAG"
+    (_p(Y_DINH_MOI=0.50, KB_SEARCH=0.20, GREETING=0.30), Branch.RAG),
+])
+def test_cong_xac_suat_theo_o(c: Classification, branch: Branch):
+    assert _decide(c).branch is branch
+
+
+@pytest.mark.parametrize("c", [
+    _c("GREETING", 0.95), _c("GREETING", 0.80), _c("HANDOFF_HUMAN", 0.70),
+    _c("BUYING_INTENT", 0.90), _c("PRICING_POLICY", 0.90), _c("HANDOFF_HUMAN", 0.50),
+])
+def test_thieu_xac_suat_thi_trung_luat_cu(c: Classification):
+    # Client giả không trả probabilities: ô = đúng ý định đầu ⇒ kết quả như bảng UC022 ở trên.
+    co_xac_suat = Classification(c.intent, c.confidence, "test",
+                                 probabilities={c.intent: c.confidence})
+    assert _decide(c) == _decide(co_xac_suat)
+
+
+def test_classify_giu_xac_suat_va_bo_qua_xac_suat_hong():
+    class _Clf:
+        def __init__(self, probs: Any) -> None:
+            self.probs = probs
+
+        async def classify(self, text: str) -> dict[str, Any]:
+            return {"intent": "KB_SEARCH", "confidence": 0.4, "model_id": "m",
+                    "probabilities": self.probs}
+
+        async def score_lead(self, features: dict[str, float]) -> dict[str, Any]:
+            return {}
+
+    tot = asyncio.run(classify_with_retry(
+        _Clf({"KB_SEARCH": 0.4, "PRICING_POLICY": 0.3}), "x", timeout_s=1, retries=0))
+    assert tot.probabilities == {"KB_SEARCH": 0.4, "PRICING_POLICY": 0.3}
+    assert _decide(tot).branch is Branch.RAG  # ô tri thức 0,7
+
+    # Trường phụ hỏng không được biến thành lỗi phân loại: vẫn có ý định, chỉ mất phần cộng theo ô.
+    hong = asyncio.run(classify_with_retry(
+        _Clf({"KB_SEARCH": "khong-phai-so"}), "x", timeout_s=1, retries=0))
+    assert hong.error_code is None and hong.probabilities is None
+    assert _decide(hong).branch is Branch.CLARIFY  # 0,4 < τ như luật cũ
+
+
 def test_bay_nhanh_khop_v204():
     # Đổi tên nhánh là gãy CHECK của ai.ai_interactions.branch
     assert {b.value for b in Branch} == {
