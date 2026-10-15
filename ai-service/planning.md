@@ -1069,12 +1069,20 @@ kỳ hoãn cùng Ngày 21 (danh sách ở cuối mục).*
 
 **Việc:**
 
-- [ ] 🖐 Chạy end-to-end: khách gửi tin → `guard` → `route` → `retrieve` → `generate` →
+- [x] 🖐 Chạy end-to-end: khách gửi tin → `guard` → `route` → `retrieve` → `generate` →
       `postguard` → `handoff` → `telemetry`.
       → **10/10: 2/3 ngả đạt**. Gọi thẳng `POST /v1/ai/chat` (người dùng chốt), Gemini thật, kho đo.
       (a) trả lời có trích dẫn `a4d6f8b9…` và (b) từ chối `NOT_COVERED` `3a105bb9…`, mỗi lượt đúng 1
       dòng `ai.ai_interactions`. (c) chuyển giao **chặn**, chờ `router_model.onnx` của Dev B (người
       dùng chốt: không tự export). Minh chứng: `docs/report/m2-ngay14-2026-10-10.md`, kịch bản (c) ở §7.
+      → **15/10: 3/3 — M2 đóng** (người dùng chốt). (c) `9e2f9f32…`: `HANDOFF_HUMAN` 0,98 ở tầng luật,
+      `route = HANDOFF`, 0 LLM, 60 ms, 1 dòng `is_handoff = true`. ⚠️ Chạy lại (a), (b) khi bật router
+      thì **cả hai vào `CLARIFY`**. Trên bộ vàng, 91/112 câu (81%) vào `CLARIFY` vì dưới τ = 0,65; trong
+      100 câu có đáp án chỉ 14 tới RAG. **Đã xử lý cùng ngày:** đo 6 phương án, người dùng chốt **D —
+      cộng xác suất theo ô** (ADR-0035, `docs/report/dinh-tuyen-duoi-nguong-2026-10-15.md`): câu có đáp án
+      tới RAG 14 → 60/100, (a) và (b) đi RAG lại. Thêm một lỗi, **đã sửa cùng ngày**: `INFERENCE_*_URL`
+      trong `.env` không có tác dụng vì client đọc `os.getenv`; giờ đọc qua `Settings`. Minh chứng: báo
+      cáo M2 §8.
 
 **Chạm Dev B:** `route` cần `artifacts/router_model.onnx` của Dev B, hiện **chưa có trong repo**.
 Thiếu nó thì `ai-classify` không sẵn sàng và `router.py` cho mọi câu đi nhánh tra tri thức, nên
