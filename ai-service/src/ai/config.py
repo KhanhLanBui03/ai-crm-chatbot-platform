@@ -8,7 +8,7 @@ khởi động rằng biến bắt buộc đã có.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -218,6 +218,22 @@ class Settings(BaseSettings):
     # Một lô 32 đoạn trên CPU: đo ở Ngày 7/15. Tạm đặt rộng; chuỗi timeout phải tăng dần từ trong
     # ra ngoài (§3.10.2) — ở đây là job nền nên không bị ALB 120 s chặn trên.
     embed_timeout_s: float = Field(default=60.0, gt=0)
+    # ai-rerank và ai-classify. Đọc qua Settings như mọi biến khác, KHÔNG ``os.getenv``: chạy trên
+    # máy thì giá trị nằm trong ``.env``, mà pydantic-settings không đẩy ``.env`` sang
+    # ``os.environ``. Đọc bằng ``os.getenv`` thì hai dòng đó vô tác dụng — rerank âm thầm tắt,
+    # router mất, response vẫn 200 (đo 15/10, báo cáo M2 §8.5). Biến môi trường của container vẫn
+    # thắng ``.env``.
+    inference_rerank_url: str = "http://ai-rerank:8080"
+    inference_classify_url: str = "http://ai-classify:8080"
+
+    @field_validator("inference_rerank_url", "inference_classify_url", mode="before")
+    @classmethod
+    def _rong_thi_giu_mac_dinh(cls, v: object, info: ValidationInfo) -> object:
+        # compose đặt ``${INFERENCE_RERANK_URL:-}`` thì biến tồn tại nhưng RỖNG — giữ mặc định thay
+        # vì gọi vào địa chỉ rỗng.
+        if isinstance(v, str) and not v.strip():
+            return cls.model_fields[info.field_name].default
+        return v
 
     @property
     def database_url(self) -> str:

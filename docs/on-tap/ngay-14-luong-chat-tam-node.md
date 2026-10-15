@@ -4,8 +4,9 @@
 > Kiến trúc: [ADR-0027](../adr/0027-luot-chat-pipeline-tuan-tu-khong-langgraph.md). Mã:
 > `src/api/v1/endpoints/chat.py` → `src/ai/service.py::answer_turn` → `src/ai/orchestrator/turn.py::run_turn`.
 >
-> **Trạng thái M2: 2/3 ngả đạt** (trả lời có trích dẫn, từ chối). Ngả chuyển giao chờ `router_model.onnx`
-> của Dev B.
+> **Trạng thái M2: ĐÃ ĐÓNG, 3/3 ngả** (cập nhật 15/10/2026). Ngả trả lời có trích dẫn và ngả từ chối đạt
+> 10/10; ngả chuyển giao đạt 15/10 sau khi có `router_model.onnx` của Dev B. Đọc §6: bật router thật thì
+> 81% câu bộ vàng vào nhánh hỏi lại.
 
 ## 1. Câu mở đầu của buổi bảo vệ — 8 node, mỗi node một câu
 
@@ -79,3 +80,93 @@ tenant kho đo.
 - ai-embed nguội: lần nhúng đầu 1145 ms ⇒ đo ở Ngày 15.
 - `cost_vnd = 0` do đơn giá mặc định 0 ⇒ đặt đơn giá khi bật thanh toán Ngày 18.
 - Câu ngoài kho vẫn tốn một lượt LLM (sàn toàn tập 0) ⇒ số cho buổi đọc số Ngày 16.
+
+## 6. Bổ sung 15/10 — ngả chuyển giao, và điều router thật làm với hai ngả kia
+
+Số liệu và log: báo cáo M2 §8.
+
+### 6.1. Lượt (c) đi qua node nào
+
+| Node | (c) "cho em gặp nhân viên tư vấn với ạ" |
+|---|---|
+| `guard` | 0 ms, không cờ |
+| `route` | 60 ms — `HANDOFF_HUMAN` 0,98, **tầng luật** quyết định (chưa cần ONNX) ⇒ `HANDOFF` |
+| `fastpath` · `retrieve` · `generate` · `postguard` | bỏ qua: 0 lần nhúng, 0 LLM |
+| `handoff` | bật cờ, trả `HANDOFF_REPLY` |
+| `telemetry` | 1 dòng: `branch = HANDOFF`, `model_name = template`, `llm_called = false`, `is_handoff = true` |
+| **Tổng** | **60 ms**, so với 1,6–2,9 s của hai lượt RAG ngày 10/10 |
+
+Đọc bảng: chuyển giao do khách xin là ví dụ đúng nhất của triết lý *Rule → ML → LLM*. Một luật bắt được
+câu, và lượt không tốn đồng nào.
+
+### 6.2. Chạy lại (a), (b) với router thật: cả hai bị hỏi lại
+
+| | (a) G072 | (b) T002 |
+|---|---|---|
+| Ý định · độ tin cậy | `COMPLAINT_SUPPORT` 0,554 | `KB_SEARCH` 0,393 |
+| So với τ = 0,65 | dưới | dưới |
+| Nhánh | `CLARIFY` ("Dạ em chưa hiểu rõ ý…") | `CLARIFY` |
+
+Đo trên toàn bộ câu hỏi: **91/112 câu bộ vàng (81%)** và 28/30 câu ngoài kho vào `CLARIFY`. Bộ vàng gồm
+100 câu có đáp án và 12 câu không; trong 100 câu có đáp án, chỉ **14** câu tới được RAG.
+
+**Ba điều phải nói được khi hội đồng hỏi:**
+
+1. **Recall@5 0,870 là chất lượng của nhánh RAG, chưa phải của cả hệ thống.** Harness N13/N15 gọi thẳng
+   nhánh RAG, không qua `route`. Bật router thì 86/100 câu có đáp án không tới được nhánh đó.
+2. **Thiết kế và code đang lệch ở vùng dưới τ.** ADR-0019 cho câu dưới τ sang *tầng 3 — LLM phân loại
+   lại*. Code chọn *hỏi lại* theo luồng phụ 5.1 của UC022. Cả hai đều có căn cứ trong tài liệu. Cùng ngày
+   đã chốt cách thứ ba: **cộng xác suất theo ô** (ADR-0035, xem §6.5).
+3. **KPI "≥ 55% lượt không gọi LLM" có thể đạt vì lý do sai.** Hỏi lại thì không tốn LLM. Một chỉ số tốt lên
+   nhờ khách không được trả lời là lý do không được nhìn KPI này một mình. Phải đọc nó cạnh tỉ lệ lượt vào
+   `CLARIFY`.
+
+### 6.3. Câu hội đồng dễ hỏi tiếp
+
+**§4 nói "phân loại hỏng thì đi RAG là an toàn nhất". Vậy sao phân loại chạy được lại tệ hơn phân loại
+hỏng?** Vì hai luồng phụ khác nhau. Phân loại hỏng thì hệ thống *không biết gì* và mặc định coi là câu hỏi
+tri thức. Phân loại chạy nhưng *không chắc* thì code chọn hỏi lại. Với bộ câu toàn câu hỏi tri thức, mặc
+định "coi là câu hỏi tri thức" tình cờ đúng hơn. Đây chính là dữ kiện cho quyết định ADR-0035.
+
+**Vì sao router thiếu tự tin với câu hỏi tri thức?** *Giả thuyết, chưa kiểm:* câu hỏi tri thức cụ thể
+("mất hóa đơn còn bảo hành không") nằm giữa `KB_SEARCH`, `PRICING_POLICY` và `COMPLAINT_SUPPORT`, nên xác
+suất bị chia ra. Dữ kiện ủng hộ: trên bộ vàng, ý định gán ra trải khá đều (27 · 24 · 20 cho ba nhãn đó).
+Coverage trên bộ vàng chỉ 0,19, thấp hơn 0,395 trên tập ý định người thật (ADR-0019 mục 0).
+
+### 6.4. Bẫy môi trường gặp hôm nay — đã sửa
+
+`INFERENCE_CLASSIFY_URL` và `INFERENCE_RERANK_URL` ghi trong `ai-service/.env` từng **không có tác dụng** khi
+chạy trên máy chủ. Hai client đọc bằng `os.getenv`, còn pydantic-settings không đẩy `.env` vào `os.environ`.
+Lượt đầu tiên hôm nay vì thế mất router lẫn rerank mà response vẫn 200.
+
+**Đã sửa cùng ngày:** hai URL thành trường của `Settings` (`inference_rerank_url`,
+`inference_classify_url`), client lấy qua `get_settings()`. Giờ chỉ cần `python -m src.entrypoint`, `.env` là
+đủ. Biến môi trường của container vẫn thắng `.env`. Chi tiết và lượt kiểm: báo cáo M2 §8.5.
+
+**Bài học nói được với hội đồng:** lỗi cấu hình kiểu này *không làm hỏng response*, mà chỉ làm hệ thống âm
+thầm chạy kém đi. Luồng phụ chịu lỗi (phân loại hỏng → RAG, rerank hỏng → RRF) đã che nó rất kỹ. Đó là lý
+do `config.py` bắt mọi biến đi qua một chỗ: đọc rải rác thì không biết ứng dụng thật sự đang dùng giá trị
+nào.
+
+### 6.5. Đo tiếp cùng ngày: so các luật định tuyến
+
+Chi tiết ở [`docs/report/dinh-tuyen-duoi-nguong-2026-10-15.md`](../report/dinh-tuyen-duoi-nguong-2026-10-15.md).
+Ba điều cần nhớ:
+
+1. **Cách đo được chốt trước khi chạy** (báo cáo §1). Một phương án (F\*) nghĩ ra sau khi thấy số thì đánh dấu
+   sao và gọi số của nó là "lạc quan". Hội đồng hỏi "sao biết không tự chọn số đẹp" thì chỉ vào §1.
+2. **Hai tập dữ liệu cân nhau:** bộ vàng toàn câu hỏi tri thức, nên "mọi câu đi RAG" chắc chắn đạt 100%. Tập
+   200 câu người thật có đủ câu xin người, câu muốn mua, nên mới phạt được phương án đẩy nhầm những câu đó vào RAG.
+3. **Router học trên câu phần mềm, tenant demo là cửa hàng điện máy** (0% từ điện máy trong 1.941 câu huấn
+   luyện, 45% trong bộ vàng). Không luật ngưỡng nào sửa hết được chuyện lệch lĩnh vực; luật tốt là luật *chịu
+   được* nó, bằng cách dựa vào RAG + lối từ chối khi không chắc.
+
+**Quyết định (người dùng chốt 15/10): D — cộng xác suất theo ô**, ghi ở ADR-0035. Câu hội đồng dễ hỏi:
+
+- *"Sao không chọn F\*, số đẹp hơn?"* — Vì luật của F\* nghĩ ra sau khi đã nhìn đúng những câu dùng để chấm; số
+  của nó là số lạc quan. D đã chốt từ trước khi đo, và là phương án ít để bot bỏ qua khách xin người hay khách
+  muốn mua nhất trong các phương án có cải thiện.
+- *"D có làm hỏng quyết định nào luật cũ đang đúng không?"* — Không: với τ > 0,5, câu nào ý định đứng đầu đã ≥ τ
+  thì ô của nó cũng ≥ τ. Script kiểm trên 380 câu: D đổi **0** quyết định luật cũ đã đưa ra; chỉ cứu câu luật cũ hỏi lại.
+- *"Cái giá là gì?"* — Tenant demo vẫn bị hỏi lại 32/100 câu có đáp án, vì router lệch lĩnh vực. Ước tính lượt
+  không gọi LLM giảm từ 72% xuống 48%, nhưng 72% kia có được nhờ hỏi lại khách.

@@ -218,3 +218,55 @@ def test_moi_event_loop_mot_client_rieng():
     asyncio.run(_grab())
     asyncio.run(_grab())
     assert seen[0] is not seen[1]
+
+
+# ── URL tầng suy luận đọc qua Settings (nạp cả .env) ─────────────────────────
+#
+# Lỗi 15/10 (báo cáo M2 §8.5): hai client đọc URL bằng ``os.getenv``, mà pydantic-settings không đẩy
+# ``.env`` sang ``os.environ`` ⇒ chạy trên máy thì dòng ``INFERENCE_*_URL`` trong ``.env`` vô tác
+# dụng, rerank âm thầm tắt, router mất.
+
+_BIEN_URL = ("INFERENCE_RERANK_URL", "INFERENCE_CLASSIFY_URL")
+
+
+@pytest.fixture
+def env_file(tmp_path, monkeypatch):
+    """Một tệp ``.env`` riêng, và môi trường tiến trình KHÔNG có hai biến URL."""
+    for ten in _BIEN_URL:
+        monkeypatch.delenv(ten, raising=False)
+    tep = tmp_path / ".env"
+    tep.write_text(
+        "INFERENCE_RERANK_URL=http://localhost:8082\n"
+        "INFERENCE_CLASSIFY_URL=http://localhost:8083\n",
+        encoding="utf-8",
+    )
+    return tep
+
+
+def test_url_trong_env_file_toi_duoc_client(env_file, monkeypatch):
+    monkeypatch.setattr(clients, "get_settings", lambda: Settings(_env_file=env_file))
+    assert clients.RemoteRerankClient().base_url == "http://localhost:8082"
+    assert clients.RemoteClassifyClient().base_url == "http://localhost:8083"
+
+
+def test_bien_moi_truong_thang_env_file(env_file, monkeypatch):
+    # Container: compose đặt biến thật — phải thắng giá trị của máy dev trong .env.
+    monkeypatch.setenv("INFERENCE_RERANK_URL", "http://host.docker.internal:8082")
+    s = Settings(_env_file=env_file)
+    assert s.inference_rerank_url == "http://host.docker.internal:8082"
+    assert s.inference_classify_url == "http://localhost:8083"
+
+
+@pytest.mark.parametrize("ten", _BIEN_URL)
+def test_bien_rong_thi_giu_mac_dinh(ten, monkeypatch):
+    # compose ``${INFERENCE_RERANK_URL:-}``: biến tồn tại nhưng rỗng.
+    monkeypatch.setenv(ten, "  ")
+    s = Settings(_env_file=None)
+    assert s.inference_rerank_url == "http://ai-rerank:8080"
+    assert s.inference_classify_url == "http://ai-classify:8080"
+
+
+def test_base_url_truyen_vao_van_thang_settings(env_file, monkeypatch):
+    monkeypatch.setattr(clients, "get_settings", lambda: Settings(_env_file=env_file))
+    assert clients.RemoteRerankClient(base_url=URL).base_url == URL
+    assert clients.RemoteClassifyClient(base_url=URL).base_url == URL

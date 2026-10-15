@@ -49,5 +49,6 @@ Mỗi quyết định kiến trúc một file. Nguồn trực tiếp cho **chư�
 | 0032 | Tóm tắt hội thoại: nhiệt độ 0 ghim cứng, phiên bản model là ảnh chụp, PATCH rồi mới đánh dấu xong | Thiết kế UC026 Ngày 12 |
 | 0033 | Xoá dữ liệu cá nhân phía AI: `contact_id` trên tài liệu, hội thoại do java-core gửi, chốt token nội bộ | Thiết kế UC041 Ngày 12 |
 | 0034 | Chốt cấp vCPU: ai-embed 4, ai-rerank 4, ghim luồng bắt buộc; bench ở `inference/bench/` | Benchmark Ngày 15 Khối B |
+| 0035 | Định tuyến câu dưới τ: cộng xác suất theo ô thay cho ngưỡng trên từng ý định | Đo 6 phương án 15/10, người dùng chốt D |
 
 `KH` = tài liệu `Ke-hoach-do-an-Chatbot-AI-CRM-v2-nhom-2-nguoi.docx`.

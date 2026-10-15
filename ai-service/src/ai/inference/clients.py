@@ -210,9 +210,9 @@ async def _post(
 
 class RemoteRerankClient:
     def __init__(self, base_url: str | None = None, timeout_s: float = 60.0) -> None:
-        # ``or`` thay vì mặc định của getenv: compose đặt ``${INFERENCE_RERANK_URL:-}`` thì biến tồn
-        # tại nhưng RỖNG, getenv trả "" và client gọi vào địa chỉ rỗng.
-        self.base_url = base_url or os.getenv("INFERENCE_RERANK_URL") or "http://ai-rerank:8080"
+        # Lấy từ Settings (nạp cả ``.env``), không ``os.getenv`` — xem
+        # ``Settings.inference_rerank_url``; biến rỗng đã được Settings đưa về mặc định.
+        self.base_url = base_url or get_settings().inference_rerank_url
         # Đo 11/10 (Ngày 15): cross-encoder thật mất 0,15–3 s MỖI cặp ở 2 vCPU trên máy dev — một
         # lượt 20 cặp p50 ~11 s. Production lấy hạn từ Settings.rerank_timeout_s (60 s); quá hạn ⇒
         # answerer giữ thứ hạng RRF. Harness đo nới rộng hơn để lấy trọn đuôi phân bố.
@@ -225,7 +225,9 @@ class RemoteRerankClient:
 
 class RemoteClassifyClient:
     def __init__(self, base_url: str | None = None) -> None:
-        self.base_url = base_url or os.getenv("INFERENCE_CLASSIFY_URL", "http://ai-classify:8080")
+        # Lấy từ Settings (nạp cả ``.env``), không ``os.getenv`` — xem
+        # ``Settings.inference_classify_url``.
+        self.base_url = base_url or get_settings().inference_classify_url
 
     async def classify(self, text: str) -> dict[str, Any]:
         return await _post(self.base_url, "/v1/classify", {"text": text}, 5.0)
