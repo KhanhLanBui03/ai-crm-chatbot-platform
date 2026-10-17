@@ -1289,11 +1289,12 @@ image ship; sửa bench không phải build lại image. Lệch Master Plan §3.
       `ai-service` hay harness eval trong lúc đo. Tắt bớt ứng dụng trên máy, ghi load average trước mỗi lượt.
       Cấp vCPU bằng `docker run --cpus N -e OMP_NUM_THREADS=N` — không cần file override compose.
       ⏳ **Router (`ai-classify`) đo bù khi Dev B gửi `artifacts/router_model.onnx`** (kiểm 11/10: chưa có).
+      → Đo bù 17/10: 1 · 2 · 4 vCPU × ghim/mặc định, lượt ngắn + lượt dài, mỗi lượt có lượt lặp (báo cáo §9).
       *(Ma trận đầy đủ đã cắt — xem sheet "Phạm vi cắt & làm sau".)*
       → Xong 11/10 21:11–22:22: 15 lượt (câu hỏi · đoạn · rerank × 2/4 vCPU × ghim/mặc định + 3 lượt lặp
       kiểm trôi). Tải máy chủ 2,5 → 7,9 trong buổi; độ trôi giữa hai lượt cùng cấu hình tới +35% p95.
       Số: `docs/report/benchmark-ngay15-2026-10-11.md`.
-- [ ] 🖐 **Chứng minh 2 điều:** — (2) ✅ · (1) ⏳ chờ router (cổng ra cho phép mở)
+- [x] 🖐 **Chứng minh 2 điều:** — (2) ✅ 11/10 · (1) ✅ 17/10
       (1) với model nhỏ, **tăng vCPU KHÔNG cải thiện p95** — ⏳ **chờ router**: router là model nhỏ
       duy nhất (LogisticRegression trên vector băm n-gram, ADR-0019 mục 0); bge-m3 và reranker đều
       ~568 triệu tham số, không dùng để chứng minh điều này được;
@@ -1304,6 +1305,12 @@ image ship; sửa bench không phải build lại image. Lệch Master Plan §3.
       → (2) **ĐÃ CHỨNG MINH:** để mặc định ORT tạo **8 luồng** ở cả `--cpus 2` lẫn `--cpus 4`, cgroup bị chặn
       99–100% chu kỳ, p95 chậm **× 2,2 – × 13,3** (câu hỏi 2 vCPU: 68 → 906 ms). (1) chưa có model nhỏ;
       bằng chứng gián tiếp: câu hỏi 13 token trên bge-m3 cho p95 68 ms (2 vCPU) ≈ 69 ms (4 vCPU).
+      → (1) **ĐÃ CHỨNG MINH 17/10** trên router (bench thêm vai `classify`, dựng thẳng `RouterEmbedder` +
+      session, đo tầng ONNX, khớp `/v1/classify` tới từng xác suất). Cách đo + tiêu chí chốt vào báo cáo §9.1
+      **trước** khi chạy. Lượt dài 112.000 mẫu, ghim: p95 **0,176 · 0,177 · 0,176 ms** ở 1 · 2 · 4 vCPU, lõi
+      dùng TB **1,00** ở mọi mức, biên trôi 18% ⇒ đạt; lượt ngắn 1.120 mẫu cũng đạt nhưng biên trôi 54% (phép
+      thử yếu). 77% thời gian là băm n-gram trong Python. Thêm: router **không** bị phạt khi để mặc định
+      (× 0,98–1,00) — luồng ORT không có việc thì không quay chờ. Số: báo cáo benchmark §9.
 - [x] 🖐 **Chốt số vCPU cho từng service bằng bảng số:** `ai-embed` (đang tạm 4) · `ai-rerank` (đang
       tạm 2) · `ai-classify` (giữ tạm 2, chốt khi có router). Sửa `inference/compose.inference.yml`
       (cả comment "chốt ở Ngày 21") và cột *Cấp vCPU* + *p95 đo thật* của `bge-m3-int8` trong
@@ -1312,6 +1319,10 @@ image ship; sửa bench không phải build lại image. Lệch Master Plan §3.
       p50 7,8 / 9,0 s so với 11,1 / 12,5 s ở 2 vCPU (hai lượt mỗi mức) — **đính chính Khối A** ("4 vCPU không
       nhanh hơn"). Embed: câu hỏi 2 ≈ 4, đoạn 4 nhanh hơn ~30%. Compose đã sửa; `ai-rerank` chạy lại ở 4 vCPU,
       `/ready` xanh, một lượt `/v1/rerank` thật HTTP 200.
+      → **Người dùng chốt 17/10: ai-classify 1 vCPU** (từ 2 tạm) — đúng tiêu chí chốt trước: mức nhỏ nhất
+      không chậm hơn mức nhanh nhất quá biên trôi. Compose sửa (`cpus` + `OMP_NUM_THREADS` = 1), `ai-classify`
+      chạy lại, `/ready` xanh với `threads: 1`, một lượt `/v1/classify` thật đúng kết quả cũ. `MODEL_REGISTRY.md`
+      có dòng `intent-router-v1`; ADR-0034 thêm mục "Cập nhật 17/10". Chưa đo: đường HTTP ở 1 vCPU.
 - [x] 🖐 **ADR-0034 chốt cấp vCPU.** Chốt bằng bảng số, không bằng ngưỡng.
       - **Không model nào bị loại ở Ngày 15** — ghi đúng một dòng như vậy kèm lý do (mỗi vai một model;
         độ trễ chưa là cổng). Trường hợp duy nhất bị loại vì độ trễ là router nhánh B XLM-R: p95
@@ -1346,6 +1357,8 @@ Ngày 21", báo trong mô tả PR). Router đo bù phụ thuộc `router_model.o
 → ✅ **Đạt 11/10** — bảng benchmark (thêm tải "đoạn" + 3 lượt lặp), ADR-0034 (embed 4 · rerank 4), compose +
 `MODEL_REGISTRY.md` đã sửa. Còn mở đúng như cổng cho phép: điều (1) và vCPU `ai-classify` chờ router. Ôn tập:
 `docs/on-tap/ngay-15-khoi-b-benchmark-vcpu.md`.
+→ ✅ **Đóng trọn 17/10** — điều (1) đã chứng minh, ai-classify 1 vCPU (ADR-0034 cập nhật 17/10). Ngày 15 không
+còn ô nào mở.
 
 **Minh chứng báo cáo:** bảng benchmark rút gọn (model × vCPU × số luồng × p50 × p95 × RSS × so với
 ngưỡng kế hoạch §5.3 — embed 120 / rerank 300 / classify 60 ms, *chưa áp dụng*) · **bảng chênh lệch

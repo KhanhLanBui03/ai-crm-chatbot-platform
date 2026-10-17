@@ -1,6 +1,6 @@
 # ADR-0034 — Chốt cấp vCPU: ai-embed 4, ai-rerank 4, ghim luồng bắt buộc; bench ở `inference/bench/`
 
-- **Trạng thái:** Chấp nhận
+- **Trạng thái:** Chấp nhận — cập nhật 17/10/2026 (ai-classify 1 vCPU)
 - **Ngày:** 2026-10-11
 - **Làn sở hữu:** Track B (module AI)
 - **Quan hệ:** kế hoạch Ngày 15 Khối B · Master Plan §3.9.2, §5.3, §5.4, §5.4.1, §5.6 ·
@@ -142,3 +142,60 @@ Rerank p95 10,3 s ở 4 vCPU — gấp ~34 lần ngưỡng §5.3. Không loại 
   hộ, báo trong mô tả PR.
 - **Còn mở:** điều (1) "model nhỏ tăng vCPU không nhanh hơn" và vCPU của ai-classify — chờ
   `router_model.onnx`; bench thêm vai `classify` khi có model. Đo x86 ở N20; đo dưới tải song song ở N19.
+  → Điều (1) và vCPU ai-classify **đóng 17/10**, xem mục cập nhật dưới.
+
+## Cập nhật 17/10/2026 — ai-classify 1 vCPU, điều (1) đã chứng minh
+
+**Người dùng chốt 17/10** sau khi xem bảng số. Số đo đầy đủ và cách đo chốt trước khi chạy:
+`docs/report/benchmark-ngay15-2026-10-11.md` §9.
+
+**Model:** router nhánh C `intent-router-v1` — băm n-gram ký tự + IDF (1024 chiều) → `LogisticRegression`
+7 lớp, ONNX `QUInt8` 35,9 KB, sha256 `0cc5f770…` khớp `artifacts/DATA_HASHES.txt`. Bench thêm vai
+`classify`: dựng `RouterEmbedder` + session như `_init_router_model`, đo đúng tầng 2 của `classify.py`
+(băm → `run` → đọc kết quả), không qua tầng luật và HTTP. Kết quả khớp `POST /v1/classify` của container
+tới từng xác suất.
+
+**Số đo** — 112 câu `golden_set.jsonl` × 1.000 vòng = 112.000 mẫu một cấu hình, Apple M1, ghim luồng:
+
+| vCPU | p50 | p95 | p99 | Lõi dùng TB | Chu kỳ bị chặn | Lâu nhất |
+|---|---|---|---|---|---|---|
+| **1** — chọn | 0,074 ms | **0,176 ms** | 0,236 ms | 1,00 | 23% | 15 ms |
+| 2 — cấp tạm cũ | 0,075 ms | 0,177 ms | 0,239 ms | 1,00 | 0% | 9,8 ms |
+| 4 | 0,075 ms | 0,176 ms | 0,236 ms | 1,00 | 0% | 7,9 ms |
+
+Biên trôi giữa lượt đầu và lượt lặp: 18%. Lượt ngắn 1.120 mẫu (cỡ chốt ban đầu) cũng đạt tiêu chí nhưng
+biên trôi 54% — phép thử yếu, ghi kèm, không dùng làm căn cứ chính.
+
+**Điều (1) — đã chứng minh.** Tiêu chí ghi trước khi chạy: p95 ở 2 và 4 vCPU không thấp hơn p95 ở 1 vCPU
+quá biên trôi — đạt ở cả hai lượt. Cơ chế: lõi dùng TB 1,00 ở mọi mức. Graph một tích 1 × 1024 với
+1024 × 7 quá nhỏ để ONNX Runtime chia cho pool luồng; 77% thời gian một mẫu là băm n-gram trong Python, một
+luồng. vCPU thêm vào không có việc để làm.
+
+**Quyết định:** `ai-classify` **1 vCPU** = `OMP_NUM_THREADS` 1, `requests.cpu = limits.cpu = 1` — mức nhỏ
+nhất không chậm hơn mức nhanh nhất quá biên trôi (tiêu chí chốt trước). Bảng *Quyết định* ở trên đọc thành:
+ai-embed 4 · ai-rerank 4 · **ai-classify 1**.
+
+**Phát hiện thêm, không đổi quyết định ghim luồng:** router **không** bị phạt khi để mặc định (p95 mặc
+định ÷ ghim = × 0,98–1,00), khác bge-m3 và reranker (× 2,2–13,3). ORT vẫn tạo 8 luồng, nhưng luồng không có
+việc thì không quay chờ. Phạt chỉ hiện ở đuôi cực xa của 1 vCPU (66% chu kỳ bị chặn, mẫu lâu nhất 78 ms so
+với 15 ms khi ghim). Kỷ luật ghim vẫn áp cho cả ba vai: bất biến 3 kiểm như nhau, ghim không tốn gì, và
+model đổi sang loại lớn hơn thì phạt quay lại.
+
+**Đánh đổi của 1 vCPU:**
+
+- **Hạn mức chật:** chạy liên tục 100% một lõi thì 23–49% chu kỳ bị chặn, mẫu lâu nhất 15–16 ms so với
+  8–10 ms ở 2 vCPU; p95, p99 không đổi. Một lượt chat chỉ gọi router một lần, nên service thật hiếm khi chạy
+  liên tục như vậy.
+- **HTTP, uvicorn và log dùng chung lõi duy nhất — chưa đo ở 1 vCPU.** Số HTTP duy nhất là của Dev B
+  (05/10, 2 vCPU, client Windows): p95 5,3 ms tuần tự, 18,8 ms với 5 yêu cầu đồng thời — lớn gấp ~30 lần
+  phần model. Đo dưới tải (N19, hoãn) mà p95 qua HTTP tăng thì trả về 2 vCPU: đổi compose, không đổi code.
+- **Thêm vCPU cũng không thêm thông lượng:** uvicorn một tiến trình, handler `async` gọi ONNX đồng bộ ⇒ yêu
+  cầu đồng thời xếp hàng trên event loop. Cần thông lượng thì thêm worker hoặc bản sao.
+- **Trên máy dev:** tổng cấp ba service 4 + 4 + 1 = 9 vCPU trên VM 8 CPU (trước: 10). `--cpus` là hạn mức,
+  không giữ riêng nhân, nên tổng vượt số CPU vẫn chạy; ba service chỉ tranh nhau khi cùng bận.
+- **Số trên Apple M1** — x86 đo lại ở N20 (hoãn), như hai service kia.
+
+**Hệ quả:** `inference/compose.inference.yml` (ai-classify `cpus` 2 → 1, `OMP_NUM_THREADS` 2 → 1; đã khởi
+động lại, `/ready` xanh với `threads: 1`) · `artifacts/MODEL_REGISTRY.md` (dòng `intent-router-v1`) ·
+`inference/bench/bench_cpu.py` (vai `classify`, bảng theo mức vCPU 1/2/4, bảng lượt lặp, định dạng số dưới
+1 ms). Bất biến 3 chỉ canh biến môi trường (xem *Đánh đổi*) — vẫn là việc của Dev B.
