@@ -37,6 +37,10 @@ public class SubscriptionPlan {
     @Column(name = "max_channels", nullable = false)
     private short maxChannels;
 
+    /** Trần số thẻ khách hàng của gói (UC017) — cột {@code int2}, nên {@code short}. */
+    @Column(name = "max_tags", nullable = false)
+    private short maxTags;
+
     @Column(name = "storage_mb", nullable = false)
     private int storageMb;
 
@@ -79,6 +83,7 @@ public class SubscriptionPlan {
     public void setMaxDocuments(int maxDocuments) { this.maxDocuments = maxDocuments; }
 
     public short getMaxChannels() { return maxChannels; }
+    public short getMaxTags() { return maxTags; }
     public void setMaxChannels(short maxChannels) { this.maxChannels = maxChannels; }
 
     public int getStorageMb() { return storageMb; }

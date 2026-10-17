@@ -11,7 +11,6 @@ import {
   MessageSquare,
   Percent,
   RefreshCw,
-  Sparkles,
   TrendingUp,
 } from 'lucide-react'
 import {
@@ -98,7 +97,7 @@ export function AdminAnalyticsPage() {
       tangTruong: `+${kpis.mrrTangTruongPhanTram}% so với tháng trước`,
       laTang: true,
       icon: DollarSign,
-      mau: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-400',
+      mau: 'bg-muted text-muted-foreground',
     },
     {
       nhan: 'Doanh nghiệp hoạt động',
@@ -106,15 +105,15 @@ export function AdminAnalyticsPage() {
       tangTruong: `Tỷ lệ chuyển đổi dùng thử ${kpis.tiLeChuyenDoiDungThu}%`,
       laTang: true,
       icon: Building2,
-      mau: 'text-blue-600 bg-blue-100 dark:bg-blue-950/60 dark:text-blue-400',
+      mau: 'bg-muted text-muted-foreground',
     },
     {
       nhan: 'Tổng Token AI tiêu thụ',
       giaTri: dinhDangSo(kpis.tongTokensAi),
       tangTruong: `Chi phí: ${dinhDangUSD(kpis.chiPhiAiUsd)} · Biên lãi ${kpis.bienLoiNhuanGop}%`,
       laTang: true,
-      icon: Sparkles,
-      mau: 'text-violet-600 bg-violet-100 dark:bg-violet-950/60 dark:text-violet-400',
+      icon: Cpu,
+      mau: 'bg-muted text-muted-foreground',
     },
     {
       nhan: 'Tỷ lệ AI tự động giải quyết',
@@ -122,7 +121,7 @@ export function AdminAnalyticsPage() {
       tangTruong: `${dinhDangSo(kpis.tongHoiThoai)} hội thoại · Độ trễ ${kpis.doTreTrungBinhMs}ms`,
       laTang: true,
       icon: Bot,
-      mau: 'text-amber-600 bg-amber-100 dark:bg-amber-950/60 dark:text-amber-400',
+      mau: 'bg-muted text-muted-foreground',
     },
   ]
 
@@ -163,7 +162,7 @@ export function AdminAnalyticsPage() {
 
           <Button
             size="sm"
-            className="h-9 gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+            className="h-9 gap-1.5"
             onClick={() => toast.success('Đã xuất file báo cáo phân tích tổng quan (.CSV)')}
           >
             <Download className="size-3.5" />
@@ -364,7 +363,7 @@ export function AdminAnalyticsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Cpu className="size-4 text-violet-600" />
+                  <Cpu className="size-4 text-muted-foreground" />
                   Lượng Token AI Tiêu thụ Hàng ngày
                 </CardTitle>
                 <CardDescription className="text-xs mt-0.5">
@@ -430,7 +429,7 @@ export function AdminAnalyticsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <MessageSquare className="size-4 text-blue-600" />
+                  <MessageSquare className="size-4 text-muted-foreground" />
                   Lưu lượng Hội thoại theo Kênh
                 </CardTitle>
                 <CardDescription className="text-xs mt-0.5">
@@ -493,7 +492,7 @@ export function AdminAnalyticsPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <Layers className="size-4 text-indigo-600" />
+            <Layers className="size-4 text-muted-foreground" />
             Cơ cấu Sử dụng Mô hình AI (LLM Model Breakdown)
           </CardTitle>
           <CardDescription className="text-xs">
@@ -523,7 +522,7 @@ export function AdminAnalyticsPage() {
 
                 <div className="pt-2 border-t flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">Token: {dinhDangSo(model.tokens)}</span>
-                  <span className="font-semibold text-violet-600 dark:text-violet-400">
+                  <span className="font-semibold text-primary">
                     {dinhDangUSD(model.chiPhiUsd)}
                   </span>
                 </div>

@@ -1,20 +1,29 @@
 package com.thesis.crm.sales.lead;
 
+import com.thesis.crm.common.enums.LeadSource;
+import com.thesis.crm.common.enums.LeadStatus;
+import com.thesis.crm.common.enums.Level;
+import com.thesis.crm.engagement.entity.Contact;
+import com.thesis.crm.sales.entity.Lead;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.TypedQuery;
 import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /**
- * SQL của UC032. Mọi câu có {@code tenant_id = :t} tường minh — lớp thứ hai cạnh RLS, như các
- * repository UC012–UC017. Gọi trong transaction đã {@code TenantTransactionScope.apply()}.
+ * Truy cập dữ liệu UC032 qua Entity {@link Lead} (JPA). Mọi truy vấn lọc {@code tenantId} tường minh — lớp
+ * thứ hai cạnh RLS. Gọi trong transaction đã {@code TenantTransactionScope.apply()}.
+ *
+ * <p>Giữ nguyên chữ ký các hàm từ bản SQL tay, nên {@code LeadService} không phải đổi.
  */
 @Repository
 public class LeadRepository {
@@ -36,202 +45,250 @@ public class LeadRepository {
     public record ScoreRow(int score, String modelVersion, String topFactorsJson, String confidence,
                            Instant scoredAt) {}
 
+    private static final List<LeadStatus> DANG_MO = List.of(LeadStatus.NEW, LeadStatus.CONTACTED, LeadStatus.QUALIFIED);
+
+    /** Lead kèm tên + SĐT khách và tên người phụ trách — cùng tenant. */
     private static final String SELECT = """
-            SELECT l.id, l.contact_id, coalesce(k.full_name, 'Khách chưa có tên') AS contact_name, k.phone,
-                   l.source_conversation_id, l.source, l.status, l.interested_product, l.budget_min, l.budget_max,
-                   l.budget_confidence, l.urgency, l.current_score, l.score_updated_at,
-                   l.owner_user_id, u.full_name AS owner_name, l.disqualified_reason, l.converted_at,
-                   l.created_at, l.updated_at
-            FROM sales.leads l
-            JOIN engagement.contacts k ON k.id = l.contact_id AND k.tenant_id = l.tenant_id
-            LEFT JOIN platform.users u ON u.id = l.owner_user_id AND u.tenant_id = l.tenant_id
+            SELECT l, coalesce(k.fullName, 'Khách chưa có tên'), k.phone, u.fullName
+            FROM Lead l
+            JOIN Contact k ON k.id = l.contactId AND k.tenantId = l.tenantId
+            LEFT JOIN User u ON u.id = l.ownerUserId AND u.tenantId = l.tenantId
             """;
 
-    private final NamedParameterJdbcTemplate jdbc;
+    private final EntityManager em;
 
-    public LeadRepository(NamedParameterJdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    public LeadRepository(EntityManager em) {
+        this.em = em;
     }
 
     // ── đọc ─────────────────────────────────────────────────────────────────────
 
     /** Sắp điểm giảm dần, lead chưa chấm điểm xếp cuối (UC032 bước 3); hoà điểm thì lead mới trước. */
     public List<LeadRow> search(UUID tenantId, Filter f) {
-        MapSqlParameterSource p = new MapSqlParameterSource("t", tenantId);
-        String where = where(f, p);
-        p.addValue("lim", f.size()).addValue("off", (long) f.page() * f.size());
-        return jdbc.query(SELECT + where
-                + " ORDER BY l.current_score DESC NULLS LAST, l.created_at DESC, l.id LIMIT :lim OFFSET :off",
-                p, LeadRepository::map);
+        Map<String, Object> p = new HashMap<>();
+        TypedQuery<Object[]> q = em.createQuery(SELECT + where(tenantId, f, p)
+                        + " ORDER BY l.currentScore DESC NULLS LAST, l.createdAt DESC, l.id", Object[].class)
+                .setFirstResult(f.page() * f.size())
+                .setMaxResults(f.size());
+        p.forEach(q::setParameter);
+        return q.getResultStream().map(LeadRepository::map).toList();
     }
 
     public long count(UUID tenantId, Filter f) {
-        MapSqlParameterSource p = new MapSqlParameterSource("t", tenantId);
-        Long n = jdbc.queryForObject("""
-                SELECT count(*) FROM sales.leads l
-                JOIN engagement.contacts k ON k.id = l.contact_id AND k.tenant_id = l.tenant_id
-                """ + where(f, p), p, Long.class);
-        return n == null ? 0 : n;
+        Map<String, Object> p = new HashMap<>();
+        TypedQuery<Long> q = em.createQuery("""
+                SELECT count(l) FROM Lead l
+                JOIN Contact k ON k.id = l.contactId AND k.tenantId = l.tenantId
+                """ + where(tenantId, f, p), Long.class);
+        p.forEach(q::setParameter);
+        return q.getSingleResult();
     }
 
-    private static String where(Filter f, MapSqlParameterSource p) {
-        StringBuilder w = new StringBuilder(" WHERE l.tenant_id = :t");
+    private static String where(UUID tenantId, Filter f, Map<String, Object> p) {
+        StringBuilder w = new StringBuilder(" WHERE l.tenantId = :t");
+        p.put("t", tenantId);
         if (f.status() != null) {
             w.append(" AND l.status = :status");
-            p.addValue("status", f.status());
+            p.put("status", LeadStatus.valueOf(f.status()));
         }
         if (f.source() != null) {
             w.append(" AND l.source = :source");
-            p.addValue("source", f.source());
+            p.put("source", LeadSource.valueOf(f.source()));
         }
         if (f.ownerUserId() != null) {
-            w.append(" AND l.owner_user_id = :owner");
-            p.addValue("owner", f.ownerUserId());
+            w.append(" AND l.ownerUserId = :owner");
+            p.put("owner", f.ownerUserId());
         }
         if (f.contactId() != null) {
-            w.append(" AND l.contact_id = :contact");
-            p.addValue("contact", f.contactId());
+            w.append(" AND l.contactId = :contact");
+            p.put("contact", f.contactId());
         }
         if (f.minScore() != null) {
-            w.append(" AND l.current_score >= :minScore");
-            p.addValue("minScore", f.minScore());
+            w.append(" AND l.currentScore >= :minScore");
+            p.put("minScore", f.minScore().shortValue());
         }
         // Tìm theo tên/SĐT khách, không dấu — dùng lại cột search_text của danh bạ (V124)
         for (int i = 0; i < f.tokens().size(); i++) {
-            w.append(" AND k.search_text LIKE :kw").append(i).append(" ESCAPE '\\'");
-            p.addValue("kw" + i, "%" + escapeLike(f.tokens().get(i)) + "%");
+            w.append(" AND k.searchText LIKE :kw").append(i).append(" ESCAPE '!'");
+            p.put("kw" + i, "%" + escapeLike(f.tokens().get(i)) + "%");
         }
         return w.toString();
     }
 
     public Optional<LeadRow> find(UUID tenantId, UUID leadId) {
-        return jdbc.query(SELECT + " WHERE l.tenant_id = :t AND l.id = :id",
-                new MapSqlParameterSource("t", tenantId).addValue("id", leadId), LeadRepository::map)
-                .stream().findFirst();
+        return em.createQuery(SELECT + " WHERE l.tenantId = :t AND l.id = :id", Object[].class)
+                .setParameter("t", tenantId)
+                .setParameter("id", leadId)
+                .getResultStream().findFirst().map(LeadRepository::map);
     }
 
     /** Khoá dòng lead trước khi sửa — hai người sửa cùng lúc thì người sau thấy trạng thái mới nhất. */
     public boolean lock(UUID tenantId, UUID leadId) {
-        return !jdbc.queryForList("SELECT id FROM sales.leads WHERE tenant_id = :t AND id = :id FOR UPDATE",
-                new MapSqlParameterSource("t", tenantId).addValue("id", leadId), UUID.class).isEmpty();
+        return managed(tenantId, leadId, LockModeType.PESSIMISTIC_WRITE).isPresent();
     }
 
     /** Lead đang mở của khách (tối đa một — chỉ mục {@code uq_leads_mot_lead_mo_moi_khach}). */
     public Optional<LeadRow> findOpenByContact(UUID tenantId, UUID contactId) {
-        return jdbc.query(SELECT + """
-                 WHERE l.tenant_id = :t AND l.contact_id = :c AND l.status IN ('NEW','CONTACTED','QUALIFIED')""",
-                new MapSqlParameterSource("t", tenantId).addValue("c", contactId), LeadRepository::map)
-                .stream().findFirst();
+        return em.createQuery(SELECT + " WHERE l.tenantId = :t AND l.contactId = :c AND l.status IN :mo",
+                        Object[].class)
+                .setParameter("t", tenantId)
+                .setParameter("c", contactId)
+                .setParameter("mo", DANG_MO)
+                .getResultStream().findFirst().map(LeadRepository::map);
     }
 
     public Optional<ContactRef> findContact(UUID tenantId, UUID contactId) {
-        return jdbc.query("""
-                SELECT id, status, deleted_at IS NOT NULL AS deleted FROM engagement.contacts
-                WHERE tenant_id = :t AND id = :id""",
-                new MapSqlParameterSource("t", tenantId).addValue("id", contactId),
-                (rs, i) -> new ContactRef(rs.getObject("id", UUID.class), rs.getString("status"),
-                        rs.getBoolean("deleted")))
-                .stream().findFirst();
+        return em.createQuery("SELECT k FROM Contact k WHERE k.tenantId = :t AND k.id = :id", Contact.class)
+                .setParameter("t", tenantId)
+                .setParameter("id", contactId)
+                .getResultStream().findFirst()
+                .map(k -> new ContactRef(k.getId(), k.getStatus(), k.getDeletedAt() != null));
     }
 
     /** Khách của một hội thoại — {@code null} trong Optional nghĩa là hội thoại chưa gắn khách. */
     public Optional<Optional<UUID>> conversationContact(UUID tenantId, UUID conversationId) {
-        return jdbc.query("SELECT contact_id FROM engagement.conversations WHERE tenant_id = :t AND id = :id",
-                new MapSqlParameterSource("t", tenantId).addValue("id", conversationId),
-                (rs, i) -> Optional.ofNullable(rs.getObject("contact_id", UUID.class)))
-                .stream().findFirst();
+        // Optional ngoài: hội thoại có tồn tại không. Optional trong: hội thoại đã gắn khách chưa.
+        List<Object[]> rows = em.createQuery(
+                        "SELECT c.id, c.contactId FROM Conversation c WHERE c.tenantId = :t AND c.id = :id", Object[].class)
+                .setParameter("t", tenantId)
+                .setParameter("id", conversationId)
+                .getResultList();
+        return rows.stream().findFirst().map(r -> Optional.ofNullable((UUID) r[1]));
     }
 
     /** Người dùng ĐANG HOẠT ĐỘNG của doanh nghiệp — trả tên, hoặc rỗng nếu không hợp lệ. */
     public Optional<String> activeUserName(UUID tenantId, UUID userId) {
-        return jdbc.queryForList("""
-                SELECT full_name FROM platform.users
-                WHERE tenant_id = :t AND id = :id AND status = 'ACTIVE' AND deleted_at IS NULL""",
-                new MapSqlParameterSource("t", tenantId).addValue("id", userId), String.class)
-                .stream().findFirst();
+        return em.createQuery("""
+                SELECT u.fullName FROM User u
+                WHERE u.tenantId = :t AND u.id = :id AND u.status = 'ACTIVE' AND u.deletedAt IS NULL""", String.class)
+                .setParameter("t", tenantId)
+                .setParameter("id", userId)
+                .getResultStream().findFirst();
     }
 
     public Optional<UUID> convertedDealId(UUID tenantId, UUID leadId) {
-        return jdbc.queryForList("SELECT id FROM sales.deals WHERE tenant_id = :t AND lead_id = :id",
-                new MapSqlParameterSource("t", tenantId).addValue("id", leadId), UUID.class)
-                .stream().findFirst();
+        return em.createQuery("SELECT d.id FROM Deal d WHERE d.tenantId = :t AND d.leadId = :id", UUID.class)
+                .setParameter("t", tenantId)
+                .setParameter("id", leadId)
+                .setMaxResults(1)
+                .getResultStream().findFirst();
     }
 
     public int activityCount(UUID tenantId, UUID leadId) {
-        Integer n = jdbc.queryForObject(
-                "SELECT count(*)::int FROM sales.activities WHERE tenant_id = :t AND lead_id = :id",
-                new MapSqlParameterSource("t", tenantId).addValue("id", leadId), Integer.class);
-        return n == null ? 0 : n;
+        return em.createQuery("SELECT count(a) FROM Activity a WHERE a.tenantId = :t AND a.leadId = :id", Long.class)
+                .setParameter("t", tenantId)
+                .setParameter("id", leadId)
+                .getSingleResult().intValue();
     }
 
-    /** Lịch sử điểm, mới nhất trước (UC032 bước 6). Bảng chỉ ghi thêm — {@code sales.lead_scores}, V113. */
+    /**
+     * Lịch sử điểm, mới nhất trước (UC032 bước 6). Bảng chỉ ghi thêm — {@code sales.lead_scores}, V113.
+     *
+     * <p>Tạm giữ native SQL: Entity {@code LeadScore} do Dev A tạo cùng UC030/UC041 — không tạo trùng ở
+     * đây. Đổi sang Entity đó khi nhánh của Dev A đã merge.
+     */
     public List<ScoreRow> scores(UUID tenantId, UUID leadId, int limit) {
-        return jdbc.query("""
+        List<?> rows = em.createNativeQuery("""
                 SELECT score, model_version, top_factors::text AS top_factors, confidence, scored_at
                 FROM sales.lead_scores WHERE tenant_id = :t AND lead_id = :id
-                ORDER BY scored_at DESC LIMIT :lim""",
-                new MapSqlParameterSource("t", tenantId).addValue("id", leadId).addValue("lim", limit),
-                (rs, i) -> new ScoreRow(rs.getInt("score"), rs.getString("model_version"),
-                        rs.getString("top_factors"), rs.getString("confidence"), instant(rs, "scored_at")));
+                ORDER BY scored_at DESC LIMIT :lim""")
+                .setParameter("t", tenantId)
+                .setParameter("id", leadId)
+                .setParameter("lim", limit)
+                .getResultList();
+        return rows.stream().map(o -> {
+            Object[] r = (Object[]) o;
+            return new ScoreRow(((Number) r[0]).intValue(), (String) r[1], (String) r[2], (String) r[3],
+                    thoiDiem(r[4]));
+        }).toList();
     }
 
     // ── ghi ─────────────────────────────────────────────────────────────────────
 
     public UUID insert(UUID tenantId, LeadDtos.CreateLeadRequest r, UUID ownerUserId) {
-        return jdbc.queryForObject("""
-                INSERT INTO sales.leads (tenant_id, contact_id, source_conversation_id, source, status,
-                                         interested_product, budget_min, budget_max, urgency, owner_user_id)
-                VALUES (:t, :contact, :conv, 'MANUAL', 'NEW', :product, :bmin, :bmax, :urgency, :owner)
-                RETURNING id""",
-                new MapSqlParameterSource("t", tenantId).addValue("contact", r.contactId())
-                        .addValue("conv", r.sourceConversationId()).addValue("product", r.interestedProduct())
-                        .addValue("bmin", r.budgetMin()).addValue("bmax", r.budgetMax())
-                        .addValue("urgency", r.urgency()).addValue("owner", ownerUserId), UUID.class);
+        Lead l = new Lead(tenantId, r.contactId(), LeadSource.MANUAL);
+        l.setSourceConversationId(r.sourceConversationId());
+        l.setInterestedProduct(r.interestedProduct());
+        l.setBudgetMin(r.budgetMin());
+        l.setBudgetMax(r.budgetMax());
+        l.setUrgency(r.urgency() == null ? null : Level.valueOf(r.urgency()));
+        l.setOwnerUserId(ownerUserId);
+        em.persist(l);
+        em.flush(); // vi phạm "một lead mở mỗi khách" nổ ngay tại đây, như INSERT trước đây
+        return l.getId();
     }
 
     /** Ghi đè trọn các trường người dùng sửa được — service đã gộp giá trị cũ với phần thay đổi. */
     public void update(UUID tenantId, UUID leadId, String status, String interestedProduct, BigDecimal budgetMin,
                        BigDecimal budgetMax, String urgency, UUID ownerUserId, String disqualifiedReason) {
-        jdbc.update("""
-                UPDATE sales.leads SET status = :status, interested_product = :product, budget_min = :bmin,
-                       budget_max = :bmax, urgency = :urgency, owner_user_id = :owner, disqualified_reason = :reason
-                WHERE tenant_id = :t AND id = :id""",
-                new MapSqlParameterSource("t", tenantId).addValue("id", leadId).addValue("status", status)
-                        .addValue("product", interestedProduct).addValue("bmin", budgetMin)
-                        .addValue("bmax", budgetMax).addValue("urgency", urgency).addValue("owner", ownerUserId)
-                        .addValue("reason", disqualifiedReason));
+        managed(tenantId, leadId, LockModeType.NONE).ifPresent(l -> {
+            l.setStatus(LeadStatus.valueOf(status));
+            l.setInterestedProduct(interestedProduct);
+            l.setBudgetMin(budgetMin);
+            l.setBudgetMax(budgetMax);
+            l.setUrgency(urgency == null ? null : Level.valueOf(urgency));
+            l.setOwnerUserId(ownerUserId);
+            l.setDisqualifiedReason(disqualifiedReason);
+            ghiVaNapLai(l);
+        });
     }
 
     /** UC033 — lead đã thành deal: khoá lại, giữ bản ghi (đặc tả b7). */
     public void markConverted(UUID tenantId, UUID leadId, UUID ownerUserId) {
-        jdbc.update("""
-                UPDATE sales.leads SET status = 'CONVERTED', converted_at = now(), owner_user_id = :owner
-                WHERE tenant_id = :t AND id = :id""",
-                new MapSqlParameterSource("t", tenantId).addValue("id", leadId).addValue("owner", ownerUserId));
+        managed(tenantId, leadId, LockModeType.NONE).ifPresent(l -> {
+            l.setStatus(LeadStatus.CONVERTED);
+            l.setConvertedAt(Instant.now());
+            l.setOwnerUserId(ownerUserId);
+            ghiVaNapLai(l);
+        });
     }
 
     // ── tiện ích ────────────────────────────────────────────────────────────────
 
-    private static LeadRow map(ResultSet rs, int i) throws SQLException {
-        int raw = rs.getInt("current_score");
-        Integer score = rs.wasNull() ? null : raw;
-        return new LeadRow(
-                rs.getObject("id", UUID.class), rs.getObject("contact_id", UUID.class), rs.getString("contact_name"),
-                rs.getString("phone"), rs.getObject("source_conversation_id", UUID.class), rs.getString("source"),
-                rs.getString("status"), rs.getString("interested_product"), rs.getBigDecimal("budget_min"),
-                rs.getBigDecimal("budget_max"), rs.getString("budget_confidence"), rs.getString("urgency"),
-                score, instant(rs, "score_updated_at"),
-                rs.getObject("owner_user_id", UUID.class), rs.getString("owner_name"),
-                rs.getString("disqualified_reason"), instant(rs, "converted_at"),
-                instant(rs, "created_at"), instant(rs, "updated_at"));
+    private Optional<Lead> managed(UUID tenantId, UUID leadId, LockModeType lock) {
+        return em.createQuery("SELECT l FROM Lead l WHERE l.tenantId = :t AND l.id = :id", Lead.class)
+                .setParameter("t", tenantId)
+                .setParameter("id", leadId)
+                .setLockMode(lock)
+                .getResultStream().findFirst();
     }
 
-    private static Instant instant(ResultSet rs, String col) throws SQLException {
-        Timestamp ts = rs.getTimestamp(col);
-        return ts == null ? null : ts.toInstant();
+    /**
+     * Ghi xuống CSDL rồi nạp lại: {@code updated_at} do trigger đặt, mà service dùng nó làm mốc "đã loại"
+     * ({@code closedAt}) ngay trong cùng request — không nạp lại thì trả về mốc cũ.
+     */
+    private void ghiVaNapLai(Lead l) {
+        em.flush();
+        em.refresh(l);
     }
 
+    private static LeadRow map(Object[] r) {
+        Lead l = (Lead) r[0];
+        return new LeadRow(l.getId(), l.getContactId(), (String) r[1], (String) r[2], l.getSourceConversationId(),
+                l.getSource().name(), l.getStatus().name(), l.getInterestedProduct(), l.getBudgetMin(),
+                l.getBudgetMax(), l.getBudgetConfidence() == null ? null : l.getBudgetConfidence().name(),
+                l.getUrgency() == null ? null : l.getUrgency().name(),
+                l.getCurrentScore() == null ? null : l.getCurrentScore().intValue(), l.getScoreUpdatedAt(),
+                l.getOwnerUserId(), (String) r[3], l.getDisqualifiedReason(), l.getConvertedAt(),
+                l.getCreatedAt(), l.getUpdatedAt());
+    }
+
+    /** Native query trả {@code timestamptz} dưới dạng {@link Timestamp}, {@link OffsetDateTime} hoặc {@link Instant} tuỳ driver. */
+    private static Instant thoiDiem(Object o) {
+        if (o == null) {
+            return null;
+        }
+        if (o instanceof Instant i) {
+            return i;
+        }
+        if (o instanceof OffsetDateTime odt) {
+            return odt.toInstant();
+        }
+        return ((Timestamp) o).toInstant();
+    }
+
+    /** Ký tự thoát của LIKE là {@code !} — xem {@code ESCAPE '!'} ở {@link #where}. */
     private static String escapeLike(String s) {
-        return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        return s.replace("!", "!!").replace("%", "!%").replace("_", "!_");
     }
 }

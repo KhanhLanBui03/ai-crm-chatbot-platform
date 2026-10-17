@@ -6,7 +6,7 @@ import {
   CreditCard,
   LayoutDashboard,
   LogOut,
-  Sparkles,
+  Cpu,
 } from 'lucide-react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -42,7 +42,7 @@ const MUC_ADMIN = [
   { duongDan: '/admin/phan-tich', nhan: 'Phân tích & Báo cáo', BieuTuong: BarChart3 },
   { duongDan: '/admin/doanh-nghiep', nhan: 'Quản lý doanh nghiệp', BieuTuong: Building2 },
   { duongDan: '/admin/goi-dich-vu', nhan: 'Quản lý gói dịch vụ', BieuTuong: CreditCard },
-  { duongDan: '/admin/tai-nguyen-ai', nhan: 'Tài nguyên & Chi phí AI', BieuTuong: Sparkles },
+  { duongDan: '/admin/tai-nguyen-ai', nhan: 'Tài nguyên & Chi phí AI', BieuTuong: Cpu },
 ] as const
 
 export function AdminSidebar() {
@@ -69,14 +69,14 @@ export function AdminSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <div className="flex items-center gap-2.5 px-1 py-1 group-data-[collapsible=icon]:justify-center">
-          <div className="bg-gradient-to-br from-violet-600 to-fuchsia-500 text-white flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-bold shadow-md">
+          <div className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-bold">
             SA
           </div>
           <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
             <span className="truncate text-sm leading-tight font-semibold">
               CRM AI Platform
             </span>
-            <span className="text-xs font-medium text-violet-600 dark:text-violet-400">
+            <span className="text-xs text-muted-foreground">
               Super Admin
             </span>
           </div>
@@ -112,7 +112,7 @@ export function AdminSidebar() {
               type="button"
               className="hover:bg-accent/50 flex w-full items-center gap-2 rounded-lg p-2 text-left transition-colors cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-ring group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-1"
             >
-              <div className="bg-violet-600 text-white flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-medium">
+              <div className="bg-primary text-primary-foreground flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-medium">
                 {nguoiDung ? chuCaiDau(nguoiDung.fullName) : '—'}
               </div>
               <div className="flex min-w-0 flex-1 flex-col group-data-[collapsible=icon]:hidden">
