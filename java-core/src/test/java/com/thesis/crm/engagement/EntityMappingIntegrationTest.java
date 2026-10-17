@@ -113,6 +113,8 @@ class EntityMappingIntegrationTest extends EngagementIntegrationTestBase {
         Message doc = trongTenant(TENANT_A, () -> messages.findByIdAndTenantId(id, TENANT_A).orElseThrow());
         assertThat(doc.getSenderType()).isEqualTo(SenderType.BOT);
         assertThat(doc.getMetadata()).containsEntry("feedback", "UP");
+        // Phải là List của Java: mapper riêng của Hibernate từng trả scala.collection.List (HibernateJsonConfig)
+        assertThat(doc.getMetadata().get("citations")).isInstanceOf(java.util.List.class);
         // Ngoài transaction đã đặt tenant: RLS báo lỗi ngay (fail-closed), không lặng lẽ trả rỗng hay trả hết
         assertThatThrownBy(() -> messages.findByTenantIdAndConversationIdOrderBySentAtAsc(TENANT_A, conv))
                 .hasStackTraceContaining("app.tenant_id");
