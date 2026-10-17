@@ -2,7 +2,7 @@ import {
   Activity,
   Building2,
   DollarSign,
-  Sparkles,
+  Cpu,
   TrendingUp,
   Users,
 } from 'lucide-react'
@@ -46,28 +46,28 @@ export function AdminOverviewPage() {
       giaTri: dinhDangSo(tk.tongDoanhNghiep),
       icon: Building2,
       moTa: `${tk.doanhNghiepHoatDong} hoạt động · ${tk.doanhNghiepDungThu} dùng thử`,
-      mau: 'text-blue-600 bg-blue-100 dark:bg-blue-900/40 dark:text-blue-400',
+      mau: 'bg-muted text-muted-foreground',
     },
     {
       nhan: 'Doanh thu định kỳ (MRR)',
       giaTri: dinhDangTien(tk.mrrVnd),
       icon: DollarSign,
       moTa: 'Ước tính từ gói dịch vụ hiện tại',
-      mau: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-400',
+      mau: 'bg-muted text-muted-foreground',
     },
     {
       nhan: 'Hội thoại tháng này',
       giaTri: dinhDangSo(tk.tongHoiThoaiThang),
       icon: Activity,
       moTa: 'Tổng hội thoại trên toàn sàn',
-      mau: 'text-orange-600 bg-orange-100 dark:bg-orange-900/40 dark:text-orange-400',
+      mau: 'bg-muted text-muted-foreground',
     },
     {
       nhan: 'Token AI tiêu thụ',
       giaTri: dinhDangSo(tk.tongTokenAiThang),
-      icon: Sparkles,
+      icon: Cpu,
       moTa: '≈ ' + dinhDangTien(Math.round(tk.tongTokenAiThang / 1000 * 0.003 * 25000)) + ' chi phí ước tính',
-      mau: 'text-violet-600 bg-violet-100 dark:bg-violet-900/40 dark:text-violet-400',
+      mau: 'bg-muted text-muted-foreground',
     },
   ]
 
@@ -171,7 +171,7 @@ export function AdminOverviewPage() {
               </div>
             )}
             {tk.doanhNghiepDungThu > 0 && (
-              <div className="flex items-center gap-3 rounded-lg bg-blue-100 dark:bg-blue-900/30 p-3 text-sm text-blue-700 dark:text-blue-400">
+              <div className="flex items-center gap-3 rounded-lg bg-muted p-3 text-sm text-foreground">
                 <Users className="size-4 shrink-0" />
                 <span>{tk.doanhNghiepDungThu} doanh nghiệp đang dùng thử</span>
               </div>

@@ -83,11 +83,16 @@ public class AuditLog {
     @Column(nullable = false, length = 20)
     private AuditSeverity severity = AuditSeverity.INFO;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt = Instant.now();
+    /**
+     * CSDL đặt bằng {@code now()} — thời điểm BẮT ĐẦU transaction, nên mọi dòng nhật ký của cùng một thao
+     * tác có chung một mốc. Vì vậy trên bản ghi vừa {@code save()} hai trường này còn {@code null}; đọc lại
+     * từ CSDL mới có giá trị.
+     */
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    private Instant createdAt;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt = Instant.now();
+    @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
+    private Instant updatedAt;
 
     protected AuditLog() {
         // JPA yêu cầu constructor không tham số
