@@ -4,8 +4,8 @@
 > Quyết định: [ADR-0034](../adr/0034-chot-cap-vcpu-ai-embed-ai-rerank.md). Mã: `inference/bench/bench_cpu.py` ·
 > `inference/src/session.py` · `inference/compose.inference.yml`. Khối A: [`ngay-15-rerank-that.md`](ngay-15-rerank-that.md).
 >
-> **Trạng thái:** Khối B xong — **ai-embed 4 vCPU, ai-rerank 4 vCPU** (người dùng chốt). Còn mở: điều (1)
-> và vCPU của ai-classify, chờ `router_model.onnx`.
+> **Trạng thái:** Khối B xong — **ai-embed 4 vCPU, ai-rerank 4 vCPU** (người dùng chốt 11/10) · **ai-classify
+> 1 vCPU** (người dùng chốt 17/10, đo bù router — mục 6). Ngày 15 đóng trọn.
 
 ## 1. Ba con số phải nhớ
 
@@ -42,7 +42,8 @@ tuần tự (tách từ, Python, chép tensor) thì không chia được (địn
 lượt chạy** = model × độ dài chuỗi, không phải riêng số tham số. Bằng chứng gián tiếp đo được hôm nay:
 nhúng một câu hỏi (trung vị 13 token) bằng bge-m3 — model 568 triệu tham số — p95 **68 ms ở 2 vCPU và
 69 ms ở 4 vCPU**, trong khi nhúng một đoạn (dài hơn nhiều) thì 4 vCPU nhanh hơn 30%. Bằng chứng trực tiếp
-(router, model nhỏ thật) chờ `router_model.onnx`.
+đo 17/10 trên router (mục 6): p95 **0,176 · 0,177 · 0,176 ms ở 1 · 2 · 4 vCPU** — và ở cỡ này ORT thậm chí
+không chia việc cho pool luồng (lõi dùng 1,00 ở mọi mức).
 
 **Vì sao số đo trên M1 không dùng thẳng cho máy x86 lúc lên production?**
 1. **Nhân không đồng nhất:** M1 có 4 nhân hiệu năng + 4 nhân tiết kiệm điện; macOS quyết định luồng của
@@ -70,6 +71,7 @@ cần thêm vCPU), không phải con số tuyệt đối. Số tuyệt đối đ
 3. **Thêm vCPU luôn bị dùng hết, kể cả khi không nhanh hơn.** Câu hỏi ở 4 vCPU dùng 3,95 lõi, ở 2 vCPU dùng
    1,99 lõi — cùng p95. Hai lõi thêm là luồng ORT quay chờ việc (spin). Vì thế "chọn dư cho chắc" không miễn
    phí: ai-embed 4 vCPU đốt dư CPU mỗi lượt chat, đổi lấy nạp kho nhanh hơn 30% (ADR-0034 Đánh đổi).
+   *Đúng với bge-m3 và reranker; router thì không — xem mục 6.*
 4. **`/ready` không canh được lỗi này.** Bất biến 3 so biến môi trường `OMP_NUM_THREADS` với cgroup — nhưng
    ONNX Runtime **không đọc biến đó**: mọi lượt "mặc định" hôm nay đều chạy với `OMP_NUM_THREADS=2` (hoặc 4)
    mà ORT vẫn tạo 8 luồng. Thứ quyết định là dòng `intra_op_num_threads` trong `make_session`. Xoá dòng đó thì `/ready` vẫn xanh, p95 chậm vài lần. Đã báo Dev B (`session.py`).
@@ -97,3 +99,49 @@ python3 inference/bench/bench_cpu.py bang reports/eval/bench-thu-*.json
 
 Đổi `--che-do ghim` để thấy chênh lệch ngay trên máy mình: dòng in ra có số luồng ORT tạo (`+1` so với `+7`)
 và tỉ lệ chu kỳ bị chặn.
+
+## 6. Cập nhật 17/10 — router `ai-classify`: điều (1) và 1 vCPU
+
+Số: báo cáo benchmark §9 · quyết định: ADR-0034 mục "Cập nhật 17/10".
+
+**Ba con số phải nhớ** (lượt dài, 112.000 câu mỗi cấu hình, ghim luồng):
+
+| | 1 vCPU | 2 vCPU | 4 vCPU |
+|---|---|---|---|
+| p95 một câu (băm + `run`) | **0,176 ms** | 0,177 ms | 0,176 ms |
+| Lõi dùng TB | **1,00** | 1,00 | 1,00 |
+
+Và: **77%** thời gian một câu là **băm n-gram trong Python**, chỉ 17% là ONNX Runtime.
+
+**Vì sao router tăng vCPU không nhanh hơn — câu trả lời ngắn:** việc một lượt quá nhỏ (một tích
+1 × 1024 với 1024 × 7) nên ORT **không chia cho pool luồng** — luồng thêm vào nằm ngủ, lõi dùng đứng ở
+1,00. Phần lớn thời gian lại nằm ở đoạn Python một luồng. Không có gì để song song hoá thì thêm nhân không
+giúp gì. Khác bge-m3: ở đó ORT có chia việc, thêm vCPU bị dùng hết (3,95 lõi), chỉ là không nhanh hơn với
+câu ngắn.
+
+**Ba điều hội đồng có thể hỏi:**
+
+1. **"Router để mặc định cũng không chậm — vậy ghim luồng để làm gì?"** Đúng là với router, mặc định ÷ ghim
+   = × 0,98–1,00: ORT tạo 8 luồng nhưng không giao việc cho chúng, nên không quay chờ, không tranh hạn mức.
+   Phạt chỉ hiện ở **đuôi cực xa của 1 vCPU** (mẫu lâu nhất 78 ms so với 15 ms khi ghim). Vẫn ghim vì: luật
+   áp chung cho cả ba vai, bất biến 3 kiểm như nhau, ghim không tốn gì — và đổi sang model lớn hơn (ví dụ
+   XLM-R nhánh B) thì phạt × 2–13 quay lại ngay.
+2. **"Sao lại có hai lượt đo, lượt dài thêm vào lúc nào?"** Cách đo chốt trước là 1.120 câu. Lượt chạy thử
+   kiểm code (chưa phải số đo) cho thấy 112 câu xong trong ~10 ms ⇒ 1.120 câu chỉ ~0,1 s, khoảng **một chu
+   kỳ CFS 100 ms** — cơ chế cgroup chặn tiến trình không kịp hiện ra. Lượt dài được **ghi vào báo cáo trước
+   khi chạy ma trận**, và tiêu chí phải đạt ở **cả hai** lượt (siết, không nới). Lượt ngắn quả thật trôi
+   54% giữa hai lần chạy — đúng điều đã lo.
+3. **"1 vCPU có chật quá không?"** Có đánh đổi: chạy liên tục 100% một lõi thì 23–49% chu kỳ bị chặn, mẫu
+   lâu nhất 15 ms (2 vCPU: 10 ms); p95, p99 không đổi. Chỗ **chưa đo**: HTTP + uvicorn + log chạy chung lõi
+   đó. Số HTTP duy nhất là của Dev B ở 2 vCPU: p95 5,3 ms — gấp ~30 lần phần model. Lên tải (N19) mà HTTP
+   chậm đi thì trả về 2 vCPU, chỉ đổi compose. Thêm vCPU cũng **không** thêm thông lượng: uvicorn một tiến
+   trình, handler `async` gọi ONNX đồng bộ ⇒ yêu cầu đồng thời xếp hàng trên event loop.
+
+**Tự chạy lại một cấu hình:**
+
+```bash
+docker run --rm --cpus 1 -e OMP_NUM_THREADS=1 -e TZ=ICT-7 -e TAI_MAY_CHU="$(sysctl -n vm.loadavg)" \
+  -v "$PWD/artifacts:/app/artifacts:ro" -v "$PWD/ai-service/tests/eval:/app/eval:ro" \
+  -v "$PWD/inference/bench:/app/bench:ro" -v "$PWD/reports/eval:/app/reports/eval" \
+  ai-inference:dev python -m bench.bench_cpu chay --vai classify --che-do ghim --nhan thu --vong 1000  # ~10 s
+```

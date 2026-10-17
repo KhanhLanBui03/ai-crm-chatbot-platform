@@ -15,7 +15,7 @@
 # ⚠️ cpus và OMP_NUM_THREADS phải BẰNG NHAU. Lệch thì /ready trả 503 (bất biến 3, §3.4.2).
 #
 # Cấp vCPU chốt Ngày 15 bằng bảng benchmark (ADR-0034, docs/report/benchmark-ngay15-2026-10-11.md):
-#     ai-embed 4 · ai-rerank 4 · ai-classify 2 — ai-classify còn TẠM, đo bù khi có router_model.onnx.
+#     ai-embed 4 · ai-rerank 4 (11/10) · ai-classify 1 (17/10, ADR-0034 mục "Cập nhật 17/10").
 # Số đo trên máy dev Apple M1 (ARM). Lên cloud x86 thì đo lại (N20) trước khi coi là số production.
 
 name: ai-inference
@@ -86,15 +86,15 @@ services:
     environment:
       <<: *inference-env
       MODEL_ROLE: classify
-      OMP_NUM_THREADS: "2"
+      OMP_NUM_THREADS: "1"        # PHẢI bằng cpus bên dưới — 1 vCPU: p95 như 2 và 4, lõi thứ hai không được dùng (ADR-0034)
     # Môi trường (C): mount artifact thay vì COPY vào image — giữ image nhỏ và giống bản
     # production (lấy từ S3). Thiếu router_model.onnx / router_embedder.json thì /ready = 503.
     volumes:
       - ../artifacts:/app/artifacts:ro
     deploy:
       resources:
-        limits: { cpus: "2", memory: 4G }
-        reservations: { cpus: "2", memory: 4G }
+        limits: { cpus: "1", memory: 4G }
+        reservations: { cpus: "1", memory: 4G }
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/ready"]
       interval: 10s

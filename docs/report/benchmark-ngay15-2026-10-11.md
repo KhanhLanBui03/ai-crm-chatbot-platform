@@ -12,7 +12,8 @@
   lượt 2 ↔ 4 vCPU của Khối A), và 152 đoạn khác nhau trong các cặp đó cho tải "đoạn".
 - **Cấp vCPU:** `docker run --cpus N -e OMP_NUM_THREADS=N` — chạy **từng cấu hình một**, nối tiếp.
 - **Quyết định:** người dùng chốt 11/10 — **ai-embed 4 vCPU (giữ) · ai-rerank 4 vCPU (từ 2)** ·
-  ai-classify giữ tạm 2. [ADR-0034](../adr/0034-chot-cap-vcpu-ai-embed-ai-rerank.md).
+  ai-classify giữ tạm 2; **17/10: ai-classify 1 vCPU** (từ 2, đo bù router — §9).
+  [ADR-0034](../adr/0034-chot-cap-vcpu-ai-embed-ai-rerank.md).
 
 **Ngưỡng §5.3 (embed 120 ms · rerank 300 ms · classify 60 ms) KHÔNG áp dụng** — người dùng chốt 11/10/2026:
 độ trễ chưa là cổng. Cột ngưỡng ghi để biết khoảng cách.
@@ -35,7 +36,8 @@
    **chưa thử**; bảng §5 là căn cứ ước lượng, không phải số đo.
 6. **Điều (1)** — model nhỏ tăng vCPU không nhanh hơn — **chưa chứng minh trực tiếp**: model nhỏ duy nhất là
    router, chờ `artifacts/router_model.onnx`. Bằng chứng gián tiếp: khối lượng nhỏ (câu hỏi 13 token) trên
-   model lớn cho 2 ≈ 4 vCPU.
+   model lớn cho 2 ≈ 4 vCPU. → **Cập nhật 17/10: đã chứng minh** trên router — p95 0,176 · 0,177 · 0,176 ms
+   ở 1 · 2 · 4 vCPU, lõi dùng 1,00 ở mọi mức; ai-classify chốt 1 vCPU (§9).
 
 ---
 
@@ -185,9 +187,182 @@ Rerank ước ~5 phút một cấu hình ghim, 10–25 phút một cấu hình m
 
 ## 8. Còn nợ
 
-- **Router (`ai-classify`)** — đo bù khi Dev B gửi `artifacts/router_model.onnx`; chứng minh điều (1) và chốt
-  vCPU ai-classify (đang tạm 2). Bench chưa có vai `classify`: thêm khi có model, cùng khung ghim / mặc định.
+- ~~**Router (`ai-classify`)** — đo bù khi Dev B gửi `artifacts/router_model.onnx`; chứng minh điều (1) và
+  chốt vCPU ai-classify (đang tạm 2).~~ **Xong 17/10** — bench thêm vai `classify`, ai-classify 1 vCPU (§9).
+  Còn: đường HTTP của router ở 1 vCPU chưa đo (§9.5).
 - **x86** — số trên M1 chỉ chốt cho máy dev. Đo lại trên đúng loại máy cloud ở N20 (hoãn).
 - **Dưới tải song song** — mọi số ở đây là một luồng yêu cầu. Nhiều lượt chat cùng lúc chưa đo (N19 hoãn).
 - **`max_length 256`** và **tắt spin của ORT** (`session.intra_op.allow_spinning = 0` — giảm CPU đốt khi chờ,
   không chắc giảm độ trễ) — chưa thử.
+
+---
+
+## 9. Cập nhật 17/10/2026 — router `ai-classify`: điều (1) và cấp vCPU
+
+Đo bù phần còn mở của Khối B. `artifacts/router_model.onnx` có từ 11/10 (Dev B gửi, sha256 khớp sổ).
+
+### 9.1. Cách đo — CHỐT TRƯỚC KHI CHẠY
+
+Mục này viết xong **trước** khi có con số nào của router. Không sửa định nghĩa, tiêu chí hay ma trận sau
+khi thấy số; phương án nghĩ ra sau khi thấy số sẽ đánh dấu `*`.
+
+**Câu hỏi.** Điều (1) của kế hoạch: với model nhỏ, **tăng vCPU không giảm p95**. Router là model nhỏ duy
+nhất của hệ thống.
+
+**Model.** Router nhánh C — `LogisticRegression` 7 lớp × 1024 chiều, ONNX opset 15, lượng tử hoá động
+`QUInt8`, 35,9 KB (`docs/MODEL_CARD_router.md`). `router_model.onnx` sha256 `0cc5f770…` ·
+`router_embedder.json` sha256 `6e15b469…` — khớp dòng 6 và 7 của `artifacts/DATA_HASHES.txt`. Image
+`ai-inference:dev` (`sha256:c07b9cc3ced3…`) — `session.py`, `roles/classify.py`, `roles/router_embedder.py`,
+`entrypoint.py` khớp từng byte với repo (kiểm sha256 17/10).
+
+**Đo gì.** Đúng tầng 2 của `classify.py` (dòng 257–262): `RouterEmbedder.transform_single(câu)` →
+`session.run(None, {"float_input": vec.reshape(1, -1)})` → đọc nhãn và 7 xác suất. Bench dựng thẳng
+`RouterEmbedder.from_json` + session, **không qua `classify()`**: tầng luật đứng trước ONNX, câu nào khớp từ
+khoá thì không chạm ONNX. Không qua HTTP. Session dựng như 11/10: **ghim** = `make_session` của `session.py`
+(`intra_op = OMP_NUM_THREADS`, `inter_op = 1`); **mặc định** = `SessionOptions` không đặt số luồng.
+
+**Một mẫu = một câu.** 112 câu hỏi của `golden_set.jsonl` (chỉ đọc, sha256 `323baf73…`) × **10 vòng** =
+1.120 mẫu; warm-up 20 câu, bỏ khỏi số đo. Mười vòng thay cho ba vòng của embed vì một mẫu dưới 1 ms
+(Model Card §5 đo p95 0,33 ms trên Intel) — thêm mẫu gần như không tốn thời gian. Ghi tách hai chặng:
+**băm** (`transform_single`, Python thuần, một luồng) và **`run`** (ONNX Runtime).
+
+**Ma trận.** **1 · 2 · 4 vCPU × ghim / mặc định** = 6 cấu hình, `docker run --cpus N -e OMP_NUM_THREADS=N`,
+nối tiếp, từng cấu hình một.
+
+- Lượt đầu: ghim 1 → 2 → 4, rồi mặc định 1 → 2 → 4.
+- Lượt lặp (`--nhan n15-router-lap`): đủ 6 cấu hình, **thứ tự ngược** (mặc định 4 → 2 → 1, rồi ghim
+  4 → 2 → 1). Đảo thứ tự để tải nền trôi theo giờ không cùng chiều với số vCPU.
+
+**Điều kiện.** `ai-classify` chạy rảnh (không ai gọi). `ai-embed`, `ai-rerank`, postgres, kafka, ai-service
+và harness eval đều tắt. Ghi tải VM và tải máy chủ ở đầu mỗi lượt.
+
+**Chỉ số.**
+
+- **Chính:** p95 một mẫu (băm + `run` + đọc kết quả), chế độ ghim, **lượt đầu**.
+- **Phụ:** p50 · p95 riêng `run` · số luồng ORT tạo · chu kỳ cgroup bị chặn · lõi dùng TB · RSS.
+- **Biên trôi:** chênh tương đối lớn nhất của p95 giữa lượt đầu và lượt lặp, trên 3 cấu hình ghim.
+
+**Tiêu chí điều (1).**
+
+- **Đã chứng minh** nếu, ở chế độ ghim, p95 lượt đầu ở 2 vCPU và ở 4 vCPU đều **không thấp hơn** p95 ở
+  1 vCPU quá biên trôi: `p95(N) ≥ p95(1) × (1 − biên trôi)` với N = 2 và N = 4.
+- Nếu 2 hoặc 4 vCPU nhanh hơn 1 vCPU vượt biên trôi ⇒ ghi **bị bác bỏ** kèm số thật, không đổi định nghĩa.
+- Biên trôi lớn (≥ 50%) thì phép thử yếu — ghi rõ, không coi "không phát hiện chênh" là "bằng nhau".
+
+**Tiêu chí đề xuất cấp vCPU** (người dùng chốt bằng bảng số): mức **nhỏ nhất** trong {1, 2, 4} mà p95
+ghim lượt đầu không chậm hơn mức nhanh nhất quá biên trôi. Ngưỡng §5.3 60 ms ghi để biết khoảng cách,
+**chưa áp dụng**. Ghi trước, ngoài số đo:
+
+- `ai-classify` còn phục vụ `/v1/lead-score` (UC030) — hiện chấm bằng luật, chưa có model, không chạy ONNX.
+- uvicorn một tiến trình, handler `async` gọi ONNX đồng bộ ⇒ yêu cầu đồng thời xếp hàng trên một luồng
+  event loop dù cấp bao nhiêu vCPU. Bench chỉ đo một luồng yêu cầu; dưới tải song song chưa đo (N19 hoãn).
+
+**Không làm:** không chạy `scripts/evaluate_router_branches_comparison.py` (ghi lại `DATA_HASHES.txt`);
+không đọc `data/intent_test_human.jsonl`.
+
+**Bổ sung sau lượt chạy thử, TRƯỚC khi chạy ma trận (17/10).** Lượt chạy thử kiểm code (2 vCPU, ghim,
+1 vòng, 112 mẫu, không dùng làm số) cho hai điều: (a) bench khớp production — câu "may giat nay bao hanh
+may nam" ra `BUYING_INTENT` với **đúng 7 xác suất** như `POST /v1/classify` của container `ai-classify`;
+(b) **112 mẫu đo xong trong ~10 ms** ⇒ 1.120 mẫu chỉ ~0,1 s, khoảng **một chu kỳ CFS 100 ms**. Cơ chế làm
+chậm của cgroup (hạn mức cạn giữa chu kỳ, cả tiến trình dừng tới chu kỳ sau) gần như không có chỗ để hiện ra,
+và cột "chu kỳ bị chặn" không có thông tin. Vì vậy thêm:
+
+- **Lượt dài** (`--nhan n15-router-dai --vong 1000`, 112.000 mẫu, ~10 s một cấu hình ghim — cỡ lượt embed
+  câu hỏi 11/10): đủ 6 cấu hình, cùng thứ tự lượt đầu; rồi lặp 3 cấu hình ghim theo thứ tự ngược
+  (`n15-router-dai-lap`) để có biên trôi riêng.
+- **Tiêu chí điều (1) và tiêu chí đề xuất vCPU áp dụng cho CẢ lượt ngắn lẫn lượt dài**, mỗi lượt với biên
+  trôi của chính nó. Hai lượt cho kết luận khác nhau thì ghi cả hai, không chọn lượt đẹp hơn. Đây là siết
+  thêm, không nới: phải đạt ở cả hai mới ghi "đã chứng minh".
+
+### 9.2. Kết quả — lượt dài (112.000 mẫu một cấu hình)
+
+Đo 17/10 21:00–21:02, `ai-classify` chạy rảnh, các container khác tắt; tải máy chủ 2,8–3,8 (1 phút).
+
+| vCPU | Chế độ | Luồng ORT tạo | p50 | p95 | p99 | Lâu nhất | Chu kỳ bị chặn | Lõi dùng TB |
+|---|---|---|---|---|---|---|---|---|
+| 1 | ghim | +0 | 0,074 ms | **0,176 ms** | 0,236 ms | 15 ms | 23% | 1,00 |
+| 2 | ghim | +1 | 0,075 ms | **0,177 ms** | 0,239 ms | 9,8 ms | 0% | 1,00 |
+| 4 | ghim | +3 | 0,075 ms | **0,176 ms** | 0,236 ms | 7,9 ms | 0% | 1,00 |
+| 1 | mặc định | +7 | 0,074 ms | **0,174 ms** | 0,232 ms | 78 ms | 66% | 0,99 |
+| 2 | mặc định | +7 | 0,075 ms | **0,176 ms** | 0,239 ms | 4,9 ms | 0% | 1,00 |
+| 4 | mặc định | +7 | 0,074 ms | **0,173 ms** | 0,231 ms | 3,3 ms | 0% | 1,00 |
+
+**Lượt lặp ghim (thứ tự ngược):** 4 vCPU 0,208 ms (+18,0%) · 2 vCPU 0,183 ms (+3,4%) · 1 vCPU 0,177 ms
+(+0,9%) ⇒ **biên trôi 18,0%**.
+
+**Hai chặng của một mẫu** (giống nhau ở mọi cấu hình): băm n-gram p50 0,056 / p95 0,149–0,157 ms, **77%**
+thời gian · `run` p50 0,014 / p95 0,017–0,020 ms, **17%** · đọc nhãn và 7 xác suất ~6%. RSS sau khi nạp 80–81 MB
+(đỉnh 127 MB của lượt dài gồm danh sách 112.000 mẫu bench giữ trong bộ nhớ, không phải của router).
+
+### 9.3. Kết quả — lượt ngắn (1.120 mẫu một cấu hình, như chốt ban đầu)
+
+Đo 17/10 20:59, cùng điều kiện, mỗi lượt đo ~0,1 s.
+
+| vCPU | p95 ghim lượt đầu / lặp | Chênh | p95 mặc định lượt đầu / lặp |
+|---|---|---|---|
+| 1 | 0,187 / 0,184 ms | −1,6% | 0,548 / 0,184 ms |
+| 2 | 0,213 / 0,189 ms | −11,2% | 0,178 / 0,178 ms |
+| 4 | 0,193 / 0,298 ms | **+54,2%** | 0,168 / 0,188 ms |
+
+**Biên trôi 54,2%** — lượt ngắn quá ngắn để ổn định, đúng như lo ở §9.1. Cột "chu kỳ bị chặn" của lượt
+ngắn (0% / 33% / 100% xen kẽ) dựa trên 1–2 chu kỳ CFS, không đọc được. Bảng đầy đủ:
+`reports/eval/bench-n15-router.md` và `bench-n15-router-dai.md` (không commit).
+
+### 9.4. Kết luận
+
+1. **Điều (1) — model nhỏ tăng vCPU không nhanh hơn: ĐÃ CHỨNG MINH**, áp đúng tiêu chí §9.1:
+   - *lượt dài:* cận dưới `0,176 × (1 − 0,18)` = 0,144 ms; p95 ở 2 vCPU 0,177 và ở 4 vCPU 0,176 ms đều
+     trên cận ⇒ **đạt**;
+   - *lượt ngắn:* biên trôi 54,2% ≥ 50% ⇒ **phép thử yếu**; cận 0,086 ms; p95 0,213 và 0,193 ms ⇒ đạt.
+
+   **Cơ chế thấy được trong số:** lõi dùng TB **1,00 ở mọi mức vCPU**. Graph chỉ là một tích 1 × 1024 với
+   1024 × 7 rồi softmax — ONNX Runtime không chia việc cỡ này cho pool luồng, các luồng thêm vào nằm ngủ.
+   So với bge-m3 ghim 4 vCPU: dùng 3,95 lõi (§2). Thêm nữa, **77% thời gian một mẫu là băm n-gram** trong
+   Python (MD5 + SHA-1 mỗi token, một luồng) — không vCPU nào tăng tốc được phần đó.
+2. **Router không bị phạt khi để mặc định** — khác hẳn bge-m3 và reranker (§3: × 2,2–13,3). p95 mặc định ÷
+   ghim = × 0,98–1,00 ở lượt dài. ORT vẫn tạo 8 luồng, nhưng luồng không có việc thì không quay chờ, không
+   tranh hạn mức. Phạt chỉ hiện ở **đuôi cực xa của 1 vCPU**: 66% chu kỳ bị chặn, mẫu lâu nhất 78 ms (ghim:
+   15 ms); p99 không đổi. Đây là quan sát sau khi thấy số; **không đổi kỷ luật ghim luồng**: luật áp cho cả
+   ba vai, bất biến 3 kiểm như nhau, và ghim không tốn gì.
+3. **Tiêu chí đề xuất §9.1 cho ra 1 vCPU** (lượt dài: 1 vCPU 0,176 ms bằng mức nhanh nhất; lượt ngắn: 1 vCPU
+   là mức nhanh nhất). **Người dùng chốt 17/10: ai-classify 1 vCPU** (từ 2 tạm).
+4. **So với ngưỡng 60 ms §5.3** (chưa áp dụng): p95 0,176 ms, khoảng 1/340 ngưỡng. Phần lớn độ trễ thật của
+   router nằm ở **HTTP**: Dev B đo ngày 05/10 ở 2 vCPU, client Windows — p95 5,3 ms tuần tự, 18,8 ms với 5
+   yêu cầu đồng thời (`docs/report/bao-cao-uc022-router.md` §6). Số 0,182 ms ADR-0019 từng ghi là **gán
+   cứng, đã thu hồi** (ADR-0019 mục 0) — gần số đo hôm nay chỉ là tình cờ, vẫn không dẫn. Model Card §5 đo
+   p95 0,33 ms trên Intel ngoài Docker — khác máy, không so trực tiếp.
+
+### 9.5. Đánh đổi và chỗ chưa đo của 1 vCPU
+
+- **Hạn mức chật.** Bench chạy một lõi liên tục 100%, nên ở 1 vCPU có 23–49% chu kỳ bị chặn (tổng ~0,06 s
+  trên 10 s), mẫu lâu nhất 15–16 ms so với 8–10 ms ở 2–4 vCPU; p95, p99 không đổi. Service thật không chạy
+  liên tục như vậy (mỗi lượt chat gọi router một lần).
+- **HTTP, uvicorn và log chạy chung một lõi với router — chưa đo ở 1 vCPU.** Số HTTP duy nhất có là của
+  2 vCPU. N19 (hoãn) mà thấy p95 qua HTTP dưới tải tăng thì trả về 2 vCPU: đổi compose, không đổi code.
+- **Thêm vCPU cũng không thêm thông lượng:** uvicorn một tiến trình, handler `async` gọi ONNX đồng bộ ⇒ yêu
+  cầu đồng thời xếp hàng trên một luồng event loop. Muốn thêm thông lượng phải thêm worker hoặc bản sao,
+  không phải thêm vCPU cho một tiến trình.
+- **Số trên Apple M1** — x86 đo lại ở N20 (hoãn), như embed và rerank.
+
+### 9.6. Lệnh
+
+```bash
+cd <gốc repo>
+docker compose -f inference/compose.inference.yml up -d ai-classify      # chỉ để kiểm /ready; bench không gọi nó
+for nhan_vong in "n15-router 10" "n15-router-dai 1000"; do read -r nhan vong <<<"$nhan_vong"
+  for che_do in ghim mac-dinh; do for vcpu in 1 2 4; do
+    docker run --rm --cpus $vcpu -e OMP_NUM_THREADS=$vcpu -e TZ=ICT-7 \
+      -e TAI_MAY_CHU="$(sysctl -n vm.loadavg)" \
+      -v "$PWD/artifacts:/app/artifacts:ro" -v "$PWD/ai-service/tests/eval:/app/eval:ro" \
+      -v "$PWD/inference/bench:/app/bench:ro" -v "$PWD/reports/eval:/app/reports/eval" \
+      ai-inference:dev python -m bench.bench_cpu chay --vai classify --che-do $che_do \
+      --nhan $nhan --vong $vong
+  done; done
+done
+# lượt lặp: "--nhan n15-router-lap" (6 cấu hình) và "--nhan n15-router-dai-lap --vong 1000" (3 cấu hình
+# ghim), thứ tự ngược
+python3 inference/bench/bench_cpu.py bang --ra reports/eval/bench-n15-router.md \
+  reports/eval/bench-n15-router-classify-*.json reports/eval/bench-n15-router-lap-*.json
+python3 inference/bench/bench_cpu.py bang --ra reports/eval/bench-n15-router-dai.md \
+  reports/eval/bench-n15-router-dai-*.json
+```

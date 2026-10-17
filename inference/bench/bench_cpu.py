@@ -1,4 +1,4 @@
-"""``bench_cpu.py`` — độ trễ suy luận CPU của ai-embed và ai-rerank, ghim luồng và mặc định. [R&D]
+"""``bench_cpu.py`` — độ trễ CPU của ai-embed, ai-rerank, ai-classify; ghim luồng và mặc định. [R&D]
 
 Ngày 15 Khối B. Bench không phục vụ request nên KHÔNG nằm trong ``src/`` (Dockerfile
 ``COPY src/ src/`` sẽ chép nó vào image ship). Lúc đo thì mount vào ``ai-inference:dev`` — image duy
@@ -24,7 +24,9 @@ của VM Docker và mọi con số đều chậm hơn thật một lượng khô
 ĐO GÌ
 -----
 Gọi đúng hàm production — ``BoNhung.nhung`` (embed) và ``BoXepHang.cham`` (rerank), nạp qua
-``lay_bo_nhung`` / ``lay_bo_xep_hang`` — trên session nạp trực tiếp, không qua HTTP. Chỉ thay hàm
+``lay_bo_nhung`` / ``lay_bo_xep_hang`` — trên session nạp trực tiếp, không qua HTTP. Router
+(classify) không có hàm nào tách riêng tầng ONNX để gọi: bench dựng ``RouterEmbedder`` + session như
+``_init_router_model`` và chép đúng tầng 2 của ``classify.py`` (xem ``_BoPhanLoai``). Chỉ thay hàm
 dựng session, mọi tuỳ chọn khác giữ nguyên (``ORT_ENABLE_ALL``, ``ORT_SEQUENTIAL``):
 
     ghim      ``make_session`` của ``session.py``: intra_op = OMP_NUM_THREADS, inter_op = 1
@@ -39,6 +41,8 @@ Một MẪU là một yêu cầu. Đầu vào thật, không PII, chỉ đọc:
     rerank  một câu hỏi × 20 ứng viên = 20 lượt ``run`` lô 1, cộng tách từ. ``--so-cau`` dòng đầu
             ``eval/rerank_cap_100x20.jsonl`` — 30 dòng đầu là G001–G033, đúng 30 câu lượt
             2 ↔ 4 vCPU của Khối A (``docs/report/rerank-ngay15-2026-10-11.md`` §3)
+    classify  phân loại MỘT câu hỏi ``golden_set.jsonl`` × ``--vong`` vòng: băm n-gram (Python, một
+            luồng) + một lượt ``run``. Ghi riêng thời gian băm để tách phần ONNX Runtime ra
 
 Warm-up chạy trước, không vào số đo. Phân vị theo hạng gần nhất, cùng ``_phan_vi`` của harness
 truy hồi (``ai-service/tests/eval/danh_gia_truy_hoi.py``) để so được với số Khối A.
@@ -61,6 +65,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import json
 import math
 import os
@@ -75,7 +80,11 @@ from typing import Any
 # Ngưỡng §5.3 — số KẾ HOẠCH, chưa áp dụng (người dùng chốt 11/10/2026: độ trễ chưa là cổng).
 NGUONG_KE_HOACH_MS = {"embed": 120, "rerank": 300, "classify": 60}
 
-TEN_MODEL = {"embed": "bge-m3 INT8", "rerank": "bge-reranker-v2-m3 INT8"}
+TEN_MODEL = {
+    "embed": "bge-m3 INT8",
+    "rerank": "bge-reranker-v2-m3 INT8",
+    "classify": "router LogisticRegression QUInt8",
+}
 TEN_TAI = {"cau-hoi": "câu hỏi", "doan": "đoạn"}
 
 # Nhóm độ dài cặp rerank — biết lượt nào ăn thời gian trước khi bàn tới đòn bẩy ``max_length``.
@@ -127,7 +136,9 @@ class _PhienDo:
         t0 = time.perf_counter()
         ra = self._phien.run(ten_ra, dau_vao)
         ms = (time.perf_counter() - t0) * 1000
-        self.luot.append((int(dau_vao["input_ids"].shape[1]), ms))
+        # Router nhận vector cố định 1024 chiều, không có độ dài chuỗi — ghi 0.
+        do_dai = int(dau_vao["input_ids"].shape[1]) if "input_ids" in dau_vao else 0
+        self.luot.append((do_dai, ms))
         return ra
 
     def __getattr__(self, ten: str) -> Any:
@@ -170,6 +181,42 @@ def _thay_ham_dung_session(che_do: str) -> Iterator[None]:
         phien.make_session = goc
 
 
+class _BoPhanLoai:
+    """Tầng 2 của ``classify.py`` (dòng 257–262), dựng thẳng — không qua ``classify()``.
+
+    Hai lý do không gọi được hàm production như embed/rerank: ``_init_router_model`` nạp
+    ``session.py`` bằng ``_load_sibling`` thành module riêng và giữ session ở biến toàn cục,
+    nên thay ``src.session.make_session`` không với tới; và tầng luật đứng trước ONNX — câu khớp
+    từ khoá không chạm ONNX. Bench dựng embedder + session đúng như ``_init_router_model``
+    (``make_session(tệp)``, không truyền số luồng ⇒ lấy ``OMP_NUM_THREADS``) và chép nguyên ba
+    dòng băm → ``run`` → đọc kết quả.
+    """
+
+    def __init__(self) -> None:
+        from src.roles.classify import INTENT_TAXONOMY, _find_path
+        from src.roles.router_embedder import RouterEmbedder
+        from src.session import make_session
+
+        tep_onnx = _find_path("artifacts/router_model.onnx")
+        tep_emb = _find_path("artifacts/router_embedder.json")
+        if tep_onnx is None or tep_emb is None:
+            raise SystemExit(f"Thiếu artifact router: onnx={tep_onnx}, embedder={tep_emb}")
+        self.embedder = RouterEmbedder.from_json(tep_emb)
+        if sorted(self.embedder.classes) != sorted(INTENT_TAXONOMY):
+            raise SystemExit(f"Lớp embedder {self.embedder.classes} không khớp taxonomy 7 ý định")
+        self.session = make_session(tep_onnx)
+        self.model_version = "onnx-" + hashlib.sha256(tep_onnx.read_bytes()).hexdigest()[:8]
+        self.bam_ms: list[float] = []
+
+    def phan_loai(self, cau: str) -> tuple[str, dict[str, float]]:
+        t = time.perf_counter()
+        vec = self.embedder.transform_single(cau)
+        self.bam_ms.append((time.perf_counter() - t) * 1000)
+        ten_vao = self.session.get_inputs()[0].name
+        ra = self.session.run(None, {ten_vao: vec.reshape(1, -1)})
+        return str(ra[0][0]), {k: round(float(v), 4) for k, v in ra[1][0].items()}
+
+
 # ── Đầu vào ──────────────────────────────────────────────────────────────────
 
 
@@ -182,7 +229,7 @@ def _yeu_cau(
     vai: str, tai: str, thu_muc_eval: Path, so_cau: int, so_ung_vien: int
 ) -> list[tuple[str, Any]]:
     """Danh sách (mã, đầu vào của một yêu cầu)."""
-    if vai == "embed" and tai == "cau-hoi":
+    if vai in ("embed", "classify") and tai == "cau-hoi":
         return [(d["id"], d["question"]) for d in _doc_jsonl(thu_muc_eval / "golden_set.jsonl")]
     dong = _doc_jsonl(thu_muc_eval / "rerank_cap_100x20.jsonl")[:so_cau]
     if vai == "embed":
@@ -206,8 +253,13 @@ def chay(args: argparse.Namespace) -> Path:
 
     if args.vai == "embed":
         from src.roles.embed import lay_bo_nhung as nap
-    else:
+    elif args.vai == "rerank":
         from src.roles.rerank import lay_bo_xep_hang as nap
+    else:
+        # Import trước khi đếm luồng: classify.py kéo theo fastapi/pydantic, không phải của ORT.
+        import src.roles.classify  # noqa: F401
+
+        nap = _BoPhanLoai
 
     yeu_cau = _yeu_cau(args.vai, args.tai, Path(args.eval), args.so_cau, args.so_ung_vien)
     vcpu = get_cgroup_cpus()
@@ -224,8 +276,10 @@ def chay(args: argparse.Namespace) -> Path:
     def mot_yeu_cau(dau_vao: Any) -> None:
         if args.vai == "embed":
             bo.nhung([dau_vao])
-        else:
+        elif args.vai == "rerank":
             bo.cham(*dau_vao)
+        else:
+            bo.phan_loai(dau_vao)
 
     # Warm-up: lượt đầu cấp phát arena bộ nhớ và dựng kernel — không phải chi phí của yêu cầu thật.
     for _, dau_vao in yeu_cau[: args.warmup]:
@@ -246,6 +300,8 @@ def chay(args: argparse.Namespace) -> Path:
                 "ms": (time.perf_counter() - t) * 1000,
                 "run_ms": sum(ms for _, ms in phien.luot[so_luot:]),
             })
+            if args.vai == "classify":
+                mau[-1]["bam_ms"] = bo.bam_ms[-1]
     giay_do = time.perf_counter() - t_do
     cpu_sau = _cpu_stat()
     cuoi = _trang_thai()
@@ -301,6 +357,9 @@ def chay(args: argparse.Namespace) -> Path:
         "mau": mau,
         "luot": phien.luot,
     }
+    if args.vai == "classify":
+        bam = [m["bam_ms"] for m in mau]
+        ket_qua["bam"] = {"p50_ms": phan_vi(bam, 0.5), "p95_ms": phan_vi(bam, 0.95)}
     vai_tai = args.vai if args.tai == "cau-hoi" else f"{args.vai}-{args.tai}"
     gio = time.strftime("%H%M%S")
     ra = Path(args.ra) / f"bench-{args.nhan}-{vai_tai}-{_so(vcpu)}vcpu-{args.che_do}-{gio}.json"
@@ -325,6 +384,11 @@ def _so(x: float | None, chu_so: int = 0) -> str:
 
 
 def _thoi_gian(ms: float) -> str:
+    """Router chạy dưới 1 ms — làm tròn tới ms thì mọi ô thành "0 ms"."""
+    if ms < 1:
+        return f"{_so(ms, 3)} ms"
+    if ms < 10:
+        return f"{_so(ms, 2)} ms"
     return f"{_so(ms)} ms" if ms < 1000 else f"{_so(ms / 1000, 1)} s"
 
 
@@ -402,20 +466,72 @@ def _bang_ghim(theo: dict[tuple[str, float, str], dict[str, Any]]) -> list[str]:
 
 
 def _bang_vcpu(theo: dict[tuple[str, float, str], dict[str, Any]]) -> list[str]:
+    """So các mức vCPU trong cùng chế độ — embed/rerank đo 2 và 4, router đo thêm 1."""
+    nhom: dict[tuple[str, str], dict[float, dict[str, Any]]] = {}
+    for (ten, vcpu, che_do), r in theo.items():
+        nhom.setdefault((ten, che_do), {})[vcpu] = r
     dong = [
-        "## 2 ↔ 4 vCPU (cùng chế độ)",
+        "## Theo mức vCPU (cùng chế độ)",
         "",
-        "| Model — tải | Chế độ | p50 2 / 4 vCPU | p95 2 / 4 vCPU | p95 4 ÷ 2 vCPU |",
+        "| Model — tải | Chế độ | vCPU | p50 | p95 | p95 ÷ mức thấp nhất | Lõi dùng TB |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for (ten, che_do), muc in nhom.items():
+        if len(muc) < 2:
+            continue
+        ds = [muc[v] for v in sorted(muc)]
+        p95_thap = ds[0]["p95_ms"]
+        dong.append(
+            f"| {ten} | {che_do} | {' / '.join(_so(r['vcpu_cgroup']) for r in ds)} "
+            f"| {' / '.join(_thoi_gian(r['p50_ms']) for r in ds)} "
+            f"| {' / '.join(_thoi_gian(r['p95_ms']) for r in ds)} "
+            f"| **{' / '.join(_ti_le(r['p95_ms'], p95_thap) for r in ds)}** "
+            f"| {' / '.join(_so(r['cgroup'].get('loi_dung_tb'), 2) for r in ds)} |"
+        )
+    return dong + [""]
+
+
+def _bang_lap(lan: list[dict[str, Any]]) -> list[str]:
+    """Lượt đầu ↔ lượt lặp của cùng cấu hình — biên trôi theo tải máy, chênh nhỏ hơn là nhiễu."""
+    theo: dict[tuple[str, float, str], list[dict[str, Any]]] = {}
+    for r in lan:
+        theo.setdefault((r["ten"], r["vcpu_cgroup"], r["che_do"]), []).append(r)
+    dong = [
+        "## Lượt đầu ↔ lượt lặp (biên trôi)",
+        "",
+        "| Model — tải | vCPU | Chế độ | p95 lượt đầu / lặp | Chênh p95 |",
         "|---|---|---|---|---|",
     ]
-    for (ten, vcpu, che_do), hai in theo.items():
-        bon = theo.get((ten, 4.0, che_do))
-        if vcpu != 2.0 or bon is None:
+    co = False
+    for (ten, vcpu, che_do), ds in theo.items():
+        if len(ds) < 2:
             continue
+        co = True
+        chenh = [_so(100 * (r["p95_ms"] / ds[0]["p95_ms"] - 1), 1) + "%" for r in ds[1:]]
         dong.append(
-            f"| {ten} | {che_do} | {_thoi_gian(hai['p50_ms'])} / {_thoi_gian(bon['p50_ms'])} "
-            f"| {_thoi_gian(hai['p95_ms'])} / {_thoi_gian(bon['p95_ms'])} "
-            f"| **{_ti_le(bon['p95_ms'], hai['p95_ms'])}** |"
+            f"| {ten} | {_so(vcpu)} | {che_do} "
+            f"| {' / '.join(_thoi_gian(r['p95_ms']) for r in ds)} | {' / '.join(chenh)} |"
+        )
+    return dong + [""] if co else []
+
+
+def _bang_chang(router: list[dict[str, Any]]) -> list[str]:
+    """Router: băm n-gram (Python, một luồng) ↔ ``run`` của ONNX Runtime trong cùng một mẫu."""
+    dong = [
+        "## Router — hai chặng của một mẫu",
+        "",
+        "| vCPU | Chế độ | Băm p50 / p95 | `run` p50 / p95 | Cả mẫu p95 "
+        "| Phần thời gian của `run` |",
+        "|---|---|---|---|---|---|",
+    ]
+    for r in router:
+        tong = sum(m["ms"] for m in r["mau"])
+        run = sum(m["run_ms"] for m in r["mau"])
+        dong.append(
+            f"| {_so(r['vcpu_cgroup'])} | {r['che_do']} "
+            f"| {_thoi_gian(r['bam']['p50_ms'])} / {_thoi_gian(r['bam']['p95_ms'])} "
+            f"| {_thoi_gian(r['luot_run']['p50_ms'])} / {_thoi_gian(r['luot_run']['p95_ms'])} "
+            f"| {_thoi_gian(r['p95_ms'])} | {_phan_tram(run / tong)} |"
         )
     return dong + [""]
 
@@ -468,10 +584,11 @@ def bang(args: argparse.Namespace) -> None:
         "",
         f"ONNX Runtime {r0['ort']} · {r0['kien_truc']} · VM nhìn thấy {r0['cpu_vm_nhin_thay']} CPU."
         " Mẫu = một yêu cầu (embed: một câu hỏi hoặc một đoạn; rerank: một câu hỏi × 20 cặp,"
-        " lô 1). Phân vị theo hạng gần nhất.",
+        " lô 1; router: một câu, băm + một lượt `run`). Phân vị theo hạng gần nhất.",
         "",
     ]
     dong += _bang_chinh(lan)
+    dong += _bang_lap(lan)
 
     # Lượt ĐẦU của mỗi (dòng, vCPU, chế độ) là lượt dùng để so. Lượt chạy lặp lại cuối buổi để
     # kiểm số có trôi theo tải máy hay không — chỉ ghi ở bảng chính, không chọn lượt đẹp hơn.
@@ -483,6 +600,9 @@ def bang(args: argparse.Namespace) -> None:
     rerank = [r for r in theo.values() if r["vai"] == "rerank"]
     if rerank:
         dong += _bang_do_dai(rerank)
+    router = [r for r in theo.values() if r["vai"] == "classify"]
+    if router:
+        dong += _bang_chang(router)
 
     noi_dung = "\n".join(dong)
     if args.ra:
@@ -497,7 +617,7 @@ def main() -> None:
     con = p.add_subparsers(dest="lenh", required=True)
 
     c = con.add_parser("chay", help="đo một cấu hình (trong container ai-inference)")
-    c.add_argument("--vai", choices=["embed", "rerank"], required=True)
+    c.add_argument("--vai", choices=["embed", "rerank", "classify"], required=True)
     c.add_argument("--che-do", choices=["ghim", "mac-dinh"], required=True)
     c.add_argument("--tai", choices=["cau-hoi", "doan"], default="cau-hoi", help="chỉ cho embed")
     c.add_argument("--nhan", required=True, help="tiền tố tên tệp kết quả, vd. n15")
@@ -505,8 +625,13 @@ def main() -> None:
     c.add_argument("--ra", default="reports/eval")
     c.add_argument("--so-cau", type=int, default=30, help="số dòng đầu rerank_cap_100x20.jsonl")
     c.add_argument("--so-ung-vien", type=int, default=20)
-    c.add_argument("--warmup", type=int, default=None, help="mặc định: embed 10, rerank 2")
-    c.add_argument("--vong", type=int, default=None, help="mặc định: embed câu hỏi 3, còn lại 1")
+    c.add_argument(
+        "--warmup", type=int, default=None, help="mặc định: embed 10, rerank 2, classify 20"
+    )
+    c.add_argument(
+        "--vong", type=int, default=None,
+        help="mặc định: embed câu hỏi 3, classify 10, còn lại 1",
+    )
 
     b = con.add_parser("bang", help="gộp các tệp JSON thành bảng Markdown (chạy trên máy)")
     b.add_argument("tep", nargs="+")
@@ -516,12 +641,14 @@ def main() -> None:
     if args.lenh == "bang":
         bang(args)
         return
-    if args.vai == "rerank" and args.tai != "cau-hoi":
+    if args.vai != "embed" and args.tai != "cau-hoi":
         p.error("--tai chỉ dùng cho embed")
     if args.warmup is None:
-        args.warmup = 10 if args.vai == "embed" else 2
+        args.warmup = {"embed": 10, "rerank": 2, "classify": 20}[args.vai]
     if args.vong is None:
-        args.vong = 3 if (args.vai, args.tai) == ("embed", "cau-hoi") else 1
+        # Router: một mẫu dưới 1 ms — 10 vòng (1.120 mẫu) gần như không tốn thời gian (§9.1).
+        vong = {("embed", "cau-hoi"): 3, ("classify", "cau-hoi"): 10}
+        args.vong = vong.get((args.vai, args.tai), 1)
     chay(args)
 
 
