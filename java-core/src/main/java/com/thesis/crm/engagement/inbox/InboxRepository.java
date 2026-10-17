@@ -1,9 +1,15 @@
 package com.thesis.crm.engagement.inbox;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.thesis.crm.common.enums.ConversationStatus;
+import com.thesis.crm.common.enums.SenderType;
 import com.thesis.crm.engagement.dto.response.ContactDtos.TagDto;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Timestamp;
+import com.thesis.crm.engagement.entity.Message;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.Query;
+import jakarta.persistence.TypedQuery;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -12,13 +18,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /**
- * SQL của hộp thư (UC012/UC013). Mọi câu có {@code tenant_id = :t} tường minh — lớp thứ hai cạnh
- * RLS, như các repository UC016/UC017. Gọi trong transaction đã {@code TenantTransactionScope.apply()}.
+ * Truy cập dữ liệu hộp thư (UC012/UC013) qua Entity {@code Conversation}, {@link Message}, {@code Channel}
+ * (JPA). Mọi truy vấn lọc {@code tenantId} tường minh — lớp thứ hai cạnh RLS. Gọi trong transaction đã
+ * {@code TenantTransactionScope.apply()}.
+ *
+ * <p><b>Đọc bằng phép chiếu, ghi bằng {@code UPDATE} JPQL — không nạp Entity hội thoại rồi sửa.</b> Hội
+ * thoại có cột do trigger cập nhật mỗi khi có tin mới (số tin, tin cuối…), và widget/phân công vẫn sửa
+ * bảng này bằng SQL ở nơi khác. Một Entity đã nạp vào bộ nhớ sẽ giữ bản CŨ: đọc lại trả số sai, còn sửa
+ * rồi so với bản cũ có thể bỏ sót thay đổi. Phép chiếu và {@code UPDATE} đi thẳng xuống CSDL nên luôn đúng.
+ *
+ * <p>Giữ nguyên chữ ký các hàm từ bản SQL tay, nên {@code InboxService} không phải đổi.
  */
 @Repository
 public class InboxRepository {
@@ -38,91 +50,105 @@ public class InboxRepository {
     public record Filter(String scope, UUID currentUserId, List<String> statuses, String channelType,
                          UUID tagId, String keyword, int page, int size) {}
 
-    private static final String CONV_SELECT = """
-            SELECT c.id, c.contact_id, coalesce(k.full_name, 'Khách chưa có tên') AS contact_name,
-                   ch.type AS channel_type, c.status, c.assigned_user_id, u.full_name AS assigned_name,
-                   c.priority, coalesce(c.last_message_at, c.created_at) AS last_at,
-                   c.last_message_preview, c.message_count, c.unread_count, c.created_at,
-                   c.first_agent_response_at, c.resolved_at, c.closed_reason
-            FROM engagement.conversations c
-            JOIN engagement.channels ch ON ch.id = c.channel_id AND ch.tenant_id = c.tenant_id
-            LEFT JOIN engagement.contacts k ON k.id = c.contact_id AND k.tenant_id = c.tenant_id
-            LEFT JOIN platform.users u ON u.id = c.assigned_user_id AND u.tenant_id = c.tenant_id
+    private static final String CONV_FROM = """
+            FROM Conversation c
+            JOIN Channel ch ON ch.id = c.channelId AND ch.tenantId = c.tenantId
+            LEFT JOIN Contact k ON k.id = c.contactId AND k.tenantId = c.tenantId
+            LEFT JOIN User u ON u.id = c.assignedUserId AND u.tenantId = c.tenantId
             """;
 
-    private final NamedParameterJdbcTemplate jdbc;
+    private static final String CONV_SELECT = """
+            SELECT c.id, c.contactId, coalesce(k.fullName, 'Khách chưa có tên'), ch.type, c.status,
+                   c.assignedUserId, u.fullName, c.priority, coalesce(c.lastMessageAt, c.createdAt),
+                   c.lastMessagePreview, c.messageCount, c.unreadCount, c.createdAt,
+                   c.firstAgentResponseAt, c.resolvedAt, c.closedReason
+            """ + CONV_FROM;
 
-    public InboxRepository(NamedParameterJdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    private static final String MSG_SELECT = """
+            SELECT m, u.fullName
+            FROM Message m
+            LEFT JOIN User u ON u.id = m.senderUserId AND u.tenantId = m.tenantId
+            """;
+
+    private final EntityManager em;
+    private final ObjectMapper json;
+
+    public InboxRepository(EntityManager em, ObjectMapper json) {
+        this.em = em;
+        this.json = json;
     }
 
     // ── đọc ─────────────────────────────────────────────────────────────────────
 
     public List<ConvRow> search(UUID tenantId, Filter f) {
-        MapSqlParameterSource p = params(tenantId, f);
-        p.addValue("lim", f.size()).addValue("off", (long) f.page() * f.size());
-        return jdbc.query(CONV_SELECT + where(f, p)
-                + " ORDER BY coalesce(c.last_message_at, c.created_at) DESC, c.id LIMIT :lim OFFSET :off",
-                p, InboxRepository::mapConv);
+        Map<String, Object> p = new HashMap<>();
+        TypedQuery<Object[]> q = em.createQuery(CONV_SELECT + where(tenantId, f, p)
+                        + " ORDER BY coalesce(c.lastMessageAt, c.createdAt) DESC, c.id", Object[].class)
+                .setFirstResult(f.page() * f.size())
+                .setMaxResults(f.size());
+        p.forEach(q::setParameter);
+        return q.getResultStream().map(InboxRepository::mapConv).toList();
     }
 
     public long count(UUID tenantId, Filter f) {
-        MapSqlParameterSource p = params(tenantId, f);
-        Long n = jdbc.queryForObject("""
-                SELECT count(*) FROM engagement.conversations c
-                JOIN engagement.channels ch ON ch.id = c.channel_id AND ch.tenant_id = c.tenant_id
-                LEFT JOIN engagement.contacts k ON k.id = c.contact_id AND k.tenant_id = c.tenant_id
-                """ + where(f, p), p, Long.class);
-        return n == null ? 0 : n;
-    }
-
-    private static MapSqlParameterSource params(UUID tenantId, Filter f) {
-        return new MapSqlParameterSource("t", tenantId);
+        Map<String, Object> p = new HashMap<>();
+        TypedQuery<Long> q = em.createQuery("""
+                SELECT count(c) FROM Conversation c
+                JOIN Channel ch ON ch.id = c.channelId AND ch.tenantId = c.tenantId
+                LEFT JOIN Contact k ON k.id = c.contactId AND k.tenantId = c.tenantId
+                """ + where(tenantId, f, p), Long.class);
+        p.forEach(q::setParameter);
+        return q.getSingleResult();
     }
 
     /** Điều kiện lọc. {@code mine} dùng userId trong JWT do service truyền — không nhận từ phía gọi. */
-    private static String where(Filter f, MapSqlParameterSource p) {
-        StringBuilder w = new StringBuilder(" WHERE c.tenant_id = :t");
+    private static String where(UUID tenantId, Filter f, Map<String, Object> p) {
+        StringBuilder w = new StringBuilder(" WHERE c.tenantId = :t");
+        p.put("t", tenantId);
         if ("mine".equals(f.scope())) {
-            w.append(" AND c.assigned_user_id = :me");
-            p.addValue("me", f.currentUserId());
+            w.append(" AND c.assignedUserId = :me");
+            p.put("me", f.currentUserId());
         } else if ("unassigned".equals(f.scope())) {
-            w.append(" AND c.assigned_user_id IS NULL");
+            w.append(" AND c.assignedUserId IS NULL");
         }
         if (f.statuses() != null && !f.statuses().isEmpty()) {
-            w.append(" AND c.status IN (:st)");
-            p.addValue("st", f.statuses());
+            w.append(" AND c.status IN :st");
+            p.put("st", f.statuses().stream().map(ConversationStatus::valueOf).toList());
         }
         if (f.channelType() != null) {
             w.append(" AND ch.type = :ct");
-            p.addValue("ct", f.channelType());
+            p.put("ct", f.channelType());
         }
         if (f.tagId() != null) {
-            w.append(" ").append("""
-                     AND EXISTS (SELECT 1 FROM engagement.contact_tags x
-                                 WHERE x.tenant_id = c.tenant_id AND x.contact_id = c.contact_id AND x.tag_id = :tag)""");
-            p.addValue("tag", f.tagId());
+            w.append(" AND EXISTS (SELECT 1 FROM ContactTag x")
+                    .append(" WHERE x.tenantId = c.tenantId AND x.contactId = c.contactId AND x.tagId = :tag)");
+            p.put("tag", f.tagId());
         }
         if (f.keyword() != null && !f.keyword().isBlank()) {
             // Không dấu, giống ô tìm của danh bạ (engagement.fold_vi, V124)
-            w.append(" ").append("""
-                     AND engagement.fold_vi(coalesce(k.full_name, '') || ' ' || coalesce(c.last_message_preview, ''))
-                         LIKE '%' || engagement.fold_vi(:kw) || '%'""");
-            p.addValue("kw", f.keyword().strip());
+            // function() không biết kiểu trả về → ép về String thì LIKE mới chấp nhận
+            w.append(" AND cast(function('engagement.fold_vi',")
+                    .append(" concat(coalesce(k.fullName, ''), ' ', coalesce(c.lastMessagePreview, ''))) as String)")
+                    .append(" LIKE concat('%', cast(function('engagement.fold_vi', :kw) as String), '%')");
+            p.put("kw", f.keyword().strip());
         }
         return w.toString();
     }
 
     public Optional<ConvRow> find(UUID tenantId, UUID conversationId) {
-        return jdbc.query(CONV_SELECT + " WHERE c.tenant_id = :t AND c.id = :c",
-                new MapSqlParameterSource("t", tenantId).addValue("c", conversationId), InboxRepository::mapConv)
-                .stream().findFirst();
+        return em.createQuery(CONV_SELECT + " WHERE c.tenantId = :t AND c.id = :c", Object[].class)
+                .setParameter("t", tenantId)
+                .setParameter("c", conversationId)
+                .getResultStream().findFirst().map(InboxRepository::mapConv);
     }
 
     /** Khoá dòng hội thoại: hai nhân viên cùng bấm "Nhận" / cùng gửi tin đầu thì một người thắng. */
     public Optional<ConvRow> lock(UUID tenantId, UUID conversationId) {
-        jdbc.query("SELECT 1 FROM engagement.conversations WHERE tenant_id = :t AND id = :c FOR UPDATE",
-                new MapSqlParameterSource("t", tenantId).addValue("c", conversationId), rs -> { });
+        em.createQuery("SELECT c FROM Conversation c WHERE c.tenantId = :t AND c.id = :c")
+                .setParameter("t", tenantId)
+                .setParameter("c", conversationId)
+                .setLockMode(LockModeType.PESSIMISTIC_WRITE)
+                .getResultList();
         return find(tenantId, conversationId);
     }
 
@@ -132,43 +158,36 @@ public class InboxRepository {
         if (contactIds.isEmpty()) {
             return out;
         }
-        jdbc.query("""
-                SELECT ct.contact_id, t.id, t.name, t.color, t.usage_count
-                FROM engagement.contact_tags ct
-                JOIN engagement.tags t ON t.id = ct.tag_id AND t.tenant_id = ct.tenant_id
-                WHERE ct.tenant_id = :t AND ct.contact_id IN (:ids)
-                ORDER BY t.name
-                """,
-                new MapSqlParameterSource("t", tenantId).addValue("ids", contactIds),
-                rs -> {
-                    out.computeIfAbsent(rs.getObject("contact_id", UUID.class), k -> new ArrayList<>())
-                            .add(new TagDto(rs.getObject("id", UUID.class), rs.getString("name"),
-                                    rs.getString("color"), rs.getInt("usage_count")));
-                });
+        em.createQuery("""
+                SELECT ct.contactId, t.id, t.name, t.color, t.usageCount
+                FROM ContactTag ct
+                JOIN Tag t ON t.id = ct.tagId AND t.tenantId = ct.tenantId
+                WHERE ct.tenantId = :t AND ct.contactId IN :ids
+                ORDER BY t.name""", Object[].class)
+                .setParameter("t", tenantId)
+                .setParameter("ids", contactIds)
+                .getResultStream()
+                .forEach(r -> out.computeIfAbsent((UUID) r[0], k -> new ArrayList<>())
+                        .add(new TagDto((UUID) r[1], (String) r[2], (String) r[3], ((Number) r[4]).intValue())));
         return out;
     }
 
     /**
      * Trang tin mới nhất (lấy {@code limit + 1} để biết còn tin cũ hơn không), trả theo thời gian
-     * TĂNG dần. Con trỏ là {@code sent_at} — thứ tự hiển thị của hội thoại.
+     * TĂNG dần ở service. Con trỏ là {@code sent_at} — thứ tự hiển thị của hội thoại.
      */
     public List<MsgRow> messages(UUID tenantId, UUID conversationId, Instant before, int limitPlusOne) {
-        MapSqlParameterSource p = new MapSqlParameterSource("t", tenantId).addValue("c", conversationId)
-                .addValue("lim", limitPlusOne);
-        String cond = "";
+        TypedQuery<Object[]> q = em.createQuery(MSG_SELECT
+                        + " WHERE m.tenantId = :t AND m.conversationId = :c"
+                        + (before != null ? " AND m.sentAt < :before" : "")
+                        + " ORDER BY m.sentAt DESC, m.id DESC", Object[].class)
+                .setParameter("t", tenantId)
+                .setParameter("c", conversationId)
+                .setMaxResults(limitPlusOne);
         if (before != null) {
-            cond = " AND m.sent_at < :before";
-            p.addValue("before", Timestamp.from(before));
+            q.setParameter("before", before);
         }
-        return jdbc.query("""
-                SELECT m.id, m.sender_type, m.sender_user_id, u.full_name AS sender_name, m.content,
-                       m.content_type, m.delivery_status, m.attachments::text AS attachments,
-                       m.ai_interaction_id, m.metadata::text AS metadata, m.created_at, m.sent_at
-                FROM engagement.messages m
-                LEFT JOIN platform.users u ON u.id = m.sender_user_id AND u.tenant_id = m.tenant_id
-                WHERE m.tenant_id = :t AND m.conversation_id = :c""" + cond + """
-                 ORDER BY m.sent_at DESC, m.id DESC LIMIT :lim
-                """, p, InboxRepository::mapMsg);
+        return q.getResultStream().map(this::mapMsg).toList();
     }
 
     /**
@@ -176,119 +195,136 @@ public class InboxRepository {
      * đang hết — trả lại cho AI lúc này là lách hạn mức (widget chỉ kiểm hạn mức khi mở hội thoại mới).
      */
     public boolean blockedByQuota(UUID tenantId, UUID conversationId) {
-        Boolean b = jdbc.queryForObject("""
-                SELECT c.handover_reason = 'QUOTA_EXCEEDED' AND EXISTS (
-                         SELECT 1 FROM platform.usage_records u
-                         JOIN platform.tenant_subscriptions s ON s.id = u.subscription_id AND s.tenant_id = u.tenant_id
-                         WHERE u.tenant_id = c.tenant_id AND u.metric = 'CONVERSATION'
-                           AND s.status IN ('TRIALING','ACTIVE','PAST_DUE') AND u.used_value >= u.quota_value)
-                FROM engagement.conversations c WHERE c.tenant_id = :t AND c.id = :c
-                """, new MapSqlParameterSource("t", tenantId).addValue("c", conversationId), Boolean.class);
-        return Boolean.TRUE.equals(b);
+        List<String> lyDo = em.createQuery(
+                        "SELECT c.handoverReason FROM Conversation c WHERE c.tenantId = :t AND c.id = :c", String.class)
+                .setParameter("t", tenantId)
+                .setParameter("c", conversationId)
+                .getResultList();
+        if (lyDo.isEmpty() || !"QUOTA_EXCEEDED".equals(lyDo.get(0))) {
+            return false;
+        }
+        return em.createQuery("""
+                SELECT count(u) FROM UsageRecord u, TenantSubscription s
+                WHERE s.id = u.subscriptionId AND s.tenantId = u.tenantId AND u.tenantId = :t
+                  AND u.metric = 'CONVERSATION' AND s.status IN ('TRIALING', 'ACTIVE', 'PAST_DUE')
+                  AND u.usedValue >= u.quotaValue""", Long.class)
+                .setParameter("t", tenantId)
+                .getSingleResult() > 0;
     }
 
     /** Người dùng còn hoạt động của doanh nghiệp — đích hợp lệ khi phân công. */
     public Optional<String> activeUserName(UUID tenantId, UUID userId) {
-        return jdbc.query("""
-                SELECT full_name FROM platform.users WHERE tenant_id = :t AND id = :u AND status = 'ACTIVE'
-                """, new MapSqlParameterSource("t", tenantId).addValue("u", userId), (rs, i) -> rs.getString(1))
-                .stream().findFirst();
+        return em.createQuery(
+                        "SELECT u.fullName FROM User u WHERE u.tenantId = :t AND u.id = :u AND u.status = 'ACTIVE'",
+                        String.class)
+                .setParameter("t", tenantId)
+                .setParameter("u", userId)
+                .getResultStream().findFirst();
     }
 
     // ── ghi ─────────────────────────────────────────────────────────────────────
 
+    /**
+     * Tin nhân viên/hệ thống gửi đi. {@code sent_at} lấy giờ thật lúc ghi (như {@code clock_timestamp()}
+     * trước đây), không phải mốc đầu transaction — hai tin trong cùng một request vẫn đúng thứ tự.
+     */
     public MsgRow insertMessage(UUID tenantId, UUID conversationId, String senderType, UUID senderUserId,
                                 String content, String deliveryStatus) {
-        UUID id = jdbc.queryForObject("""
-                INSERT INTO engagement.messages
-                    (tenant_id, conversation_id, sender_type, sender_user_id, direction, content,
-                     delivery_status, sent_at)
-                VALUES (:t, :c, :s, :u, 'OUTBOUND', :content, :d, clock_timestamp())
-                RETURNING id
-                """,
-                new MapSqlParameterSource("t", tenantId).addValue("c", conversationId).addValue("s", senderType)
-                        .addValue("u", senderUserId).addValue("content", content).addValue("d", deliveryStatus),
-                UUID.class);
-        return jdbc.query("""
-                SELECT m.id, m.sender_type, m.sender_user_id, u.full_name AS sender_name, m.content,
-                       m.content_type, m.delivery_status, m.attachments::text AS attachments,
-                       m.ai_interaction_id, m.metadata::text AS metadata, m.created_at, m.sent_at
-                FROM engagement.messages m
-                LEFT JOIN platform.users u ON u.id = m.sender_user_id AND u.tenant_id = m.tenant_id
-                WHERE m.tenant_id = :t AND m.id = :id
-                """, new MapSqlParameterSource("t", tenantId).addValue("id", id), InboxRepository::mapMsg).get(0);
+        Message m = new Message(tenantId, conversationId, SenderType.valueOf(senderType), senderUserId,
+                "OUTBOUND", content);
+        m.setDeliveryStatus(deliveryStatus);
+        m.setSentAt(Instant.now());
+        em.persist(m);
+        em.flush(); // trigger cộng số tin của hội thoại chạy ngay tại đây
+        return em.createQuery(MSG_SELECT + " WHERE m.tenantId = :t AND m.id = :id", Object[].class)
+                .setParameter("t", tenantId)
+                .setParameter("id", m.getId())
+                .getResultStream().findFirst().map(this::mapMsg).orElseThrow();
     }
 
     /** Giao cho một nhân viên → AGENT_HANDLING (AI ngừng tự trả lời). */
     public void assign(UUID tenantId, UUID conversationId, UUID userId) {
-        jdbc.update("""
-                UPDATE engagement.conversations
-                SET assigned_user_id = :u, assigned_at = now(), status = 'AGENT_HANDLING',
-                    queued_at = NULL, priority = 'NORMAL', updated_at = now()
-                WHERE tenant_id = :t AND id = :c
-                """,
-                new MapSqlParameterSource("t", tenantId).addValue("c", conversationId).addValue("u", userId));
+        update("""
+                UPDATE Conversation c
+                SET c.assignedUserId = :u, c.assignedAt = current_timestamp, c.status = :st,
+                    c.queuedAt = NULL, c.priority = 'NORMAL'
+                WHERE c.tenantId = :t AND c.id = :c""", tenantId, conversationId)
+                .setParameter("u", userId)
+                .setParameter("st", ConversationStatus.AGENT_HANDLING)
+                .executeUpdate();
     }
 
     /** Trả lại cho AI: bỏ người phụ trách. handover_at/reason giữ làm lịch sử (ck_conv_handover). */
     public void returnToBot(UUID tenantId, UUID conversationId) {
-        jdbc.update("""
-                UPDATE engagement.conversations
-                SET status = 'BOT_HANDLING', assigned_user_id = NULL, assigned_at = NULL, queued_at = NULL,
-                    priority = 'NORMAL', updated_at = now()
-                WHERE tenant_id = :t AND id = :c
-                """, new MapSqlParameterSource("t", tenantId).addValue("c", conversationId));
+        update("""
+                UPDATE Conversation c
+                SET c.status = :st, c.assignedUserId = NULL, c.assignedAt = NULL, c.queuedAt = NULL,
+                    c.priority = 'NORMAL'
+                WHERE c.tenantId = :t AND c.id = :c""", tenantId, conversationId)
+                .setParameter("st", ConversationStatus.BOT_HANDLING)
+                .executeUpdate();
     }
 
     /** Nhân viên chủ động lấy hội thoại khỏi AI → hàng chờ nhân viên. */
     public void handoffToAgent(UUID tenantId, UUID conversationId, String reason) {
-        jdbc.update("""
-                UPDATE engagement.conversations
-                SET status = 'PENDING_AGENT', handover_at = now(), handover_reason = :r, queued_at = now(),
-                    updated_at = now()
-                WHERE tenant_id = :t AND id = :c
-                """,
-                new MapSqlParameterSource("t", tenantId).addValue("c", conversationId).addValue("r", reason));
+        update("""
+                UPDATE Conversation c
+                SET c.status = :st, c.handoverAt = current_timestamp, c.handoverReason = :r,
+                    c.queuedAt = current_timestamp
+                WHERE c.tenantId = :t AND c.id = :c""", tenantId, conversationId)
+                .setParameter("st", ConversationStatus.PENDING_AGENT)
+                .setParameter("r", reason)
+                .executeUpdate();
     }
 
     public void close(UUID tenantId, UUID conversationId, String status, String reason) {
-        jdbc.update("""
-                UPDATE engagement.conversations
-                SET status = :s, closed_reason = :r,
-                    resolved_at = CASE WHEN :s = 'RESOLVED' THEN now() ELSE resolved_at END,
-                    updated_at = now()
-                WHERE tenant_id = :t AND id = :c
-                """,
-                new MapSqlParameterSource("t", tenantId).addValue("c", conversationId).addValue("s", status)
-                        .addValue("r", reason));
+        ConversationStatus st = ConversationStatus.valueOf(status);
+        update("""
+                UPDATE Conversation c
+                SET c.status = :st, c.closedReason = :r,
+                    c.resolvedAt = CASE WHEN :resolved = true THEN current_timestamp ELSE c.resolvedAt END
+                WHERE c.tenantId = :t AND c.id = :c""", tenantId, conversationId)
+                .setParameter("st", st)
+                .setParameter("r", reason)
+                .setParameter("resolved", st == ConversationStatus.RESOLVED)
+                .executeUpdate();
     }
 
     public void markRead(UUID tenantId, UUID conversationId) {
-        jdbc.update("UPDATE engagement.conversations SET unread_count = 0 WHERE tenant_id = :t AND id = :c",
-                new MapSqlParameterSource("t", tenantId).addValue("c", conversationId));
+        update("UPDATE Conversation c SET c.unreadCount = 0 WHERE c.tenantId = :t AND c.id = :c",
+                tenantId, conversationId)
+                .executeUpdate();
     }
 
     // ── ánh xạ ──────────────────────────────────────────────────────────────────
 
-    private static ConvRow mapConv(ResultSet rs, int i) throws SQLException {
-        return new ConvRow(rs.getObject("id", UUID.class), rs.getObject("contact_id", UUID.class),
-                rs.getString("contact_name"), rs.getString("channel_type"), rs.getString("status"),
-                rs.getObject("assigned_user_id", UUID.class), rs.getString("assigned_name"),
-                rs.getString("priority"), ts(rs, "last_at"), rs.getString("last_message_preview"),
-                rs.getInt("message_count"), rs.getInt("unread_count"), ts(rs, "created_at"),
-                ts(rs, "first_agent_response_at"), ts(rs, "resolved_at"), rs.getString("closed_reason"));
+    /** {@code updated_at} do trigger {@code trg_touch_updated_at} đặt — các câu UPDATE không cần ghi. */
+    private Query update(String jpql, UUID tenantId, UUID conversationId) {
+        return em.createQuery(jpql)
+                .setParameter("t", tenantId)
+                .setParameter("c", conversationId);
     }
 
-    private static MsgRow mapMsg(ResultSet rs, int i) throws SQLException {
-        return new MsgRow(rs.getObject("id", UUID.class), rs.getString("sender_type"),
-                rs.getObject("sender_user_id", UUID.class), rs.getString("sender_name"), rs.getString("content"),
-                rs.getString("content_type"), rs.getString("delivery_status"), rs.getString("attachments"),
-                rs.getObject("ai_interaction_id", UUID.class), rs.getString("metadata"),
-                ts(rs, "created_at"), ts(rs, "sent_at"));
+    private static ConvRow mapConv(Object[] r) {
+        return new ConvRow((UUID) r[0], (UUID) r[1], (String) r[2], (String) r[3],
+                ((ConversationStatus) r[4]).name(), (UUID) r[5], (String) r[6], (String) r[7], (Instant) r[8],
+                (String) r[9], (Integer) r[10], (Integer) r[11], (Instant) r[12], (Instant) r[13],
+                (Instant) r[14], (String) r[15]);
     }
 
-    private static Instant ts(ResultSet rs, String col) throws SQLException {
-        Timestamp t = rs.getTimestamp(col);
-        return t == null ? null : t.toInstant();
+    private MsgRow mapMsg(Object[] r) {
+        Message m = (Message) r[0];
+        return new MsgRow(m.getId(), m.getSenderType().name(), m.getSenderUserId(), (String) r[1], m.getContent(),
+                m.getContentType(), m.getDeliveryStatus(), toJson(m.getAttachments()), m.getAiInteractionId(),
+                toJson(m.getMetadata()), m.getCreatedAt(), m.getSentAt());
+    }
+
+    /** Service đọc lại hai cột JSON bằng {@code readJson} — giữ dạng chuỗi như bản SQL ({@code ::text}). */
+    private String toJson(Object value) {
+        try {
+            return json.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Không chuyển được JSON của tin nhắn", e);
+        }
     }
 }
