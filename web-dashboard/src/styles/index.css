@@ -64,14 +64,15 @@
     --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
     --popover-foreground: oklch(0.145 0 0);
-    /* Chàm — màu thương hiệu. Chữ trắng đè lên đạt 6,03:1 (ngưỡng WCAG AA là 4,5:1). */
-    --primary: oklch(0.51 0.19 266);
+    /* Navy — màu thương hiệu, dùng chung cho trang doanh nghiệp lẫn quản trị nền tảng. Chữ trắng đè lên
+       đạt 10,4:1 (ngưỡng WCAG AA là 4,5:1). Nền phụ ngả rất nhẹ về navy thay vì xám trung tính. */
+    --primary: oklch(0.379 0.138 265.5);
     --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
+    --secondary: oklch(0.967 0.006 265);
     --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
+    --muted: oklch(0.967 0.006 265);
     --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
+    --accent: oklch(0.955 0.012 265);
     --accent-foreground: oklch(0.205 0 0);
     --destructive: oklch(0.577 0.245 27.325);
     --destructive-foreground: oklch(0.985 0 0);
@@ -79,11 +80,11 @@
     --success-foreground: oklch(0.985 0 0);
     --warning: oklch(0.62 0.15 70);
     --warning-foreground: oklch(0.145 0 0);
-    --info: oklch(0.51 0.19 266);
+    --info: oklch(0.454 0.149 264.6);
     --info-foreground: oklch(0.985 0 0);
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
-    --ring: oklch(0.62 0.15 266);
+    --ring: oklch(0.55 0.12 265);
     /* Bảng màu chuỗi dữ liệu — giữ nguyên mã hex đã qua kiểm định, không quy đổi sang
        oklch để tránh sai số làm lệch kết quả. Thứ tự slot CHÍNH LÀ cơ chế an toàn cho
        người mù màu: gán theo thứ tự cố định, không bao giờ xoay vòng.
@@ -94,14 +95,14 @@
     --chart-4: #eda100; /* vàng */
     --chart-5: #e87ba4; /* hồng sen */
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
+    --sidebar: oklch(0.982 0.004 265);
     --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.51 0.19 266);
+    --sidebar-primary: oklch(0.379 0.138 265.5);
     --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-accent: oklch(0.945 0.016 265);
+    --sidebar-accent-foreground: oklch(0.282 0.087 267.9);
     --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.62 0.15 266);
+    --sidebar-ring: oklch(0.55 0.12 265);
 }
 
 .dark {
@@ -111,9 +112,9 @@
     --card-foreground: oklch(0.985 0 0);
     --popover: oklch(0.205 0 0);
     --popover-foreground: oklch(0.985 0 0);
-    /* Chàm nhạt + chữ tối — 7,20:1 cho chữ, 7,87:1 so với nền tối. */
-    --primary: oklch(0.72 0.14 266);
-    --primary-foreground: oklch(0.2 0.05 266);
+    /* Navy nhạt + chữ navy đậm — 7,0:1 cho chữ, 8,5:1 so với card tối #171717. */
+    --primary: oklch(0.767 0.091 261.5);
+    --primary-foreground: oklch(0.282 0.087 267.9);
     --secondary: oklch(0.269 0 0);
     --secondary-foreground: oklch(0.985 0 0);
     --muted: oklch(0.269 0 0);
@@ -126,11 +127,11 @@
     --success-foreground: oklch(0.145 0 0);
     --warning: oklch(0.78 0.15 75);
     --warning-foreground: oklch(0.145 0 0);
-    --info: oklch(0.72 0.14 266);
-    --info-foreground: oklch(0.2 0.05 266);
+    --info: oklch(0.767 0.091 261.5);
+    --info-foreground: oklch(0.282 0.087 267.9);
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.62 0.15 266);
+    --ring: oklch(0.6 0.1 262);
     /* Cùng 5 sắc màu, đã bước lại cho nền tối — không phải lật màu tự động.
        Kiểm định trên nền card #171717: CVD ΔE 8,4 · thị lực thường ΔE 19,3 — đạt. */
     --chart-1: #3987e5;
@@ -140,12 +141,12 @@
     --chart-5: #d55181;
     --sidebar: oklch(0.205 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.72 0.14 266);
-    --sidebar-primary-foreground: oklch(0.2 0.05 266);
+    --sidebar-primary: oklch(0.767 0.091 261.5);
+    --sidebar-primary-foreground: oklch(0.282 0.087 267.9);
     --sidebar-accent: oklch(0.269 0 0);
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.62 0.15 266);
+    --sidebar-ring: oklch(0.6 0.1 262);
 }
 
 @layer base {
