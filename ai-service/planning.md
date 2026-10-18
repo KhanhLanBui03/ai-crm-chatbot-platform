@@ -1432,15 +1432,33 @@ tấn công qua ĐƯỜNG NGÔN NGỮ chứ không qua đường SQL.**
 
 **Việc:**
 
-- [ ] 🖐 **BÀI (1) — CÁCH LY TENANT QUA NGÔN NGỮ.** Hỏi tenant A một câu **chỉ trả lời được bằng
+- [x] 🖐 **BÀI (1) — CÁCH LY TENANT QUA NGÔN NGỮ.** Hỏi tenant A một câu **chỉ trả lời được bằng
       tài liệu của B** → phải **TỪ CHỐI**, không phải trả lời sai và cũng không phải trả lời đúng.
       ⚠️ **Đây là bài quan trọng nhất:** RLS chặn được truy vấn, nhưng **chỉ bài này** chứng minh
       mô hình không trở thành đường vòng qua RLS.
+      → ✅ \* 18/10 (`docs/report/bao-mat-ngay17-2026-10-18.md` §2.1–2.3). Tenant B (nha khoa) đi trọn
+      UC018/019 thật qua java-core. A từ chối **11/11** câu hợp lệ (cả 11 qua Gemini), **0 LỘ / 19 câu**,
+      tầng truy hồi 0/380 đoạn lạ. `*`: lượt đầu chỉ có 2 câu hợp lệ (router đưa 8/10 vào hỏi lại), nên
+      bộ câu bổ sung được sàng bằng router, cách sàng chốt sau lượt đầu.
 - ~~🖐 **BÀI (2) — CÁCH LY CACHE.**~~ **Không áp dụng** (đổi 10/10/2026): Ngày 16 đã bỏ nên không
   có semantic cache để kiểm. Ghi "không áp dụng" kèm lý do vào bảng 5 bài, không để trống.
-- [ ] 🖐 **BÀI (3) — PII TRONG LOG.** Grep tự động tìm số điện thoại, email, nội dung tin nhắn
+- [x] 🖐 **BÀI (3) — PII TRONG LOG.** Grep tự động tìm số điện thoại, email, nội dung tin nhắn
       thô trên **TOÀN BỘ** log.
-- [ ] 🖐 Xác nhận `ai-service` kết nối CSDL bằng role **`ai_app`** (không phải `crm_owner`).
+      → Lượt đầu ❌ theo tiêu chí chốt trước: 1 khớp mẫu SĐT, là đoạn giữa UUID (dương tính giả).
+      Đo lại ✅ \* trên cửa sổ log mới: mẫu SĐT đã sửa, 6 đầu dò (2 qua Gemini), kết quả 0 · 0 · 0 trên
+      log ai-service, worker và 3 container suy luận (§2.5–2.5.1). java-core ghi email + OTP + token đặt
+      lại mật khẩu ở dạng rõ ⇒ gửi Dev B. Phát hiện phụ: `mask_pii` không che họ tên.
+- [x] 🖐 Xác nhận `ai-service` kết nối CSDL bằng role **`ai_app`** (không phải `crm_owner`).
+      → ✅ 18/10 (§2.4): `current_user = ai_app` qua chính engine của ai-service. Hai PID ai-service giữ
+      2 kết nối, khớp `ai_app` 2; `crm_owner` 0. `ai_app` không có `rolsuper` hay `rolbypassrls`, không làm
+      chủ bảng nào. (Lượt đầu ghép theo cổng ra 0 dòng vì proxy Docker Desktop ⇒ vô hiệu, đổi sang đối
+      chiếu số đếm.)
+- [x] **Kiểm lỗ hổng `contact_id`** (thêm 18/10, nợ chuyển từ Ngày 12 — ADR-0033 "Đánh đổi"): tài liệu
+      riêng của một khách nằm trong kho chung có bị trích cho khách khác không. `contact_id` mới dùng để
+      xoá, chưa lọc truy hồi. Người dùng chốt 18/10: **chỉ kiểm và ghi nhận**; sửa cần `ChatRequest` mang
+      `contact_id`, tức là đổi hợp đồng với java-core, nên làm cùng đợt tích hợp giao diện.
+      → **TÁI HIỆN** 18/10 (§2.6): tài liệu riêng của khách KH-B17-0042 đứng hạng 2/20 khi khách khác
+      hỏi, và câu trả lời nêu cả mã khách lẫn giá riêng `61.500.000`. Đã gỡ khỏi chỉ mục (UC020).
 
 **Chạm Dev B:** Dev B làm 2 bài còn lại (payload không định danh · bộ adversarial) + UC038.
 **Tổng 5 bài** — bài thứ 6 về "quyền công cụ" thuộc sheet *Mở rộng sau đồ án*, ghi **"không áp
@@ -1454,6 +1472,10 @@ dụng" kèm lý do**, không để ô trống.
 
 **Minh chứng báo cáo:** 2/2 bài đạt, bài 2 ghi "không áp dụng" · ảnh chụp tenant A **TỪ CHỐI đúng** khi được hỏi về tài liệu
 của B · kết quả grep PII = 0 · ảnh chụp `SELECT current_user` = `ai_app`.
+
+→ **Cổng ra: đạt \*** (18/10). Theo tiêu chí chốt trước khi có số: bài (1) "không đủ căn cứ", bài (3) "trượt". Chương 5
+ghi cả hai lớp số. Minh chứng dạng văn bản: báo cáo §2 và `reports/eval/n17/*.json` (không commit). Ảnh chụp thì
+người dùng tự chụp lại khi viết chương 5: chạy lại `python -m tests.eval.bao_mat_ngay17 role` và một lượt S12 trên A.
 
 ---
 
@@ -1635,7 +1657,7 @@ ERD khớp 100% migration · bảng nghiệm thu 17/17 UC × trạng thái × s�
 | 2 | Tổng p95 phần suy luận CPU | < 480 ms (classify 60 + embed 120 + rerank 300) | N13, N15 | | |
 | 3 | recall@5 trên bộ vàng | **≥ 0,85** (bộ vàng ≥ 80 cặp) | N13, N20 ⏸ | | |
 | 4 | Độ phủ trích dẫn | ≥ 0,80 | N13, N20 ⏸ | | |
-| 5 | Rò rỉ dữ liệu giữa tenant | **0 trường hợp** | N1, N7, N17, N18 ⏸ | | |
+| 5 | Rò rỉ dữ liệu giữa tenant | **0 trường hợp** | N1, N7, N17, N18 ⏸ | N17: 0/19 câu qua `/v1/ai/chat` · tầng truy hồi 0/380 đoạn lạ (`docs/report/bao-mat-ngay17-2026-10-18.md`) | N17 ✅ \* |
 | 6 | Flyway V201–V209 chạy sạch | 9 dòng history, 6 bảng, đủ chỉ mục | N1 | | |
 | 7 | Test cách ly tenant trong CI | **3/3 ca xanh** | N1 | | |
 | 8 | Dung lượng image `ai-service` | **< 400 MB** (đang 776 MB) | N1, N20 ⏸ (N16 đã bỏ) | | |
@@ -1650,10 +1672,10 @@ ERD khớp 100% migration · bảng nghiệm thu 17/17 UC × trạng thái × s�
 | 17 | Cổng quyết định bật rerank | ≥ 5 điểm nDCG@5 **VÀ** p95 < 4 s | N8 → N15 | | |
 | 18 | 30 câu hỏi ngoài phạm vi trả rỗng đúng | **30/30** | N10 | | |
 | 19 | Eval harness tái lập được | Chạy 2 lần ra cùng con số; mỗi số kèm config | N13, N20 ⏸ | | |
-| 20 | Cách ly tenant qua **ĐƯỜNG NGÔN NGỮ** | Hỏi A về tài liệu B → phải **TỪ CHỐI** | N17 | | |
-| 21 | Cách ly bộ nhớ đệm ngữ nghĩa | 2 tenant → 2 câu trả lời từ 2 kho tri thức | N17 | không áp dụng — N16 đã bỏ, không có cache | |
-| 22 | PII trong log *(cùng Dev B)* | grep tự động = **0** | N17 | | |
-| 23 | Năm bài kiểm thử bảo mật *(cùng Dev B)* | 5/5 đạt (bài "quyền công cụ" ghi *không áp dụng*) | N17, N20 ⏸ | | |
+| 20 | Cách ly tenant qua **ĐƯỜNG NGÔN NGỮ** | Hỏi A về tài liệu B → phải **TỪ CHỐI** | N17 | A từ chối 11/11 câu hợp lệ (cả 11 qua Gemini), 0 LỘ / 19 câu. Lượt đầu: 2/2, không đủ căn cứ (router đưa 8/10 vào hỏi lại) | ✅ \* (sàng router chốt sau lượt đầu) |
+| 21 | Cách ly bộ nhớ đệm ngữ nghĩa | 2 tenant → 2 câu trả lời từ 2 kho tri thức | N17 | không áp dụng — N16 đã bỏ, không có cache; `is_cached` 0/167 lượt | không áp dụng |
+| 22 | PII trong log *(cùng Dev B)* | grep tự động = **0** | N17 | Track B — lượt đầu: 1 khớp mẫu SĐT (đoạn UUID, dương tính giả); đo lại trên cửa sổ log mới, 6 đầu dò (2 qua Gemini): 0 · 0 · 0. java-core: email + token trong log (gửi Dev B) | lượt đầu ❌ · đo lại ✅ \* |
+| 23 | Năm bài kiểm thử bảo mật *(cùng Dev B)* | 5/5 đạt (bài "quyền công cụ" ghi *không áp dụng*) | N17, N20 ⏸ | Phần Dev A: (1) ✅\* · (2) không áp dụng · (3) ✅\* · role `ai_app` ✅. Phần Dev B (payload không định danh, adversarial): chưa có. Quyền công cụ: không áp dụng | dở — chờ Dev B |
 | 24 | Baseline 10 người dùng / 10 phút | p95 < 2.500 ms, lỗi 0% | N19 ⏸ | chưa đo (hoãn) | |
 | 25 | Tải mục tiêu 50 người dùng / 15 phút | p95 < 4.000 ms, lỗi < 1%, KHÔNG tăng dần | N19 ⏸ | chưa đo (hoãn) | |
 | 26 | Nguồn dữ liệu thử nghiệm *(cùng Dev B)* | Ghi rõ tự soạn/công khai hay đã ẩn danh | N18 ⏸, N21 ⏸ | | |

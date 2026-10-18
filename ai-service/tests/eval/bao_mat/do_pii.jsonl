@@ -1,0 +1,4 @@
+{"id": "P1", "tenant": "A", "tin_nhan": "Mình là Trần Thị Mẫu, số điện thoại 0912 345 678, email mau.n17@example.com. Máy lạnh mua ở đây bảo hành bao lâu?", "pii": ["Trần Thị Mẫu", "0912 345 678", "mau.n17@example.com"]}
+{"id": "P2", "tenant": "B", "tin_nhan": "Tôi muốn đặt lịch niềng răng, gọi lại giúp tôi số +84 987 654 321, CCCD của tôi là 079203001234.", "pii": ["+84 987 654 321", "079203001234"]}
+{"id": "P3", "tenant": "A", "tin_nhan": "Cho tôi gặp nhân viên tư vấn, số của tôi là 0909.888.777", "pii": ["0909.888.777"]}
+{"id": "P4", "tenant": "B", "tin_nhan": "Chào phòng khám, email của tôi là khachquen.n17@example.org", "pii": ["khachquen.n17@example.org"]}
