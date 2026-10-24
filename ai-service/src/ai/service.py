@@ -155,6 +155,7 @@ from src.ai.schemas import (
     ErasureResult,
     FeedbackRecorded,
     FeedbackRequest,
+    IngestionJobPage,
     IngestionJobProgress,
     IngestionStep,
     KbDocumentAccepted,
@@ -573,7 +574,24 @@ async def tien_do_nap(session: AsyncSession, job_id: UUID) -> IngestionJobProgre
     td = await document_repository.lay_tien_do(session, job_id)
     if td is None:
         raise DocumentNotFoundError(f"Không có job nạp {job_id}")
+    return _tien_do_ra(td)
 
+
+async def danh_sach_tien_do_nap(
+    session: AsyncSession, *, state: str | None, page: int, size: int
+) -> IngestionJobPage:
+    """Hàng đợi nạp của tenant (SCR033 ``/tri-thuc/tien-do``), mới nhất trước, lọc theo ``state``.
+
+    Mỗi dòng dựng bằng CÙNG hàm với tiến độ một job — màn danh sách và màn một tài liệu không
+    bao giờ đọc ra hai con số khác nhau cho cùng một việc nạp.
+    """
+    cac, tong = await document_repository.danh_sach_tien_do(
+        session, state=state, gioi_han=size, bo_qua=page * size
+    )
+    return IngestionJobPage(items=[_tien_do_ra(td) for td in cac], total=tong, page=page, size=size)
+
+
+def _tien_do_ra(td: document_repository.TienDoTaiLieu) -> IngestionJobProgress:
     ma_loi, cau_loi = None, None
     if td.status == "FAILED" and td.error_message:
         ma_loi, _, cau_loi = td.error_message.partition(": ")
@@ -602,6 +620,7 @@ async def tien_do_nap(session: AsyncSession, job_id: UUID) -> IngestionJobProgre
         job_id=td.id,
         document_id=td.id,
         document_title=td.title,
+        trigger="REINDEX" if td.replaces_document_id else "UPLOAD",
         state=tien_do.buoc_hien_tai(td.status, td.ingest_step),
         status=td.status,
         attempt=td.attempt_count,
@@ -982,12 +1001,20 @@ async def delete_document(session: AsyncSession, document_id: UUID) -> DocumentD
     đẳng."""
     t = await _lay_hoac_404(session, document_id, khoa=True)
     if t.status == "ARCHIVED":
-        return DocumentDeleted(message="Tài liệu đã được gỡ trước đó", chunks_deleted=0)
+        return DocumentDeleted(
+            message="Tài liệu đã được gỡ trước đó", chunks_deleted=0,
+            file_size_bytes=t.file_size_bytes, quota_released=False,
+        )
     if t.status in _DANG_NAP or t.reindex_document_id is not None:
         raise DocumentBusyError(f"Tài liệu {document_id} đang được nạp — thử lại sau")
     so = await document_repository.xoa_khoi_chi_muc(session, document_id)
-    _kiem_toan("GO", document_id, so_doan=so)
-    return DocumentDeleted(message="Đã gỡ tài liệu khỏi kho tri thức", chunks_deleted=so)
+    # Bản bóng hỏng chưa từng thế chỗ bản cũ trong bộ đếm hạn mức — gỡ nó không trả lại gì.
+    duoc_dem = not (t.replaces_document_id is not None and t.status == "FAILED")
+    _kiem_toan("GO", document_id, so_doan=so, tra_han_muc=duoc_dem)
+    return DocumentDeleted(
+        message="Đã gỡ tài liệu khỏi kho tri thức", chunks_deleted=so,
+        file_size_bytes=t.file_size_bytes, quota_released=duoc_dem,
+    )
 
 
 # ── UC026 — tóm tắt hội thoại (ADR-0032) ─────────────────────────────────────

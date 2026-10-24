@@ -27,7 +27,9 @@ import java.util.concurrent.Executors;
  */
 final class FakeAiService implements AutoCloseable {
 
-    record Request(String tenantId, String traceId, String contentType, Map<String, Object> body) {
+    /** {@code body} rỗng với lượt không có thân (GET, DELETE, POST nạp lại). */
+    record Request(String tenantId, String traceId, String contentType, Map<String, Object> body, String method,
+            String path) {
     }
 
     record Response(int status, Map<String, Object> body, long delayMs) {
@@ -55,6 +57,8 @@ final class FakeAiService implements AutoCloseable {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.setExecutor(executor);
         server.createContext("/v1/ai/kb/documents", this::handle);
+        // GD1: các đường UC019/UC020 (/v1/documents/**, /v1/ai/kb/ingestion-jobs/**) — cùng bộ trả lời.
+        server.createContext("/v1/", this::handle);
         server.start();
     }
 
@@ -99,11 +103,14 @@ final class FakeAiService implements AutoCloseable {
 
     private void handle(HttpExchange ex) throws IOException {
         try (ex) {
-            Map<String, Object> body = json.readValue(ex.getRequestBody().readAllBytes(), new TypeReference<>() {
+            byte[] than = ex.getRequestBody().readAllBytes();
+            Map<String, Object> body = than.length == 0 ? Map.of() : json.readValue(than, new TypeReference<>() {
             });
+            String path = ex.getRequestURI().getRawPath()
+                    + (ex.getRequestURI().getRawQuery() == null ? "" : "?" + ex.getRequestURI().getRawQuery());
             Request req = new Request(ex.getRequestHeaders().getFirst("X-Tenant-Id"),
                     ex.getRequestHeaders().getFirst("X-Trace-Id"),
-                    ex.getRequestHeaders().getFirst("Content-Type"), body);
+                    ex.getRequestHeaders().getFirst("Content-Type"), body, ex.getRequestMethod(), path);
             requests.add(req);
             Response resp = responder.respond(req);
             if (resp.delayMs() > 0) {

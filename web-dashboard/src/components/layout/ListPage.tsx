@@ -1,5 +1,5 @@
 import type { RowData, RowSelectionState, SortingState } from '@tanstack/react-table'
-import { Plus, Search, SearchX, X, type LucideIcon } from 'lucide-react'
+import { CloudOff, Plus, Search, SearchX, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { laLoiTruyVan } from '@/api/baseQuery'
 import { useTriHoan } from '@/hooks/useTriHoan'
 import type { Page } from '@/types/api'
 
@@ -57,6 +58,13 @@ export interface ListPageProps<T extends RowData> {
 
   /** Trạng thái **chưa có dữ liệu nào** — khác hẳn rỗng vì bộ lọc, xem `EmptyState`. */
   khiChuaCoDuLieu: { BieuTuong: LucideIcon; tieuDe: string; moTa?: string }
+
+  /**
+   * Lỗi của truy vấn danh sách. Có lỗi thì hiện lỗi thay cho trạng thái rỗng: máy chủ không trả
+   * lời mà màn báo "chưa có dữ liệu" là nói sai với người dùng — họ sẽ đi tạo lại thứ vẫn còn đó.
+   */
+  loi?: unknown
+  onThuLai?: () => void
 }
 
 /**
@@ -87,6 +95,8 @@ export function ListPage<T extends RowData>({
   thaoTacPhu,
   thaoTacHangLoat,
   khiChuaCoDuLieu,
+  loi,
+  onThuLai,
 }: ListPageProps<T>) {
   const [oNhap, datONhap] = useState(timKiem?.giaTri ?? '')
   const tuKhoaTriHoan = useTriHoan(oNhap)
@@ -209,7 +219,14 @@ export function ListPage<T extends RowData>({
             thaoTacHangLoat ? { daChon, onDoiChon: datDaChon } : undefined
           }
           khiRong={
-            dangLoc ? (
+            loi ? (
+              <EmptyState
+                BieuTuong={CloudOff}
+                tieuDe="Không tải được dữ liệu"
+                moTa={laLoiTruyVan(loi) ? loi.message : 'Máy chủ không phản hồi. Thử lại sau ít phút.'}
+                thaoTac={onThuLai ? { nhan: 'Thử lại', onClick: onThuLai } : undefined}
+              />
+            ) : dangLoc ? (
               <EmptyState
                 BieuTuong={SearchX}
                 tieuDe="Không có kết quả nào khớp"

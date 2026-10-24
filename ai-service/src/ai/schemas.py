@@ -162,7 +162,10 @@ class IngestionJobProgress(BaseModel):
     job_id: UUID
     document_id: UUID
     document_title: str
-    trigger: Literal["UPLOAD"] = "UPLOAD"
+    # REINDEX khi dòng là bản bóng của một lượt nạp lại (``replaces_document_id``, ADR-0031).
+    # ``REPLACE`` của hợp đồng chưa có nguồn: tải lại cùng tiêu đề tạo version mới, không thay
+    # bản cũ.
+    trigger: Literal["UPLOAD", "REINDEX"] = "UPLOAD"
     state: Literal[
         "QUEUED", "EXTRACTING", "CHUNKING", "EMBEDDING", "INDEXING", "DONE", "FAILED"
     ]
@@ -179,6 +182,15 @@ class IngestionJobProgress(BaseModel):
     finished_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class IngestionJobPage(BaseModel):
+    """Hàng đợi nạp của tenant (SCR033) — cùng vỏ ``items/total/page/size`` với ``DocumentPage``."""
+
+    items: list[IngestionJobProgress]
+    total: int
+    page: int
+    size: int
 
 
 # ── Đánh giá chất lượng — UC027 ──────────────────────────────────────────────
@@ -414,9 +426,19 @@ class ReindexTenantAccepted(BaseModel):
 
 
 class DocumentDeleted(BaseModel):
+    """Phản hồi gỡ. Hai trường cuối cho java-core trả hạn mức tồn kho (ADR-0023 (f)).
+
+    ``quota_released``: lượt gỡ NÀY vừa chuyển một tài liệu ĐƯỢC ĐẾM sang ``ARCHIVED`` — java-core
+    trừ 1 ``DOCUMENT`` và ``file_size_bytes`` ``STORAGE_MB``. ``False`` khi tài liệu đã gỡ từ trước
+    (gỡ lại là luỹ đẳng, không được trả hai lần) và khi đó là bản bóng nạp lại đã hỏng: bản bóng chỉ
+    thế chỗ bản cũ trong bộ đếm lúc nó READY (ADR-0031), chưa READY thì chưa từng được đếm.
+    """
+
     success: Literal[True] = True
     message: str
     chunks_deleted: int
+    file_size_bytes: int | None = None
+    quota_released: bool = False
 
 
 

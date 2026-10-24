@@ -1,18 +1,25 @@
 package com.thesis.crm.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import com.thesis.crm.security.TraceIdFilter;
 import java.io.IOException;
+import java.net.URI;
 import java.util.UUID;
+import java.util.function.Function;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.util.UriBuilder;
 
 /**
  * Bề mặt DUY NHẤT của java-core gọi ai-service (ADR-0002, luật ranh giới 4 của java-core).
@@ -29,10 +36,78 @@ public class AiServiceClient {
 
     private final RestClient rest;
     private final ObjectMapper objectMapper;
+    /**
+     * Bản sao của mapper Spring, đặt tên trường kiểu {@code snake_case} — hình dạng của mọi DTO
+     * Pydantic. Bản sao giữ nguyên module ngày giờ và {@code FAIL_ON_UNKNOWN_PROPERTIES = false} của
+     * Boot: ai-service thêm trường mới thì java-core không gãy.
+     */
+    private final ObjectMapper snake;
 
     public AiServiceClient(@Qualifier("aiServiceRestClient") RestClient rest, ObjectMapper objectMapper) {
         this.rest = rest;
         this.objectMapper = objectMapper;
+        this.snake = objectMapper.copy().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
+    }
+
+    // ── Lớp chuyển tiếp chung (GD1) ─────────────────────────────────────────────────
+    // Mọi đường AI của dashboard đi qua bốn hàm dưới — kế hoạch tích hợp giao diện mục 3. Gương
+    // DTO của từng nhóm endpoint nằm ở lớp riêng (vd. AiKnowledgeClient), dịch lỗi ở AiServiceErrors.
+
+    public <T> T get(UUID tenantId, Function<UriBuilder, URI> uri, Class<T> kieu) {
+        return goi(HttpMethod.GET, tenantId, uri, null, kieu);
+    }
+
+    public <T> T post(UUID tenantId, Function<UriBuilder, URI> uri, Object than, Class<T> kieu) {
+        return goi(HttpMethod.POST, tenantId, uri, than, kieu);
+    }
+
+    public <T> T patch(UUID tenantId, Function<UriBuilder, URI> uri, Object than, Class<T> kieu) {
+        return goi(HttpMethod.PATCH, tenantId, uri, than, kieu);
+    }
+
+    public <T> T delete(UUID tenantId, Function<UriBuilder, URI> uri, Class<T> kieu) {
+        return goi(HttpMethod.DELETE, tenantId, uri, null, kieu);
+    }
+
+    /**
+     * Một lượt gọi: gắn {@code X-Tenant-Id} (tham số, do service lấy từ JWT — không bao giờ từ
+     * request của người dùng) và {@code X-Trace-Id} (từ MDC), ghi thân bằng {@code snake_case},
+     * đọc phản hồi 2xx thành {@code kieu}.
+     *
+     * @throws AiServiceException khác 2xx (giữ mã HTTP + {@code code}) hoặc không nối được
+     */
+    private <T> T goi(HttpMethod method, UUID tenantId, Function<UriBuilder, URI> uri, Object than,
+            Class<T> kieu) {
+        RestClient.RequestBodySpec yeuCau = rest.method(method)
+                .uri(uri)
+                .header(HEADER_TENANT, tenantId.toString())
+                .accept(MediaType.APPLICATION_JSON);
+        String trace = MDC.get(TraceIdFilter.MDC_KEY);
+        if (trace != null) {
+            yeuCau.header(HEADER_TRACE, trace);
+        }
+        if (than != null) {
+            yeuCau.contentType(MediaType.APPLICATION_JSON).body(vietSnake(than));
+        }
+        try {
+            return yeuCau.exchange((req, resp) -> {
+                byte[] noiDung = resp.getBody().readAllBytes();
+                if (resp.getStatusCode().is2xxSuccessful()) {
+                    return snake.readValue(noiDung, kieu);
+                }
+                throw loiTuPhanHoi(resp.getStatusCode().value(), noiDung);
+            });
+        } catch (ResourceAccessException e) {
+            throw AiServiceException.unreachable(e);
+        }
+    }
+
+    private byte[] vietSnake(Object than) {
+        try {
+            return snake.writeValueAsBytes(than);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Không ghi được thân gửi ai-service", e);
+        }
     }
 
     /**

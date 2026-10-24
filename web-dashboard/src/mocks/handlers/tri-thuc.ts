@@ -348,6 +348,26 @@ export const triThucHandlers = [
     return HttpResponse.json(ok(t))
   }),
 
+  // UC020 bước 5 — sửa tiêu đề + mô tả; chỉ mục (số đoạn) giữ nguyên
+  http.patch('/api/v1/documents/:id', async ({ params, request }) => {
+    await delay(400)
+    const id = params.id as string
+    const t = chiTietTaiLieu[id]
+    if (!t) return HttpResponse.json(loi('Không tìm thấy tài liệu.'), { status: 404 })
+    const than = (await request.json()) as { title: string; description: string | null }
+    const trung = taiLieu.some((x) => x.id !== id && x.title === than.title && x.version === t.version)
+    if (trung) {
+      return HttpResponse.json(
+        loi(`Đã có tài liệu khác tên '${than.title}' ở version ${t.version ?? 1}`),
+        { status: 422 },
+      )
+    }
+    t.title = than.title
+    t.description = than.description
+    taiLieu = taiLieu.map((x) => (x.id === id ? { ...x, title: than.title, description: than.description } : x))
+    return HttpResponse.json(ok(t))
+  }),
+
   http.delete('/api/v1/documents/:id', async ({ params }) => {
     await delay(500)
     const id = params.id as string

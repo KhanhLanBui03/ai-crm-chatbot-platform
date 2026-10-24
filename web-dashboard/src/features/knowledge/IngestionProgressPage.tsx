@@ -2,6 +2,7 @@ import { format } from 'date-fns'
 import { Check, Loader2 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { laLoiTruyVan } from '@/api/baseQuery'
 import { useChiTietTaiLieuQuery, useDanhSachCongViecNapQuery } from '@/api/knowledge'
 import { StatusPage, type TrangThaiTrang } from '@/components/layout/StatusPage'
 import { Card, CardContent } from '@/components/ui/card'
@@ -49,6 +50,20 @@ export function IngestionProgressPage() {
     skip: !id || !dangChay(viecCuaTaiLieu),
     pollingInterval: 2_000,
   })
+
+  // Không đọc được (502 khi ai-service không phản hồi, 404…) thì nói thẳng — không giả làm
+  // "hàng đợi trống", vì người dùng sẽ tưởng tài liệu vừa tải đã biến mất.
+  const loi = id ? taiLieu.error : hangDoi.error
+  if (loi && !viec) {
+    return (
+      <StatusPage
+        trangThai="that-bai"
+        tieuDe={laLoiTruyVan(loi) && loi.status === 404 ? 'Không tìm thấy tài liệu' : 'Không tải được tiến độ nạp'}
+        moTa={laLoiTruyVan(loi) ? loi.message : 'Máy chủ không phản hồi. Thử lại sau ít phút.'}
+        thaoTacChinh={{ nhan: 'Về kho tri thức', onClick: () => dieuHuong('/tri-thuc') }}
+      />
+    )
+  }
 
   const trangThai: TrangThaiTrang = !viec
     ? 'thanh-cong'
@@ -129,8 +144,10 @@ function BuocNap({ viec }: { viec: CongViecNap }) {
         <Progress value={tyLe} className={cn('h-1.5', hong && '[&>*]:bg-destructive')} />
         <ol className="flex flex-col gap-1.5">
           {CHUOI_NAP.map((b, i) => {
-            const xong = viTri > i && !hong
-            const dang = viTri === i && !hong
+            // DONE là bước cuối của chuỗi nhưng không phải bước "đang chạy" — tới đó là xong hết
+            const daXong = viec.state === 'DONE'
+            const xong = (viTri > i || daXong) && !hong
+            const dang = viTri === i && !hong && !daXong
             return (
               <li key={b} className="flex items-center gap-2 text-xs">
                 <span
@@ -182,10 +199,18 @@ function ThongSoViec({ viec }: { viec: CongViecNap }) {
             {(viec.chunksCreated ?? 0).toLocaleString('vi-VN')}
           </span>
         </HangThongTin>
+        {/* Luồng nạp chưa ghi token và chi phí (giảm độ sâu UC019) — trống thì nói là chưa ghi,
+            không hiện số 0 như thể đã đo */}
         <HangThongTin nhan="Token đã dùng">
-          <span className="tabular-nums">{(viec.tokensUsed ?? 0).toLocaleString('vi-VN')}</span>
+          {viec.tokensUsed == null ? (
+            <span className="text-muted-foreground">Chưa ghi nhận</span>
+          ) : (
+            <span className="tabular-nums">{viec.tokensUsed.toLocaleString('vi-VN')}</span>
+          )}
         </HangThongTin>
-        <HangThongTin nhan="Chi phí nhúng">{tienVnd(viec.costVnd)}</HangThongTin>
+        <HangThongTin nhan="Chi phí nhúng">
+          {viec.costVnd == null ? <span className="text-muted-foreground">Chưa ghi nhận</span> : tienVnd(viec.costVnd)}
+        </HangThongTin>
         <HangThongTin nhan="Bắt đầu">
           {viec.startedAt ? format(new Date(viec.startedAt), 'HH:mm:ss dd/MM/yyyy') : 'Chưa chạy'}
         </HangThongTin>

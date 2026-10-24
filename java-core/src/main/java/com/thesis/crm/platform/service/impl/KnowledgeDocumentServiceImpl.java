@@ -1,19 +1,37 @@
 package com.thesis.crm.platform.service.impl;
 
+import com.thesis.crm.client.AiKnowledgeClient;
+import com.thesis.crm.client.AiKnowledgeClient.KbChunkPage;
+import com.thesis.crm.client.AiKnowledgeClient.KbDocument;
+import com.thesis.crm.client.AiKnowledgeClient.KbDocumentDeleted;
+import com.thesis.crm.client.AiKnowledgeClient.KbDocumentPage;
+import com.thesis.crm.client.AiKnowledgeClient.KbIngestionJobPage;
+import com.thesis.crm.client.AiKnowledgeClient.KbMetadataUpdate;
+import com.thesis.crm.client.AiKnowledgeClient.KbReindexAccepted;
 import com.thesis.crm.client.AiServiceClient;
 import com.thesis.crm.client.AiServiceClient.KbDocumentAccepted;
 import com.thesis.crm.client.AiServiceClient.KbDocumentCreate;
+import com.thesis.crm.client.AiServiceErrors;
 import com.thesis.crm.client.AiServiceException;
 import com.thesis.crm.client.ObjectStorageClient;
+import com.thesis.crm.common.audit.AuditLogWriter;
 import com.thesis.crm.common.enums.UsageMetric;
 import com.thesis.crm.common.exception.BusinessException;
 import com.thesis.crm.common.exception.QuotaExceededException;
+import com.thesis.crm.common.response.PageResponse;
 import com.thesis.crm.common.util.Texts;
 import com.thesis.crm.config.KbProperties;
+import com.thesis.crm.platform.dto.request.UpdateDocumentRequest;
 import com.thesis.crm.platform.dto.request.UploadDocumentRequest;
+import com.thesis.crm.platform.dto.response.CongViecNapResponse;
+import com.thesis.crm.platform.dto.response.DoanTaiLieuResponse;
 import com.thesis.crm.platform.dto.response.DocumentUploadResponse;
 import com.thesis.crm.platform.dto.response.QuotaUsageResponse;
+import com.thesis.crm.platform.dto.response.TaiLieuChiTietResponse;
+import com.thesis.crm.platform.dto.response.TaiLieuResponse;
 import com.thesis.crm.platform.entity.UsageRecord;
+import com.thesis.crm.platform.entity.User;
+import com.thesis.crm.platform.repository.UserRepository;
 import com.thesis.crm.platform.service.KnowledgeDocumentService;
 import com.thesis.crm.platform.service.OutboxService;
 import com.thesis.crm.platform.service.UsageQuotaService;
@@ -22,16 +40,23 @@ import com.thesis.crm.security.SecurityUtils;
 import com.thesis.crm.security.TenantTransactionScope;
 import com.thesis.crm.security.TraceIdFilter;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -60,22 +85,34 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
 
     private static final int TEN_TEP_TOI_DA = 255;
 
+    /** {@code entity_type} của ba dòng kiểm toán UC020 bước 8. */
+    static final String ENTITY_DOCUMENT = "DOCUMENT";
+
     private final UsageQuotaService usageQuotaService;
     private final OutboxService outboxService;
     private final ObjectStorageClient objectStorage;
     private final AiServiceClient aiService;
     private final KbProperties kb;
     private final TenantTransactionScope tenantScope;
+    private final AiKnowledgeClient kho;
+    private final AuditLogWriter audit;
+    private final UserRepository users;
+    private final TransactionTemplate tx;
 
     public KnowledgeDocumentServiceImpl(UsageQuotaService usageQuotaService, OutboxService outboxService,
             ObjectStorageClient objectStorage, AiServiceClient aiService, KbProperties kb,
-            TenantTransactionScope tenantScope) {
+            TenantTransactionScope tenantScope, AiKnowledgeClient kho, AuditLogWriter audit,
+            UserRepository users, TransactionTemplate tx) {
         this.usageQuotaService = usageQuotaService;
         this.outboxService = outboxService;
         this.objectStorage = objectStorage;
         this.aiService = aiService;
         this.kb = kb;
         this.tenantScope = tenantScope;
+        this.kho = kho;
+        this.audit = audit;
+        this.users = users;
+        this.tx = tx;
     }
 
     /**
@@ -159,6 +196,168 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 Instant.now(),
                 soTaiLieuSau,
                 dungLuongSau);
+    }
+
+    // ── UC019 · UC020 — chuyển tiếp sang ai-service (GD1) ───────────────────────────
+    // KHÔNG @Transactional ở mức hàm: lời gọi ai-service không được giữ kết nối CSDL. Chỉ hai việc
+    // chạm CSDL của java-core — tra tên người tải và ghi kiểm toán — mở transaction ngắn riêng, sau
+    // khi ai-service đã trả lời.
+
+    @Override
+    public PageResponse<TaiLieuResponse> list(String q, String status, String sourceType, int page, int size) {
+        UUID tenantId = CurrentActor.requireTenantId();
+        KbDocumentPage trang = goiAi(() -> kho.listDocuments(tenantId, q, status, sourceType, trang(page), co(size)));
+        Map<UUID, String> ten = tenNguoiTai(tenantId, trang.items().stream().map(KbDocument::uploadedBy).toList());
+        return PageResponse.of(
+                trang.items().stream().map(d -> KnowledgeMapper.taiLieu(d, ten.get(d.uploadedBy()))).toList(),
+                trang.page(), trang.size(), trang.total());
+    }
+
+    @Override
+    public TaiLieuChiTietResponse get(UUID documentId) {
+        UUID tenantId = CurrentActor.requireTenantId();
+        return chiTiet(tenantId, goiAi(() -> kho.getDocument(tenantId, documentId)));
+    }
+
+    @Override
+    public PageResponse<DoanTaiLieuResponse> chunks(UUID documentId, int page, int size) {
+        UUID tenantId = CurrentActor.requireTenantId();
+        KbChunkPage trang = goiAi(() -> kho.listChunks(tenantId, documentId, trang(page), co(size)));
+        return PageResponse.of(trang.items().stream().map(KnowledgeMapper::doan).toList(),
+                trang.page(), trang.size(), trang.total());
+    }
+
+    /**
+     * Kiểm toán ghi TÊN trường đã sửa, không ghi giá trị: tiêu đề/mô tả có thể chứa tên khách
+     * ("Báo giá riêng anh A"), mà nhật ký kiểm toán sống lâu hơn dữ liệu khách (NĐ 13, UC041).
+     */
+    @Override
+    public TaiLieuChiTietResponse update(UUID documentId, UpdateDocumentRequest request) {
+        UUID tenantId = CurrentActor.requireTenantId();
+        UUID nguoiSua = CurrentActor.requireUserId();
+        KbDocument sau = goiAi(() -> kho.updateMetadata(tenantId, documentId,
+                new KbMetadataUpdate(request.title(), request.description())));
+        ghiKiemToan(tenantId, nguoiSua, "DOCUMENT_UPDATED", documentId,
+                Map.of("fields", List.of("title", "description"), "version", sau.version()));
+        return chiTiet(tenantId, sau);
+    }
+
+    /**
+     * Bản cũ vẫn {@code READY} và vẫn được truy hồi tới khi bản bóng nạp xong (ADR-0031) — đặc tả
+     * UC020 bước 6 ghi "chuyển về PROCESSING", ở đây thứ chuyển trạng thái là bản bóng. Giao diện
+     * điều hướng theo {@code id} của việc nạp trả về, KHÔNG theo {@code documentId} cũ.
+     */
+    @Override
+    public CongViecNapResponse reindex(UUID documentId) {
+        UUID tenantId = CurrentActor.requireTenantId();
+        UUID nguoiLam = CurrentActor.requireUserId();
+        KbReindexAccepted kq = goiAi(() -> kho.reindex(tenantId, documentId));
+        ghiKiemToan(tenantId, nguoiLam, "DOCUMENT_REINDEXED", documentId,
+                Map.of("shadowDocumentId", kq.jobId().toString(), "version", kq.version()));
+        try {
+            return KnowledgeMapper.congViec(kho.ingestionJob(tenantId, kq.jobId()));
+        } catch (AiServiceException ex) {
+            // Bản bóng ĐÃ được xếp hàng — đọc tiến độ hỏng không được biến thành "nạp lại thất bại".
+            log.warn("Đã xếp nạp lại {} nhưng chưa đọc được tiến độ bản bóng: {}", documentId, ex.getMessage());
+            return new CongViecNapResponse(kq.jobId(), kq.jobId(), null, "REINDEX", "QUEUED", 0, 0, null, null,
+                    null, null, null, null, null, Instant.now());
+        }
+    }
+
+    /**
+     * Gỡ ở ai-service trước, rồi MỘT transaction cho phần của java-core: trả lại hạn mức tồn kho
+     * (ADR-0023 (f) — thứ tự khoá {@code DOCUMENT} → {@code STORAGE_MB} như lúc tải) và dòng kiểm
+     * toán. Lỗi ai-service (502) thì không có gì được ghi.
+     *
+     * <p>Trả hạn mức theo {@code quotaReleased} của ai-service, không tự suy: chỉ ai-service biết lượt
+     * gỡ này có thật sự chuyển một tài liệu ĐƯỢC ĐẾM sang {@code ARCHIVED} không (gỡ lại tài liệu
+     * đã gỡ, gỡ bản bóng nạp lại đã hỏng — cả hai đều không trả).
+     *
+     * <p>Không phát {@code DocumentDeleted} như ADR-0023 (f) ghi: {@code crm.document.v1} chưa có
+     * payload và không có consumer nào — ghi ở {@code docs/contracts/giao-dien-gd.md}.
+     */
+    @Override
+    public void archive(UUID documentId) {
+        UUID tenantId = CurrentActor.requireTenantId();
+        UUID nguoiGo = CurrentActor.requireUserId();
+        KbDocumentDeleted kq = goiAi(() -> kho.delete(tenantId, documentId));
+        long soByte = kq.fileSizeBytes() == null ? 0 : kq.fileSizeBytes();
+        tx.executeWithoutResult(st -> {
+            tenantScope.apply(tenantId);
+            if (kq.quotaReleased()) {
+                usageQuotaService.release(UsageMetric.DOCUMENT, 1);
+                if (soByte > 0) {
+                    usageQuotaService.release(UsageMetric.STORAGE_MB, soByte);
+                }
+            }
+            audit.recordUserAction(tenantId, nguoiGo, "DOCUMENT_ARCHIVED", ENTITY_DOCUMENT, documentId,
+                    Map.of("chunksDeleted", kq.chunksDeleted(), "quotaReleased", kq.quotaReleased()));
+        });
+    }
+
+    @Override
+    public PageResponse<CongViecNapResponse> ingestionJobs(String state, int page, int size) {
+        UUID tenantId = CurrentActor.requireTenantId();
+        KbIngestionJobPage trang = goiAi(() -> kho.listIngestionJobs(tenantId, state, trang(page), co(size)));
+        return PageResponse.of(trang.items().stream().map(KnowledgeMapper::congViec).toList(),
+                trang.page(), trang.size(), trang.total());
+    }
+
+    /**
+     * {@code latestJob}: việc nạp của bản bóng nếu tài liệu đang được nạp lại, không thì của chính
+     * nó. Đọc tiến độ hỏng thì để {@code null} — chi tiết tài liệu vẫn xem được.
+     */
+    private TaiLieuChiTietResponse chiTiet(UUID tenantId, KbDocument d) {
+        UUID jobId = d.reindexDocumentId() != null ? d.reindexDocumentId() : d.id();
+        CongViecNapResponse viec;
+        try {
+            viec = KnowledgeMapper.congViec(kho.ingestionJob(tenantId, jobId));
+        } catch (AiServiceException ex) {
+            log.warn("Không đọc được tiến độ nạp {}: {} {}", jobId, ex.getStatus(), ex.getCode());
+            viec = null;
+        }
+        Map<UUID, String> ten = tenNguoiTai(tenantId, Collections.singletonList(d.uploadedBy()));
+        return KnowledgeMapper.chiTiet(d, ten.get(d.uploadedBy()), viec);
+    }
+
+    /**
+     * {@code uploadedByName} ← {@code platform.users.full_name} — bảng của java-core, đọc dưới RLS
+     * của đúng tenant. Một truy vấn cho cả trang. Không thấy người dùng thì {@code null}.
+     */
+    private Map<UUID, String> tenNguoiTai(UUID tenantId, Collection<UUID> ids) {
+        Set<UUID> can = ids.stream().filter(Objects::nonNull).collect(Collectors.toSet());
+        if (can.isEmpty()) {
+            return Map.of();
+        }
+        return tx.execute(st -> {
+            tenantScope.apply(tenantId);
+            return users.findAllById(can).stream().collect(Collectors.toMap(User::getId, User::getFullName));
+        });
+    }
+
+    /** Transaction riêng, ngắn: chỉ một dòng {@code platform.audit_logs} dưới RLS của tenant. */
+    private void ghiKiemToan(UUID tenantId, UUID nguoiLam, String action, UUID documentId, Map<String, ?> duLieu) {
+        tx.executeWithoutResult(st -> {
+            tenantScope.apply(tenantId);
+            audit.recordUserAction(tenantId, nguoiLam, action, ENTITY_DOCUMENT, documentId, duLieu);
+        });
+    }
+
+    /** Kẹp như các danh sách khác của java-core — ai-service từ chối (422) ngoài khoảng này. */
+    private static int trang(int page) {
+        return Math.max(0, page);
+    }
+
+    private static int co(int size) {
+        return Math.min(Math.max(1, size), 100);
+    }
+
+    private static <T> T goiAi(Supplier<T> loiGoi) {
+        try {
+            return loiGoi.get();
+        } catch (AiServiceException ex) {
+            throw AiServiceErrors.dich(ex);
+        }
     }
 
     /**

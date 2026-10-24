@@ -75,6 +75,10 @@ import software.amazon.awssdk.services.s3.model.S3Object;
  * {@code SecurityConfig}. Chỉ ai-service là giả ({@link FakeAiService}).
  *
  * <p>Đây là chỗ DUY NHẤT đo được ca 409: ai-service không đọc được hạn mức gói.
+ *
+ * <p>GD1 thêm phần UC020 cần CSDL thật: gỡ tài liệu trả lại hạn mức tồn kho đúng một lần
+ * (ADR-0023 (f)) và ghi {@code platform.audit_logs}; 502 thì không ghi gì; thao tác ghi chỉ
+ * {@code TENANT_ADMIN}. Phần dịch trường và mã lỗi thuần ở {@code KnowledgeRelayTest}.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
@@ -640,7 +644,129 @@ class KnowledgeDocumentUploadIntegrationTest {
         daDonSachSauKhiGoiAi();
     }
 
+    // ── UC020 (GD1) — gỡ trả hạn mức, kiểm toán, quyền ghi ──────────────────────
+
+    @Test
+    void goTaiLieuTraHanMucMotLanVaGhiKiemToan() throws Exception {
+        gieoQuanTriA();
+        byte[] tep = "x".repeat(100).getBytes(UTF_8);
+        KetQua tai = taiLen(tokenAdmin(TENANT_A), "se-go.txt", tep, truong("title", "Sẽ gỡ"));
+        UUID id = UUID.fromString(tai.body().at("/data/id").asText());
+        assertThat(hanMuc(TENANT_A)).containsEntry("used_value", 1L);
+        assertThat(hanMuc(TENANT_A, "STORAGE_MB")).containsEntry("used_value", (long) tep.length);
+
+        AI.reset();
+        AI.responder = r -> new FakeAiService.Response(200, Map.of("success", true, "message", "Đã gỡ",
+                "chunks_deleted", 3, "file_size_bytes", tep.length, "quota_released", true), 0);
+        KetQua go = goi("DELETE", "/api/v1/documents/" + id, tokenAdmin(TENANT_A), null);
+
+        assertThat(go.status()).as(go.body().toString()).isEqualTo(200);
+        assertThat(AI.requests).singleElement().satisfies(r -> {
+            assertThat(r.method()).isEqualTo("DELETE");
+            assertThat(r.path()).isEqualTo("/v1/ai/kb/documents/" + id);
+            assertThat(r.tenantId()).isEqualTo(TENANT_A.toString());
+        });
+        assertThat(hanMuc(TENANT_A)).containsEntry("used_value", 0L);
+        assertThat(hanMuc(TENANT_A, "STORAGE_MB")).containsEntry("used_value", 0L);
+        assertThat(kiemToan(TENANT_A, "DOCUMENT_ARCHIVED")).singleElement()
+                .isEqualTo(List.of(ADMIN_A.toString(), "DOCUMENT", id.toString()));
+
+        // Gỡ lại tài liệu đã gỡ: ai-service báo không trả — bộ đếm không bị trừ lần hai.
+        AI.responder = r -> new FakeAiService.Response(200, Map.of("success", true, "message", "Đã gỡ trước đó",
+                "chunks_deleted", 0, "file_size_bytes", tep.length, "quota_released", false), 0);
+        datHanMuc(TENANT_A, SUB_A, 4, QUOTA_TRIAL);
+        assertThat(goi("DELETE", "/api/v1/documents/" + id, tokenAdmin(TENANT_A), null).status()).isEqualTo(200);
+        assertThat(hanMuc(TENANT_A)).containsEntry("used_value", 4L);
+    }
+
+    @Test
+    void goKhiAiServiceLoiKhongTraHanMucKhongKiemToan() throws Exception {
+        gieoQuanTriA();
+        datHanMuc(TENANT_A, SUB_A, 5, QUOTA_TRIAL);
+        UUID id = UUID.randomUUID();
+
+        AI.traLoi(503, "STORAGE_UNAVAILABLE", "Không kết nối được CSDL");
+        KetQua hong = goi("DELETE", "/api/v1/documents/" + id, tokenAdmin(TENANT_A), null);
+        assertThat(hong.status()).isEqualTo(502);
+        assertThat(hong.code()).isEqualTo("AI_SERVICE_UNAVAILABLE");
+
+        AI.traLoi(409, "DOCUMENT_BUSY", "Tài liệu " + id + " đang được nạp — thử lại sau");
+        KetQua ban = goi("DELETE", "/api/v1/documents/" + id, tokenAdmin(TENANT_A), null);
+        assertThat(ban.status()).isEqualTo(409);
+        assertThat(ban.code()).isEqualTo("DOCUMENT_BUSY");
+
+        assertThat(hanMuc(TENANT_A)).containsEntry("used_value", 5L);
+        assertThat(kiemToan(TENANT_A, "DOCUMENT_ARCHIVED")).isEmpty();
+    }
+
+    @Test
+    void thaoTacGhiKhoTriThucChiTenantAdmin() throws Exception {
+        String nhanVien = ky(KHOA, claims(TENANT_A, "AGENT"), Instant.now());
+        UUID id = UUID.randomUUID();
+        for (String[] thaoTac : List.of(
+                new String[] {"DELETE", "/api/v1/documents/" + id, null},
+                new String[] {"PATCH", "/api/v1/documents/" + id, "{\"title\":\"Tiêu đề mới\",\"description\":null}"},
+                new String[] {"POST", "/api/v1/documents/" + id + "/reindex", null})) {
+            KetQua kq = goi(thaoTac[0], thaoTac[1], nhanVien, thaoTac[2]);
+            assertThat(kq.status()).as(thaoTac[0] + " " + thaoTac[1]).isEqualTo(403);
+            assertThat(kq.code()).isEqualTo("FORBIDDEN");
+        }
+        assertThat(AI.requests).as("bị chặn trước khi gọi ai-service").isEmpty();
+
+        // Đọc thì mọi nhân viên của doanh nghiệp — tenant đi theo JWT, từ khoá qua biến URI.
+        AI.responder = r -> new FakeAiService.Response(200,
+                Map.of("items", List.of(), "total", 0, "page", 0, "size", 10), 0);
+        KetQua ds = goi("GET", "/api/v1/documents?q=b%C3%A1o%20gi%C3%A1&status=READY", nhanVien, null);
+        assertThat(ds.status()).as(ds.body().toString()).isEqualTo(200);
+        assertThat(ds.body().at("/data/totalItems").asInt()).isZero();
+        assertThat(AI.requests).singleElement().satisfies(r -> {
+            assertThat(r.tenantId()).isEqualTo(TENANT_A.toString());
+            assertThat(r.path()).startsWith("/v1/documents?").contains("status=READY", "size=10",
+                    "keyword=b%C3%A1o%20gi%C3%A1");
+        });
+    }
+
     // ── Tiện ích ─────────────────────────────────────────────────────────────────
+
+    /** Khoá ngoại {@code audit_logs.actor_user_id → platform.users}: người làm phải có thật. */
+    private static void gieoQuanTriA() throws SQLException {
+        chay("""
+                INSERT INTO platform.users (id, tenant_id, email, password_hash, full_name, status)
+                VALUES ('%s', '%s', 'quantri-a@example.test', 'x', 'Quản trị A', 'ACTIVE')
+                ON CONFLICT (id) DO NOTHING
+                """.formatted(ADMIN_A, TENANT_A));
+    }
+
+    private KetQua goi(String method, String path, String token, String thanJson) throws Exception {
+        HttpRequest.Builder req = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .header("Authorization", "Bearer " + token)
+                .method(method, thanJson == null ? HttpRequest.BodyPublishers.noBody()
+                        : HttpRequest.BodyPublishers.ofString(thanJson, UTF_8));
+        if (thanJson != null) {
+            req.header("Content-Type", "application/json");
+        }
+        HttpResponse<String> resp = http.send(req.build(), HttpResponse.BodyHandlers.ofString(UTF_8));
+        JsonNode body = resp.body().isBlank() ? json.createObjectNode() : json.readTree(resp.body());
+        return new KetQua(resp.statusCode(), body);
+    }
+
+    /** [người làm, entity_type, entity_id] của các dòng kiểm toán có {@code action} này. */
+    private static List<List<String>> kiemToan(UUID tenant, String action) throws SQLException {
+        List<List<String>> ds = new ArrayList<>();
+        try (Connection c = chuBang(); PreparedStatement ps = c.prepareStatement("""
+                SELECT actor_user_id::text, entity_type, entity_id::text FROM platform.audit_logs
+                 WHERE tenant_id = ? AND action = ? ORDER BY id
+                """)) {
+            ps.setObject(1, tenant);
+            ps.setString(2, action);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    ds.add(List.of(rs.getString(1), rs.getString(2), rs.getString(3)));
+                }
+            }
+        }
+        return ds;
+    }
 
     private void khongGhiGiCa() throws SQLException {
         assertThat(s3Keys()).as("không object nào trên S3").isEmpty();

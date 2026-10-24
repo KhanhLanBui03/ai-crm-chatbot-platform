@@ -12,9 +12,14 @@ import com.thesis.crm.platform.repository.UsageRecordRepository;
 import com.thesis.crm.platform.service.UsageQuotaService;
 import com.thesis.crm.security.CurrentActor;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -36,6 +41,12 @@ public class UsageQuotaServiceImpl implements UsageQuotaService {
      */
     private static final Set<String> DUOC_TIEU_THU =
             Set.of(SubscriptionStatus.TRIALING.name(), SubscriptionStatus.ACTIVE.name());
+
+    /** Trả lại chỗ không phải tiêu thụ: chế độ chỉ đọc (PAST_DUE/EXPIRED) vẫn được gỡ tài liệu. */
+    private static final Set<String> MOI_TRANG_THAI = Arrays.stream(SubscriptionStatus.values())
+            .map(Enum::name).collect(Collectors.toUnmodifiableSet());
+
+    private static final Logger log = LoggerFactory.getLogger(UsageQuotaServiceImpl.class);
 
     private final TenantSubscriptionRepository subscriptions;
     private final UsageRecordRepository usageRecords;
@@ -83,6 +94,33 @@ public class UsageQuotaServiceImpl implements UsageQuotaService {
         locked.setLastCalculatedAt(now);
         ghiMocNeuTrong(locked, now);
         return QuotaUsageResponse.from(locked);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public QuotaUsageResponse release(UsageMetric metric, long amount) {
+        if (!metric.isStock()) {
+            throw new IllegalArgumentException("Chỉ trả lại được chỉ số tồn kho, không phải " + metric);
+        }
+        Instant now = Instant.now();
+        UUID tenantId = CurrentActor.requireTenantId();
+        Optional<TenantSubscription> thueBao = subscriptions.findEffective(tenantId, MOI_TRANG_THAI, now).stream()
+                .findFirst();
+        if (thueBao.isEmpty()) {
+            log.warn("Không có thuê bao phủ thời điểm này — bỏ qua trả {} {} cho tenant {}", amount, metric, tenantId);
+            return null;
+        }
+        usageRecords.insertIfAbsent(thueBao.get().getId(), metric.name(), true);
+        UsageRecord dong = usageRecords.findForUpdate(thueBao.get().getId(), metric.name())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Không đọc lại được dòng hạn mức vừa tạo — RLS hoặc app.tenant_id sai"));
+        if (amount > dong.getUsedValue()) {
+            // Bộ đếm đã lệch thực tế (ADR-0023 Đánh đổi 1) — ghi lại để đối soát, không để âm.
+            log.warn("Trả {} {} nhưng bộ đếm chỉ còn {} — đặt về 0", amount, metric, dong.getUsedValue());
+        }
+        dong.setUsedValue(Math.max(0, dong.getUsedValue() - amount));
+        dong.setLastCalculatedAt(now);
+        return QuotaUsageResponse.from(dong);
     }
 
     /**

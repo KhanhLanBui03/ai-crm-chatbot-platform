@@ -27,7 +27,8 @@ const DUOI_NHAN = ['.pdf', '.docx', '.txt', '.md', '.html'] as const
 const CO_TOI_DA = 20 * 1024 * 1024
 
 const luocDo = z.object({
-  title: z.string().min(3, 'Tiêu đề cần ít nhất 3 ký tự.').max(300, 'Tiêu đề tối đa 300 ký tự.'),
+  // 255 chứ không phải 300 của đặc tả: khớp varchar(255) của V202 và java-core (ADR-0020 quyết định 3)
+  title: z.string().min(3, 'Tiêu đề cần ít nhất 3 ký tự.').max(255, 'Tiêu đề tối đa 255 ký tự.'),
   description: z.string().max(500, 'Mô tả tối đa 500 ký tự.').optional(),
   language: z.enum(['vi', 'en']),
 })
@@ -74,7 +75,10 @@ export function UploadDocumentDialog({
     }
     if (t.size > CO_TOI_DA) {
       datTep(null)
-      datLoiTep(`Tệp ${coTep(t.size)} vượt quá giới hạn 20 MB. Tách nhỏ rồi tải lên từng phần.`)
+      // Hai chữ số lẻ: tệp vừa quá ngưỡng làm tròn một chữ số thành "20.0 MB vượt quá 20 MB"
+      datLoiTep(
+        `Tệp ${(t.size / 1024 / 1024).toFixed(2)} MB vượt quá giới hạn 20 MB. Tách nhỏ rồi tải lên từng phần.`,
+      )
       return
     }
     datLoiTep(null)
