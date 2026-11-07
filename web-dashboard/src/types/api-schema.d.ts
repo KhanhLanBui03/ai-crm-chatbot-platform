@@ -3743,6 +3743,19 @@ export interface paths {
                         };
                     };
                 };
+                403: components["responses"]["KhongDuQuyen"];
+                /**
+                 * @description `AI_SERVICE_UNAVAILABLE` — không lấy được phần cảnh báo phía AI. Báo lỗi thay vì trả mỗi phần
+                 *     java-core: màn thiếu hai phần ba nguồn mà trông như "không có sự cố" là nói dối người xem.
+                 */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
+                    };
+                };
             };
         };
         put?: never;
@@ -4937,6 +4950,10 @@ export interface paths {
                     page?: components["parameters"]["Trang"];
                     /** @description Số bản ghi mỗi trang */
                     size?: components["parameters"]["CoSize"];
+                    /** @description Từ khóa tìm kiếm, không phân biệt hoa thường và không phân biệt dấu */
+                    q?: components["parameters"]["TuKhoa"];
+                    /** @description Nhật ký chỉ sắp theo thời điểm — `-occurredAt` mới nhất trước (mặc định), `occurredAt` cũ nhất trước. */
+                    sort?: "-occurredAt" | "occurredAt";
                     action?: string;
                     actorId?: string;
                     severity?: components["schemas"]["MucNghiemTrongKiemToan"];
@@ -5019,6 +5036,19 @@ export interface paths {
                     };
                 };
                 403: components["responses"]["KhongDuQuyen"];
+                404: components["responses"]["KhongThay"];
+                /**
+                 * @description `REASON_REQUIRED` — thiếu lý do hoặc lý do ngắn hơn 10 ký tự sau khi bỏ khoảng trắng (UC040
+                 *     luồng 6.2). Không có dòng nhật ký nào được ghi.
+                 */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -6185,8 +6215,11 @@ export interface components {
             createdAt: string;
         };
         SuKienAnToan: {
-            /** Format: int64 */
-            id: number;
+            /**
+             * @description Chuỗi vì ba nguồn có ba kiểu khoá: lượt xử lý và lời gọi công cụ là UUID, nhật ký kiểm toán là số
+             *     (trả dạng `audit-<số>`).
+             */
+            id: string;
             eventType: components["schemas"]["LoaiSuKienAnToan"];
             severity: components["schemas"]["MucNghiemTrong"];
             threatSurface?: components["schemas"]["BeMatDeDoa"] | null;

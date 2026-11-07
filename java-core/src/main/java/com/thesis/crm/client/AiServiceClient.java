@@ -5,7 +5,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import com.fasterxml.jackson.core.type.TypeReference;
 import java.io.IOException;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
@@ -64,6 +68,33 @@ public class AiServiceClient {
         }
     }
 
+    /**
+     * UC040 bước 8 — cảnh báo an toàn phía AI ({@code safety_flag}, lời gọi công cụ bị chặn) trong
+     * {@code [from, to)}, mới nhất trước. Gọi trong mạng nội bộ: gateway chặn đường này từ bên ngoài.
+     *
+     * @throws AiServiceException khi ai-service trả khác 200 hoặc không trả lời
+     */
+    public List<SafetyEventItem> listSafetyEvents(UUID tenantId, String traceId, Instant from, Instant to, int limit) {
+        try {
+            return rest.get()
+                    .uri(u -> u.path("/v1/safety-events")
+                            .queryParam("from", from.toString())
+                            .queryParam("to", to.toString())
+                            .queryParam("limit", limit)
+                            .build())
+                    .header(HEADER_TENANT, tenantId.toString())
+                    .header(HEADER_TRACE, traceId)
+                    .exchange((req, resp) -> {
+                        if (resp.getStatusCode().value() == HttpStatus.OK.value()) {
+                            return objectMapper.readValue(resp.getBody(), new TypeReference<List<SafetyEventItem>>() {});
+                        }
+                        throw loiTuPhanHoi(resp.getStatusCode().value(), resp.getBody().readAllBytes());
+                    });
+        } catch (ResourceAccessException e) {
+            throw AiServiceException.unreachable(e);
+        }
+    }
+
     /** Đọc {@code {code, message}} của ai-service; thân không đúng khuôn thì vẫn giữ mã HTTP. */
     private AiServiceException loiTuPhanHoi(int status, byte[] than) {
         String code = null;
@@ -104,5 +135,21 @@ public class AiServiceClient {
             String status,
             String sourceType,
             String mimeType) {
+    }
+
+    /** Gương của {@code SafetyEventItem} (ai-service/src/ai/schemas.py). */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record SafetyEventItem(
+            UUID eventId,
+            String eventType,
+            String severity,
+            String threatSurface,
+            UUID conversationId,
+            UUID interactionId,
+            String detector,
+            String actionTaken,
+            Map<String, String> evidence,
+            Instant occurredAt) {
     }
 }

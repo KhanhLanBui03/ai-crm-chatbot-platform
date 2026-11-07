@@ -23,6 +23,9 @@ final class FakeAiServer {
     final AtomicReference<String> lastTenantHeader = new AtomicReference<>();
     final AtomicReference<String> lastBody = new AtomicReference<>();
     final AtomicInteger calls = new AtomicInteger();
+    /** UC040 — thân trả cho GET /v1/safety-events (mảng JSON) và mã HTTP; header tenant của lần gọi cuối. */
+    final AtomicReference<Script> safety = new AtomicReference<>(new Script(200, "[]", 0));
+    final AtomicReference<String> lastSafetyTenant = new AtomicReference<>();
 
     private FakeAiServer(HttpServer server) {
         this.server = server;
@@ -44,6 +47,16 @@ final class FakeAiServer {
                         Thread.currentThread().interrupt();
                     }
                 }
+                byte[] out = sc.body().getBytes(StandardCharsets.UTF_8);
+                ex.getResponseHeaders().add("Content-Type", "application/json");
+                ex.sendResponseHeaders(sc.status(), out.length);
+                try (OutputStream os = ex.getResponseBody()) {
+                    os.write(out);
+                }
+            });
+            s.createContext("/v1/safety-events", ex -> {
+                fake.lastSafetyTenant.set(ex.getRequestHeaders().getFirst("X-Tenant-Id"));
+                Script sc = fake.safety.get();
                 byte[] out = sc.body().getBytes(StandardCharsets.UTF_8);
                 ex.getResponseHeaders().add("Content-Type", "application/json");
                 ex.sendResponseHeaders(sc.status(), out.length);
