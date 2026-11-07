@@ -83,6 +83,25 @@ public class AuditLog {
     @Column(nullable = false, length = 20)
     private AuditSeverity severity = AuditSeverity.INFO;
 
+    /** Chụp lại lúc ghi (V136) — vẫn đọc được "ai đã làm" sau khi người dùng bị xoá. */
+    @Column(name = "actor_email", length = 255)
+    private String actorEmail;
+
+    /** Dòng có dữ liệu cá nhân: {@code before/after} là bản ĐÃ CHE, bản gốc nằm ở {@link #piiEncrypted}. */
+    @Column(name = "contains_personal_data", nullable = false)
+    private boolean containsPersonalData;
+
+    /** Bản gốc phần trước/sau, mã hoá AES-GCM ở ứng dụng — CSDL không bao giờ thấy bản rõ (V136). */
+    @Column(name = "pii_encrypted")
+    private byte[] piiEncrypted;
+
+    /** Mã khoá đã dùng để mã hoá — để xoay khoá mà dòng cũ vẫn giải mã được. */
+    @Column(name = "pii_key_id", length = 64)
+    private String piiKeyId;
+
+    /** Lý do của chính hành động — bắt buộc với "xem đầy đủ" (UC040 luồng 6.2). */
+    private String reason;
+
     /**
      * CSDL đặt bằng {@code now()} — thời điểm BẮT ĐẦU transaction, nên mọi dòng nhật ký của cùng một thao
      * tác có chung một mốc. Vì vậy trên bản ghi vừa {@code save()} hai trường này còn {@code null}; đọc lại
@@ -120,6 +139,30 @@ public class AuditLog {
         return this;
     }
 
+    /** Email người làm, chụp lại lúc ghi — gọi TRƯỚC khi lưu. */
+    public AuditLog withActorEmail(String email) {
+        this.actorEmail = email;
+        return this;
+    }
+
+    /** Lý do của hành động — gọi TRƯỚC khi lưu. */
+    public AuditLog withReason(String reason) {
+        this.reason = reason;
+        return this;
+    }
+
+    /**
+     * Dòng có dữ liệu cá nhân: {@code before/after} đã gắn là bản ĐÃ CHE, còn bản gốc mã hoá nằm ở
+     * {@code encrypted}. {@code encrypted = null} (không mã hoá được) thì vẫn đánh dấu có dữ liệu cá nhân
+     * nhưng không có gì để "xem đầy đủ" — UC040 luồng 2.1. Gọi TRƯỚC khi lưu.
+     */
+    public AuditLog withPersonalData(byte[] encrypted, String keyId) {
+        this.containsPersonalData = true;
+        this.piiEncrypted = encrypted;
+        this.piiKeyId = encrypted == null ? null : keyId;
+        return this;
+    }
+
     /** Gắn ngữ cảnh request — gọi TRƯỚC khi lưu. */
     public AuditLog withRequest(InetAddress ip, String userAgent, String requestId) {
         this.ipAddress = ip;
@@ -141,6 +184,11 @@ public class AuditLog {
     public String getUserAgent() { return userAgent; }
     public String getRequestId() { return requestId; }
     public AuditSeverity getSeverity() { return severity; }
+    public String getActorEmail() { return actorEmail; }
+    public boolean isContainsPersonalData() { return containsPersonalData; }
+    public byte[] getPiiEncrypted() { return piiEncrypted; }
+    public String getPiiKeyId() { return piiKeyId; }
+    public String getReason() { return reason; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }

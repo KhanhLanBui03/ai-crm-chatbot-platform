@@ -3000,6 +3000,11 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Trang'
         - $ref: '#/components/parameters/CoSize'
+        - $ref: '#/components/parameters/TuKhoa'
+        - name: sort
+          in: query
+          description: Nhật ký chỉ sắp theo thời điểm — `-occurredAt` mới nhất trước (mặc định), `occurredAt` cũ nhất trước.
+          schema: { type: string, enum: ['-occurredAt', occurredAt], default: '-occurredAt' }
         - name: action
           in: query
           schema: { type: string }
@@ -3063,6 +3068,14 @@ paths:
                   - $ref: '#/components/schemas/ApiResponse'
                   - properties: { data: { $ref: '#/components/schemas/BanGhiKiemToan' } }
         '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '404': { $ref: '#/components/responses/KhongThay' }
+        '422':
+          description: |
+            `REASON_REQUIRED` — thiếu lý do hoặc lý do ngắn hơn 10 ký tự sau khi bỏ khoảng trắng (UC040
+            luồng 6.2). Không có dòng nhật ký nào được ghi.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
 
   /api/v1/erasure-requests:
     get:

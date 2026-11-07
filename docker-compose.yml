@@ -235,6 +235,10 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-changeme}
       DB_MIGRATION_USER: ${DB_MIGRATION_USER:-crm_owner}
       DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:-changeme}
+      # UC040: khoá AES-256 mã hoá bản gốc dữ liệu cá nhân trong nhật ký kiểm toán. Để trống thì
+      # dòng có dữ liệu cá nhân bỏ phần trước/sau (không bao giờ lưu bản rõ) — xem .env.example.
+      AUDIT_PII_KEY: ${AUDIT_PII_KEY:-}
+      AUDIT_PII_KEY_ID: ${AUDIT_PII_KEY_ID:-k1}
       REDIS_HOST: redis
       KAFKA_BOOTSTRAP: kafka:9092
       # Kho tệp S3 (ADR-0022). java-core GHI tệp gốc của UC018, ai-service đọc.

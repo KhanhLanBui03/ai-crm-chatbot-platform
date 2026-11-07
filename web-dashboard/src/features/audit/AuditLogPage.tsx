@@ -1,3 +1,4 @@
+import type { SortingState } from '@tanstack/react-table'
 import { format } from 'date-fns'
 import { Eye, EyeOff, ScrollText, ShieldAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -42,8 +43,14 @@ import type { BanGhiKiemToan } from '@/types/schema'
 export function AuditLogPage() {
   const [boLoc, datBoLoc] = useState<BoLocKiemToan>({ trang: 0 })
   const [dangXem, datDangXem] = useState<BanGhiKiemToan | null>(null)
+  // Nhật ký là chuỗi sự kiện theo thời gian — chỉ sắp theo Thời điểm, mặc định mới nhất trước.
+  // Sắp phía máy chủ (bảng là manualSorting): sắp trong trang hiện tại thì trang 2 vẫn lệch trang 1.
+  const [sapXep, datSapXep] = useState<SortingState>([{ id: 'occurredAt', desc: true }])
 
-  const truyVan = useDanhSachKiemToanQuery(boLoc)
+  const truyVan = useDanhSachKiemToanQuery({
+    ...boLoc,
+    sapXep: sapXep[0] && !sapXep[0].desc ? 'occurredAt' : '-occurredAt',
+  })
 
   const cot = useMemo<CotBang<BanGhiKiemToan>[]>(
     () => [
@@ -61,6 +68,7 @@ export function AuditLogPage() {
       {
         id: 'action',
         accessorKey: 'action',
+        enableSorting: false,
         header: 'Hành động',
         cell: ({ row }) => {
           const b = row.original
@@ -75,6 +83,7 @@ export function AuditLogPage() {
       {
         id: 'actorEmail',
         accessorKey: 'actorEmail',
+        enableSorting: false,
         header: 'Người thực hiện',
         cell: ({ row }) => {
           const b = row.original
@@ -89,6 +98,7 @@ export function AuditLogPage() {
       {
         id: 'entityType',
         accessorKey: 'entityType',
+        enableSorting: false,
         header: 'Đối tượng',
         cell: ({ row }) => (
           <span className="text-muted-foreground font-mono text-xs">
@@ -99,6 +109,7 @@ export function AuditLogPage() {
       {
         id: 'severity',
         accessorKey: 'severity',
+        enableSorting: false,
         header: 'Mức',
         cell: ({ row }) => {
           const m = NHAN_MUC_NGHIEM_TRONG[row.original.severity]
@@ -108,6 +119,7 @@ export function AuditLogPage() {
       {
         id: 'containsPersonalData',
         accessorKey: 'containsPersonalData',
+        enableSorting: false,
         header: 'Dữ liệu cá nhân',
         cell: ({ row }) => {
           const b = row.original
@@ -128,6 +140,7 @@ export function AuditLogPage() {
       {
         id: 'ipAddress',
         accessorKey: 'ipAddress',
+        enableSorting: false,
         header: 'Địa chỉ IP',
         cell: ({ row }) => (
           <span className="text-muted-foreground font-mono text-xs">
@@ -138,6 +151,7 @@ export function AuditLogPage() {
       {
         id: 'thaoTac',
         header: '',
+        enableSorting: false,
         cell: ({ row }) => {
           const b = row.original
           if (!b.containsPersonalData || !b.masked) return null
@@ -202,6 +216,15 @@ export function AuditLogPage() {
         }
         onGoHetBoLoc={() => datBoLoc({ trang: 0 })}
         onDoiTrang={(t) => datBoLoc((cu) => ({ ...cu, trang: t }))}
+        sapXep={{
+          trangThai: sapXep,
+          // Chỉ đảo chiều, bỏ qua trạng thái TanStack đề xuất: vòng mặc định là
+          // giảm → "bỏ sắp xếp" → tăng, mà "bỏ sắp xếp" ở đây vẫn là mới nhất trước — bấm như không.
+          onDoiSapXep: () => {
+            datSapXep((cu) => [{ id: 'occurredAt', desc: !(cu[0]?.desc ?? true) }])
+            datBoLoc((cu) => ({ ...cu, trang: 0 }))
+          },
+        }}
         khiChuaCoDuLieu={{
           BieuTuong: ScrollText,
           tieuDe: 'Chưa có bản ghi kiểm toán nào',

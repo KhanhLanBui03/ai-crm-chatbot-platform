@@ -25,24 +25,44 @@ export const NHAN_CHU_THE: Record<LoaiChuThe, string> = {
 }
 
 /**
- * Hành động ghi vào nhật ký. `Record` **không** đầy đủ được vì `action` là chuỗi tự do ở giao ước
- * — máy chủ thêm hành động mới mà không cần đổi lược đồ. Chỗ nào tra không thấy thì hiện nguyên
- * mã, đọc vẫn ra nghĩa, hơn là hiện một dòng trống.
+ * Hành động ghi vào nhật ký — đúng các mã java-core THẬT SỰ ghi (rà mọi lời gọi `AuditLogWriter`,
+ * 07/11/2026). Danh sách này cũng là các lựa chọn của bộ lọc "Hành động": để mã không ai ghi ở đây
+ * thì người dùng chọn xong chỉ thấy bảng rỗng và tưởng hệ thống không ghi.
+ *
+ * `Record` **không** đầy đủ được vì `action` là chuỗi tự do ở giao ước — máy chủ thêm hành động mới
+ * mà không cần đổi lược đồ. Chỗ nào tra không thấy thì hiện nguyên mã, đọc vẫn ra nghĩa.
+ * Thêm hành động mới ở java-core thì thêm nhãn ở đây.
  */
 export const NHAN_HANH_DONG: Record<string, string> = {
-  LOGIN_SUCCESS: 'Đăng nhập thành công',
-  LOGIN_FAILED: 'Đăng nhập thất bại',
-  ROLE_CHANGED: 'Đổi vai trò người dùng',
-  CONTACT_MERGED: 'Hợp nhất hồ sơ khách hàng',
-  CONSENT_WITHDRAWN: 'Khách rút đồng ý xử lý dữ liệu',
-  ERASURE_EXECUTED: 'Thực thi xoá dữ liệu cá nhân',
-  EXPORT_REQUESTED: 'Yêu cầu xuất báo cáo',
-  RETENTION_PURGE: 'Dọn dữ liệu quá hạn lưu trữ',
-  PLAN_CHANGED: 'Đổi gói dịch vụ',
-  MCP_SERVER_ADDED: 'Thêm máy chủ MCP',
-  TOOL_CALL_BLOCKED: 'Chặn lời gọi công cụ',
-  DOCUMENT_DELETED: 'Xoá tài liệu tri thức',
+  CONTACT_CREATED: 'Tạo hồ sơ khách hàng',
+  CONTACT_CONSENT_GRANTED: 'Khách đồng ý lưu dữ liệu',
+  CONTACT_TAGGED: 'Gắn thẻ khách hàng',
+  CONTACT_UNTAGGED: 'Gỡ thẻ khách hàng',
+  TAG_CREATED: 'Tạo thẻ mới',
+  NOTE_UPDATED: 'Sửa ghi chú',
+  NOTE_DELETED: 'Xoá ghi chú',
+  CONVERSATION_HANDOFF: 'Chuyển hội thoại cho nhân viên',
+  CONVERSATION_ASSIGNED: 'Giao hội thoại',
+  CONVERSATION_RELEASED: 'Trả hội thoại về hàng chờ',
+  CONVERSATION_AUTO_RELEASED: 'Tự trả về hàng chờ (nhân viên ngoại tuyến)',
+  CONVERSATION_ESCALATED: 'Nâng mức ưu tiên hội thoại chờ lâu',
+  CONVERSATION_STATUS_CHANGED: 'Đổi trạng thái hội thoại',
+  LEAD_CREATED: 'Tạo cơ hội tiềm năng',
+  LEAD_UPDATED: 'Sửa cơ hội tiềm năng',
+  LEAD_STATUS_CHANGED: 'Đổi trạng thái lead',
+  LEAD_ASSIGNED: 'Giao lead',
+  LEAD_CONVERTED: 'Chuyển lead thành deal',
+  DEAL_CREATED: 'Tạo deal',
+  DEAL_UPDATED: 'Sửa deal',
+  DEAL_STAGE_CHANGED: 'Chuyển giai đoạn deal',
+  DEAL_ASSIGNED: 'Giao deal',
+  WIDGET_CREATED: 'Tạo khung chat website',
+  WIDGET_CONFIG_UPDATED: 'Đổi cấu hình khung chat',
+  WIDGET_ORIGIN_REJECTED: 'Chặn khung chat nhúng trên tên miền lạ',
   AUDIT_LOG_REVEALED: 'Xem đầy đủ bản ghi kiểm toán',
+  // UC041 (Dev A) — sắp ghi qua AuditLogWriter.recordWithPersonalData
+  CONTACT_MERGED: 'Hợp nhất hồ sơ khách hàng',
+  ERASURE_EXECUTED: 'Thực thi xoá dữ liệu cá nhân',
 }
 
 export const NHAN_TRANG_THAI_XOA: Record<
