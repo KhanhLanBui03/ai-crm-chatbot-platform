@@ -39,6 +39,9 @@ public class SecurityConfig {
                         // Bảng giá trên trang chủ công khai (chỉ đọc). Có token thì vẫn kiểm và chuyển tiếp để
                         // java-core đánh dấu gói hiện tại của doanh nghiệp đăng nhập.
                         .pathMatchers(HttpMethod.GET, "/api/v1/plans").permitAll()
+                        // UC040: cảnh báo an toàn chỉ java-core gọi trong mạng nội bộ — ai-service không kiểm vai
+                        // trò, để lộ qua /ai/v1/** là nhân viên thường đọc được màn dành cho quản trị viên.
+                        .pathMatchers("/ai/v1/safety-events", "/ai/v1/safety-events/**").denyAll()
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}))
                 .build();

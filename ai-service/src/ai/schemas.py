@@ -488,3 +488,28 @@ class ErasureResult(BaseModel):
     items: list[ErasureItem]
     # Giới hạn PHẢI hiện cho người duyệt (đặc tả UC041 bước 6) — java-core hiển thị nguyên văn.
     note: str
+
+
+# ── UC040 bước 8 — cảnh báo an toàn phía AI (java-core gộp với audit_logs CRITICAL) ─────────────
+
+
+class SafetyEventItem(BaseModel):
+    """Một cảnh báo an toàn — hợp đồng ``SafetyEventItem`` (docs/openapi/ai-service-to-java-core.yaml).
+
+    ``evidence`` chỉ là trích đoạn NGẮN đã che PII, không phải nguyên văn nội dung tấn công."""
+
+    event_id: UUID
+    event_type: Literal[
+        "PROMPT_INJECTION_INPUT", "PROMPT_INJECTION_TOOL_RESULT", "PROMPT_INJECTION_DOCUMENT",
+        "CROSS_TENANT_PROBE", "INTERNAL_DATA_PROBE", "TOOL_CALL_BLOCKED",
+    ]
+    severity: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    threat_surface: Literal["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8"] | None = None
+    conversation_id: UUID | None = None
+    interaction_id: UUID | None = None
+    detector: str
+    action_taken: Literal["TREATED_AS_DATA", "BLOCKED", "REFUSED", "ESCALATED"]
+    evidence: dict[str, str] = Field(default_factory=dict)
+    occurred_at: datetime
+    # Trường cũ của hợp đồng, giữ cho bên đọc phiên bản trước — = event_type
+    reason: str

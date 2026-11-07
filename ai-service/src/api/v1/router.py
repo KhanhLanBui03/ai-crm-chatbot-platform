@@ -9,7 +9,7 @@ Gateway định tuyến ``/ai/v1/**`` tới ``lb://ai-service`` và cắt tiền
 
 from fastapi import APIRouter
 
-from src.api.v1.endpoints import chat, documents, feedback, kho, rieng_tu, tom_tat
+from src.api.v1.endpoints import an_toan, chat, documents, feedback, kho, rieng_tu, tom_tat
 
 api_router = APIRouter()
 
@@ -22,6 +22,7 @@ api_router.include_router(feedback.router)
 api_router.include_router(kho.router)
 api_router.include_router(tom_tat.router)  # /v1/ai/summarize — UC026 (Ngày 12)
 api_router.include_router(rieng_tu.router)  # /v1/ai/privacy/contacts/{id} — UC041 (Ngày 12)
+api_router.include_router(an_toan.router)  # /v1/safety-events — UC040 bước 8, chỉ java-core gọi
 
 # TODO: scoring
 # Đặc tả giao ước: docs/openapi/ai-service-to-java-core.yaml (hạn chốt 07/09)
