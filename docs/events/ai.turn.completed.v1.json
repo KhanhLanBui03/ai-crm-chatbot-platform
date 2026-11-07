@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thesis-crm-ai/events/ai.turn.completed.v1.json",
+  "title": "ai.turn.completed.v1",
+  "description": "Kết thúc MỘT lượt xử lý của tác tử AI — phát ở bước cuối của mọi lượt, kể cả lượt bị từ chối, chặn, lỗi hay chạy suy giảm (UC039 bước 1–2; UC022 bước 10). Producer: ai-service. Consumer: analytics-cg (java-core) cộng dồn vào analytics.metrics_daily. Topic có khối lượng lớn nhất hệ thống: 6 phân vùng, giữ 7 ngày, khoá tenant_id. Trace ID nằm ở header X-Trace-Id, không ở payload.",
+  "type": "object",
+  "required": ["event_id", "event_version", "event_type", "tenant_id", "aggregate_id", "occurred_at", "payload"],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "= interaction_id (ai.ai_interactions.id). KHÁC các sự kiện crm.* (event_id là outbox_events.id kiểu số): ai-service không có outbox; mã lượt đã duy nhất toàn cục nên dùng luôn để chống trùng (analytics.processed_events.event_id là chuỗi từ V137)."
+    },
+    "event_version": { "type": "integer", "const": 1 },
+    "event_type": { "type": "string", "enum": ["TurnCompleted"] },
+    "tenant_id": { "type": "string", "format": "uuid", "description": "khoá phân vùng Kafka" },
+    "aggregate_id": { "type": "string", "format": "uuid", "description": "conversation_id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "payload": {
+      "type": "object",
+      "required": [
+        "conversation_id", "branch", "status", "is_answered", "llm_called", "is_cached", "is_degraded",
+        "is_handoff", "model_name", "prompt_tokens", "completion_tokens", "cost_vnd", "latency_ms",
+        "latency_breakdown"
+      ],
+      "properties": {
+        "conversation_id": { "type": "string", "format": "uuid" },
+        "branch": {
+          "type": "string",
+          "enum": ["SMALL_TALK", "RAG", "TOOL_CALL", "CLARIFY", "HANDOFF", "SUMMARY", "EXTRACTION"],
+          "description": "Khớp TỪNG CHỮ với CHECK của ai.ai_interactions.branch (V204) và analytics.metrics_daily.branch (V113) — hai làn không có khoá ngoại nối nhau."
+        },
+        "status": { "type": "string", "enum": ["SUCCESS", "FAILED", "TIMEOUT"] },
+        "is_answered": { "type": "boolean" },
+        "refusal_reason": {
+          "type": ["string", "null"],
+          "enum": ["NOT_COVERED", "OUT_OF_SCOPE_DATA", "LOW_CONFIDENCE", "SAFETY_PROBE", null]
+        },
+        "llm_called": { "type": "boolean", "description": "KPI §1.6: ≥ 55% lượt KHÔNG gọi LLM" },
+        "is_cached": {
+          "type": "boolean",
+          "description": "Trả từ bộ đệm ngữ nghĩa. Chi phí 0 nhưng phải tách nhóm khi tính trung bình — gộp vào thì báo cáo mô tả một hệ thống nhanh và rẻ hơn thực tế."
+        },
+        "is_degraded": { "type": "boolean", "description": "Chạy chế độ suy giảm (LLM lỗi, trả mẫu câu)" },
+        "is_handoff": { "type": "boolean" },
+        "safety_flag": { "type": ["string", "null"] },
+        "model_name": { "type": "string", "description": "Mô hình SINH câu trả lời; lượt mẫu câu là 'template'" },
+        "model_version": { "type": ["string", "null"], "description": "UC039 4.2: đổi mô hình giữa kỳ thì tách số liệu theo phiên bản" },
+        "prompt_tokens": { "type": "integer", "minimum": 0 },
+        "completion_tokens": { "type": "integer", "minimum": 0 },
+        "cost_vnd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "4 chữ số thập phân — một lượt gọi mô hình nhỏ có thể dưới 1 đồng, làm tròn sớm là mất số liệu."
+        },
+        "latency_ms": { "type": "integer", "minimum": 0 },
+        "latency_breakdown": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 },
+          "description": "Thời gian từng chặng (ms): guard_ms, classify_ms, embed_ms, retrieve_ms, rerank_ms, generate_ms, postguard_ms… Chặng nào không chạy ở lượt đó thì vắng mặt. Không gồm total_ms (đã có ở latency_ms)."
+        },
+        "groundedness_score": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

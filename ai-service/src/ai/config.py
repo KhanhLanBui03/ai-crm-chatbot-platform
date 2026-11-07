@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # ── Kafka ────────────────────────────────────────────────────────────
     kafka_bootstrap: str = "kafka:9092"
     kafka_consumer_group: str = "ingestion-cg"
+    # UC039: phát ai.turn.completed sau mỗi lượt chat. Tắt ở test HTTP và môi trường không có Kafka —
+    # tắt thì trang "Hiệu quả tác tử AI" không có số liệu, lượt chat vẫn chạy bình thường.
+    turn_events_enabled: bool = True
 
     # ── Eureka ───────────────────────────────────────────────────────────
     eureka_url: str = "http://eureka-server:8761/eureka"

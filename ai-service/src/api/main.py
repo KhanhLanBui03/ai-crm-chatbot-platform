@@ -50,6 +50,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         # TODO: dừng consumer Kafka, chờ xử lý nốt bản tin đang dở
         await service.dong_tra_loi()
+        await service.dong_phat_luot()
         await aclose_http_clients()
         await eureka.deregister()
         logger.info("ai-service đã tắt")
