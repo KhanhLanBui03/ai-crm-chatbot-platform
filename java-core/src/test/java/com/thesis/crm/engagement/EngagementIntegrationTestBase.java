@@ -72,6 +72,9 @@ abstract class EngagementIntegrationTestBase {
         r.add("ai-service.chat-timeout", () -> "2s");
         // Job quá hạn hàng chờ: test gọi runOnce() trực tiếp, không để lịch chạy chen ngang
         r.add("inbox.watchdog.enabled", () -> "false");
+        // UC040: khoá mã hoá bản gốc dữ liệu cá nhân của nhật ký — 32 byte cố định, CHỈ dùng cho test
+        r.add("AUDIT_PII_KEY", () -> "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=");
+        r.add("AUDIT_PII_KEY_ID", () -> "test-k1");
     }
 
     static final UUID TENANT_A = UUID.randomUUID();
