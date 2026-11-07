@@ -52,6 +52,7 @@ export function AiPerformancePage() {
 
   const kpi = useMemo<TheKpi[]>(() => {
     if (!d) return []
+    const coDanhGia = (d.feedbackCount ?? 0) > 0
     return [
       {
         nhan: 'Lượt xử lý',
@@ -59,9 +60,18 @@ export function AiPerformancePage() {
         phuChu: `${phanTram(d.cachedRate)} dùng đệm ngữ nghĩa, không tốn lượt gọi mô hình`,
       },
       {
+        // KPI nghiệm thu §1.6 — đọc từ cờ llm_called của từng lượt, không ước lượng
+        nhan: 'Lượt không gọi LLM',
+        giaTri: phanTram(d.llmFreeRate),
+        phuChu: 'Mục tiêu ≥ 55% — luật và mô hình nhỏ trả lời trước, LLM chỉ khi cần',
+      },
+      {
         nhan: 'Phản hồi tích cực',
-        giaTri: phanTram(d.positiveFeedbackRate),
-        phuChu: `trên ${so(d.feedbackCount ?? 0)} lượt đánh giá của nhân viên và khách`,
+        // 0 lượt đánh giá thì "0%" là nói sai — chưa ai đánh giá chứ không phải mọi đánh giá đều xấu
+        giaTri: coDanhGia ? phanTram(d.positiveFeedbackRate) : '—',
+        phuChu: coDanhGia
+          ? `trên ${so(d.feedbackCount ?? 0)} lượt đánh giá của nhân viên và khách`
+          : 'Chưa có lượt đánh giá nào',
       },
       {
         nhan: 'Tỉ lệ từ chối',
@@ -72,6 +82,7 @@ export function AiPerformancePage() {
       {
         nhan: 'Chi phí mô hình',
         giaTri: tienVnd(d.costVnd),
+        // Trung bình = tổng ÷ số lượt; p95 không cộng dồn qua nhiều ngày nên không hiện (UC039 6.2)
         phuChu: `${doTre(d.avgLatencyMs)} trung bình mỗi lượt`,
         tangLaTot: false,
       },
@@ -82,7 +93,8 @@ export function AiPerformancePage() {
     <KpiDashboard
       tieuDe="Hiệu quả và chi phí của tác tử AI"
       moTa="Số liệu tổng hợp trên hội thoại thật, không phải trên bộ kiểm thử."
-      capNhatLuc={d ? format(new Date(d.updatedAt), 'HH:mm dd/MM/yyyy') : undefined}
+      // null = chưa từng có lượt nào; đừng format(null) — ra 07:00 01/01/1970
+      capNhatLuc={d ? (d.updatedAt ? format(new Date(d.updatedAt), 'HH:mm dd/MM/yyyy') : 'chưa có lượt nào') : undefined}
       kpi={kpi}
       khoangThoiGian={{ giaTri: khoang, onDoi: datKhoang }}
       dangTai={truyVan.isLoading}
