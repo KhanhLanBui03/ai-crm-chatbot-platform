@@ -4968,8 +4968,20 @@ components:
     HieuQuaAi:
       type: object
       required: [updatedAt, routeDistribution, handoffReasons, latencyBreakdown]
+      description: |
+        Mô hình đọc `analytics.metrics_daily`, consumer `analytics-cg` cộng dồn từ `ai.turn.completed`.
+        **Không có p95:** phân vị không cộng dồn qua nhiều ngày (UC039 6.2) — `avgLatencyMs` là tổng độ
+        trễ ÷ số lượt. `routeDistribution` luôn đủ 7 nhánh, nhánh 0 lượt vẫn có dòng (UC039 5.1).
       properties:
-        updatedAt: { type: string, format: date-time }
+        updatedAt:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Mốc cộng dồn gần nhất của CẢ doanh nghiệp (không theo khoảng lọc). `null` khi chưa từng có lượt
+            nào. Consumer đọng thì mốc này lùi lại — giao diện phải hiện ra (UC039 6.1).
+        llmFreeRate:
+          type: number
+          description: KPI §1.6 — tỉ lệ lượt KHÔNG gọi LLM (ngưỡng ≥ 0,55).
         totalInteractions: { type: integer }
         refusalRate: { type: number }
         positiveFeedbackRate:

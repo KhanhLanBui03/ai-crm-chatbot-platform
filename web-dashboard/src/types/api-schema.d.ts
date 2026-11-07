@@ -4937,6 +4937,10 @@ export interface paths {
                     page?: components["parameters"]["Trang"];
                     /** @description Số bản ghi mỗi trang */
                     size?: components["parameters"]["CoSize"];
+                    /** @description Từ khóa tìm kiếm, không phân biệt hoa thường và không phân biệt dấu */
+                    q?: components["parameters"]["TuKhoa"];
+                    /** @description Nhật ký chỉ sắp theo thời điểm — `-occurredAt` mới nhất trước (mặc định), `occurredAt` cũ nhất trước. */
+                    sort?: "-occurredAt" | "occurredAt";
                     action?: string;
                     actorId?: string;
                     severity?: components["schemas"]["MucNghiemTrongKiemToan"];
@@ -5019,6 +5023,19 @@ export interface paths {
                     };
                 };
                 403: components["responses"]["KhongDuQuyen"];
+                404: components["responses"]["KhongThay"];
+                /**
+                 * @description `REASON_REQUIRED` — thiếu lý do hoặc lý do ngắn hơn 10 ký tự sau khi bỏ khoảng trắng (UC040
+                 *     luồng 6.2). Không có dòng nhật ký nào được ghi.
+                 */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -6597,9 +6614,20 @@ export interface components {
             /** @description Cao ở một chủ đề là gợi ý trực tiếp — bổ sung tài liệu cho chủ đề đó */
             refusalCount?: number;
         };
+        /**
+         * @description Mô hình đọc `analytics.metrics_daily`, consumer `analytics-cg` cộng dồn từ `ai.turn.completed`.
+         *     **Không có p95:** phân vị không cộng dồn qua nhiều ngày (UC039 6.2) — `avgLatencyMs` là tổng độ
+         *     trễ ÷ số lượt. `routeDistribution` luôn đủ 7 nhánh, nhánh 0 lượt vẫn có dòng (UC039 5.1).
+         */
         HieuQuaAi: {
-            /** Format: date-time */
-            updatedAt: string;
+            /**
+             * Format: date-time
+             * @description Mốc cộng dồn gần nhất của CẢ doanh nghiệp (không theo khoảng lọc). `null` khi chưa từng có lượt
+             *     nào. Consumer đọng thì mốc này lùi lại — giao diện phải hiện ra (UC039 6.1).
+             */
+            updatedAt: string | null;
+            /** @description KPI §1.6 — tỉ lệ lượt KHÔNG gọi LLM (ngưỡng ≥ 0,55). */
+            llmFreeRate?: number;
             totalInteractions?: number;
             refusalRate?: number;
             /**
