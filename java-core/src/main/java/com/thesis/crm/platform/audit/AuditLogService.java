@@ -41,8 +41,9 @@ public class AuditLogService {
         this.writer = writer;
     }
 
-    public record Filter(String action, UUID actorId, AuditSeverity severity, String entityType, LocalDate from,
-                         LocalDate to, int page, int size) {}
+    /** {@code q}: tìm không phân biệt hoa thường trong mã hành động, email người làm và mã truy vết. */
+    public record Filter(String q, String action, UUID actorId, AuditSeverity severity, String entityType,
+                         LocalDate from, LocalDate to, boolean oldestFirst, int page, int size) {}
 
     @Transactional(readOnly = true)
     public PageResponse<AuditLogDto> list(UUID tenantId, boolean isAdmin, Filter f) {
@@ -54,7 +55,9 @@ public class AuditLogService {
         Map<String, Object> p = new HashMap<>();
         String where = where(tenantId, f, p);
         TypedQuery<AuditLog> q = em.createQuery(
-                        "SELECT a FROM AuditLog a" + where + " ORDER BY a.createdAt DESC, a.id DESC", AuditLog.class)
+                        "SELECT a FROM AuditLog a" + where + (f.oldestFirst()
+                                ? " ORDER BY a.createdAt ASC, a.id ASC" : " ORDER BY a.createdAt DESC, a.id DESC"),
+                        AuditLog.class)
                 .setFirstResult(page * size)
                 .setMaxResults(size);
         TypedQuery<Long> c = em.createQuery("SELECT count(a) FROM AuditLog a" + where, Long.class);
@@ -98,6 +101,11 @@ public class AuditLogService {
     private String where(UUID tenantId, Filter f, Map<String, Object> p) {
         StringBuilder w = new StringBuilder(" WHERE a.tenantId = :t");
         p.put("t", tenantId);
+        if (f.q() != null && !f.q().isBlank()) {
+            w.append(" AND (lower(a.action) LIKE :q ESCAPE '!' OR lower(coalesce(a.actorEmail, '')) LIKE :q ESCAPE '!'")
+                    .append(" OR lower(coalesce(a.requestId, '')) LIKE :q ESCAPE '!')");
+            p.put("q", "%" + escapeLike(f.q().strip().toLowerCase(java.util.Locale.ROOT)) + "%");
+        }
         if (f.action() != null && !f.action().isBlank()) {
             w.append(" AND a.action = :action");
             p.put("action", f.action().strip());
@@ -127,6 +135,11 @@ public class AuditLogService {
             }
         }
         return w.toString();
+    }
+
+    /** Ký tự thoát của LIKE là {@code !} — người dùng gõ "%" hay "_" thì tìm đúng ký tự đó. */
+    private static String escapeLike(String s) {
+        return s.replace("!", "!!").replace("%", "!%").replace("_", "!_");
     }
 
     private ZoneId zone(UUID tenantId) {

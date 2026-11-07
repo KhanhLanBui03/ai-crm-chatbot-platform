@@ -109,12 +109,35 @@ class AuditLogIntegrationTest extends EngagementIntegrationTestBase {
         assertThat(trang.get("totalItems").asLong()).isEqualTo(3);
         assertThat(trang.get("totalPages").asInt()).isEqualTo(2);
 
+        // Cũ nhất trước — dòng đầu của trang theo chiều tăng là dòng cuối của chiều giảm
+        JsonNode tang = data(body(mvc.perform(get("/api/v1/audit-logs").param("action", "TEST_PAGE")
+                .param("sort", "occurredAt").param("size", "3").with(admin(TENANT_X, ADMIN_X))))).get("items");
+        JsonNode giam = data(body(mvc.perform(get("/api/v1/audit-logs").param("action", "TEST_PAGE")
+                .param("size", "3").with(admin(TENANT_X, ADMIN_X))))).get("items");
+        assertThat(tang.get(0).get("id").asLong()).isEqualTo(giam.get(2).get("id").asLong());
+
         JsonNode crit = data(body(mvc.perform(get("/api/v1/audit-logs").param("severity", "CRITICAL")
                 .with(admin(TENANT_X, ADMIN_X))).andExpect(status().isOk()))).get("items");
         assertThat(crit).isNotEmpty();
         crit.forEach(i -> assertThat(i.get("severity").asText()).isEqualTo("CRITICAL"));
         assertThat(crit.get(0).get("actorType").asText()).isEqualTo("SYSTEM");
         assertThat(crit.get(0).get("actorEmail").isNull()).isTrue();
+    }
+
+    @Test
+    void timKiem_theoHanhDong_hoacEmailNguoiLam_khongPhanBietHoaThuong() throws Exception {
+        ghi(TENANT_X, ADMIN_X, "TEST_SEARCH_ABC", UUID.randomUUID());
+
+        assertThat(data(body(mvc.perform(get("/api/v1/audit-logs").param("q", "search_abc")
+                .with(admin(TENANT_X, ADMIN_X))))).get("totalItems").asLong()).isEqualTo(1);
+        // Theo email người làm — mọi dòng của ADMIN_X, không lẫn AGENT_X
+        JsonNode theoEmail = data(body(mvc.perform(get("/api/v1/audit-logs").param("q", "ADMIN.X@")
+                .param("size", "100").with(admin(TENANT_X, ADMIN_X))))).get("items");
+        assertThat(theoEmail).isNotEmpty();
+        theoEmail.forEach(i -> assertThat(i.get("actorEmail").asText()).isEqualTo("admin.x@kt.vn"));
+        // Ký tự đặc biệt của LIKE được tìm đúng nghĩa đen, không thành ký tự đại diện
+        assertThat(data(body(mvc.perform(get("/api/v1/audit-logs").param("q", "%")
+                .with(admin(TENANT_X, ADMIN_X))))).get("totalItems").asLong()).isZero();
     }
 
     @Test

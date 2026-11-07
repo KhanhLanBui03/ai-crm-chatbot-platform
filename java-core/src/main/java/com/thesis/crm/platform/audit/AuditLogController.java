@@ -37,16 +37,20 @@ public class AuditLogController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<AuditLogDto>>> list(
+            @RequestParam(required = false) String q,
             @RequestParam(required = false) String action,
             @RequestParam(required = false) UUID actorId,
             @RequestParam(required = false) AuditSeverity severity,
             @RequestParam(required = false) String entityType,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            // Chỉ sắp theo thời điểm: "-occurredAt" (mặc định) mới nhất trước, "occurredAt" cũ nhất trước
+            @RequestParam(defaultValue = "-occurredAt") String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
         return ResponseEntity.ok(ApiResponse.ok(service.list(requireTenantId(), isTenantAdmin(),
-                new AuditLogService.Filter(action, actorId, severity, entityType, from, to, page, size))));
+                new AuditLogService.Filter(q, action, actorId, severity, entityType, from, to,
+                        "occurredAt".equals(sort), page, size))));
     }
 
     @PostMapping("/{logId}/reveal")

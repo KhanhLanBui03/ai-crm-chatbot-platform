@@ -3000,6 +3000,11 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Trang'
         - $ref: '#/components/parameters/CoSize'
+        - $ref: '#/components/parameters/TuKhoa'
+        - name: sort
+          in: query
+          description: Nhật ký chỉ sắp theo thời điểm — `-occurredAt` mới nhất trước (mặc định), `occurredAt` cũ nhất trước.
+          schema: { type: string, enum: ['-occurredAt', occurredAt], default: '-occurredAt' }
         - name: action
           in: query
           schema: { type: string }
