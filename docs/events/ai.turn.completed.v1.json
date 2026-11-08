@@ -30,6 +30,11 @@
           "enum": ["SMALL_TALK", "RAG", "TOOL_CALL", "CLARIFY", "HANDOFF", "SUMMARY", "EXTRACTION"],
           "description": "Khớp TỪNG CHỮ với CHECK của ai.ai_interactions.branch (V204) và analytics.metrics_daily.branch (V113) — hai làn không có khoá ngoại nối nhau."
         },
+        "intent": {
+          "type": ["string", "null"],
+          "enum": ["GREETING", "KB_SEARCH", "PRICING_POLICY", "COMPLAINT_SUPPORT", "TECH_ERROR", "HANDOFF_HUMAN", "BUYING_INTENT", null],
+          "description": "UC038 lớp 1 — ý định router (UC022) của lượt, để thống kê chủ đề theo ý định. Bổ sung tương thích ngược: KHÔNG nằm trong required. Nhãn ngoài 7 giá trị hoặc bộ phân loại hỏng → null, consumer bỏ qua phần thống kê chủ đề."
+        },
         "status": { "type": "string", "enum": ["SUCCESS", "FAILED", "TIMEOUT"] },
         "is_answered": { "type": "boolean" },
         "refusal_reason": {

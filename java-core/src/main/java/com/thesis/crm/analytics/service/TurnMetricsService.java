@@ -42,10 +42,12 @@ public class TurnMetricsService {
 
     private final EntityManager em;
     private final TenantTransactionScope scope;
+    private final TopicMetricsService chuDe;
 
-    public TurnMetricsService(EntityManager em, TenantTransactionScope scope) {
+    public TurnMetricsService(EntityManager em, TenantTransactionScope scope, TopicMetricsService chuDe) {
         this.em = em;
         this.scope = scope;
+        this.chuDe = chuDe;
     }
 
     /**
@@ -81,7 +83,10 @@ public class TurnMetricsService {
         LocalDate ngay = occurredAt.atZone(muiGio(tenantId)).toLocalDate();
         String moHinh = moHinh(p);
         MetricsDaily dong = timHoacTao(tenantId, ngay, channelId, branch, moHinh);
-        dong.cong(luot(p), Instant.now());
+        Instant bayGio = Instant.now();
+        dong.cong(luot(p), bayGio);
+        // UC038 lớp 1 — cùng sự kiện, cùng transaction, đã qua chống trùng ở trên
+        chuDe.congTheoYDinh(tenantId, ngay, p, bayGio);
         em.flush();
         return true;
     }

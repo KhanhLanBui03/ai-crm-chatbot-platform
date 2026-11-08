@@ -44,10 +44,11 @@ export const analyticsApi = apiSlice.injectEndpoints({
       providesTags: ['BaoCao'],
     }),
 
-    thongKeChuDe: build.query<ThongKeChuDe[], KhoangNgay>({
+    // UC038 — lớp INTENT (7 ý định router) hoặc CLUSTER (cụm ngữ nghĩa); mặc định INTENT
+    thongKeChuDe: build.query<ThongKeChuDe[], KhoangNgay & { lop?: ThongKeChuDe['dimension'] }>({
       query: (bo) => ({
         url: '/api/v1/analytics/topics',
-        params: { from: bo.tuNgay, to: bo.denNgay },
+        params: { dimension: bo.lop, from: bo.tuNgay, to: bo.denNgay },
       }),
       providesTags: ['BaoCao'],
     }),

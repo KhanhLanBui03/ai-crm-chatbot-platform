@@ -2885,10 +2885,22 @@ paths:
         đề về sau không làm số liệu cũ đổi theo.
 
         `refusalCount` cao ở một chủ đề là gợi ý trực tiếp: bổ sung tài liệu cho chủ đề đó.
+
+        Hai lớp chủ đề (`dimension`): `INTENT` — 7 ý định router (UC022), cộng theo từng sự kiện
+        `ai.turn.completed`; `CLUSTER` — cụm ngữ nghĩa từ công việc phân cụm hằng tuần. Số đếm theo
+        **hội thoại**, không theo lượt: hội thoại hỏi giá ba lượt là một hội thoại. Chỉ quản trị viên.
       parameters:
+        - name: dimension
+          in: query
+          description: Lớp chủ đề. Mặc định `INTENT`.
+          schema: { type: string, enum: [INTENT, CLUSTER], default: INTENT }
         - $ref: '#/components/parameters/TuNgay'
         - $ref: '#/components/parameters/DenNgay'
       responses:
+        '400':
+          description: INVALID_DIMENSION · INVALID_RANGE
+        '403':
+          description: FORBIDDEN — không phải quản trị viên
         '200':
           description: Thống kê theo chủ đề
           content:
@@ -4962,20 +4974,33 @@ components:
 
     ThongKeChuDe:
       type: object
-      required: [statDate, clusterId, topicLabel, conversationCount]
+      required: [statDate, dimension, topicKey, topicLabel, conversationCount, botResolvedCount, refusalCount]
       properties:
         statDate: { type: string, format: date }
-        clusterId: { type: string, format: uuid }
+        dimension: { type: string, enum: [INTENT, CLUSTER] }
+        topicKey:
+          type: string
+          description: |
+            Khoá gộp ở giao diện: mã ý định (`PRICING_POLICY`…) ở lớp INTENT, mã cụm ở lớp CLUSTER.
+        clusterId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Chỉ có ở lớp CLUSTER.
         topicLabel:
           type: string
           description: |
             Nhãn **chụp lại tại thời điểm tổng hợp** — đổi tên chủ đề về sau không làm số liệu cũ
             đổi theo.
         conversationCount: { type: integer }
-        botResolvedCount: { type: integer }
+        botResolvedCount:
+          type: integer
+          description: Hội thoại tác tử tự xử lý trọn — có trả lời, không từ chối, không chuyển giao
         refusalCount:
           type: integer
-          description: Cao ở một chủ đề là gợi ý trực tiếp — bổ sung tài liệu cho chủ đề đó
+          description: |
+            Hội thoại có ≥ 1 lượt bị từ chối. Cao ở một chủ đề là gợi ý trực tiếp — bổ sung tài liệu
+            cho chủ đề đó. Hỏi lại (CLARIFY), chuyển giao và lỗi hệ thống KHÔNG tính là từ chối.
 
     HieuQuaAi:
       type: object

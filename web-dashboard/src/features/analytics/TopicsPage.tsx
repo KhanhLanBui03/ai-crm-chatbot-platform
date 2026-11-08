@@ -1,5 +1,5 @@
 import type { SortingState } from '@tanstack/react-table'
-import { MessagesSquare, TriangleAlert } from 'lucide-react'
+import { Boxes, MessagesSquare, Tags, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { useThongKeChuDeQuery } from '@/api/analytics'
@@ -8,6 +8,7 @@ import type { CotBang } from '@/components/ui/data-table'
 import { Progress } from '@/components/ui/progress'
 import { StatusChip } from '@/components/ui/status-chip'
 import type { Page } from '@/types/api'
+import type { ThongKeChuDe } from '@/types/schema'
 import { cn } from '@/utils/cn'
 
 interface DongChuDe {
@@ -23,8 +24,20 @@ const so = (v: number) => new Intl.NumberFormat('vi-VN').format(v)
 /** Từ mức này trở lên thì chủ đề đang là khoảng trống tri thức, không phải chuyện nhỏ. */
 const NGUONG_TU_CHOI = 0.2
 
+type Lop = ThongKeChuDe['dimension']
+
+const MO_TA: Record<Lop, string> = {
+  INTENT:
+    'Nhóm theo 7 ý định của bộ định tuyến. Đếm theo hội thoại, sắp mặc định theo tỉ lệ từ chối — chỗ tác tử đang bí, không phải chỗ khách hỏi nhiều.',
+  CLUSTER:
+    'Nhóm theo cụm ngữ nghĩa, tính hằng tuần; tên cụm do mô hình đặt. Cụm thay đổi giữa các kỳ nên không so một cụm qua nhiều kỳ.',
+}
+
 /**
- * SCR052 — thống kê chủ đề hội thoại. Mẫu M1.
+ * SCR052 — thống kê chủ đề hội thoại (UC038). Mẫu M1.
+ *
+ * Hai lớp: **ý định** (7 nhãn router, có ngay từ lượt đầu) và **cụm ngữ nghĩa** (công việc phân cụm hằng
+ * tuần — cho thấy khách thật sự hỏi gì ngoài 7 nhãn định sẵn).
  *
  * Cột đáng giá nhất là **tỉ lệ từ chối**, không phải số hội thoại: một chủ đề hỏi nhiều mà tác tử
  * trả lời tốt thì không cần làm gì; một chủ đề hỏi ít mà từ chối 34% là một lỗ hổng trong kho tri
@@ -32,15 +45,16 @@ const NGUONG_TU_CHOI = 0.2
  */
 export function TopicsPage() {
   const [sapXep, datSapXep] = useState<SortingState>([{ id: 'refusalRate', desc: true }])
-  const truyVan = useThongKeChuDeQuery({})
+  const [lop, datLop] = useState<Lop>('INTENT')
+  const truyVan = useThongKeChuDeQuery({ lop })
 
   /** Số liệu về theo từng ngày — gộp lại theo chủ đề trước khi hiển thị. */
   const trang: Page<DongChuDe> | undefined = useMemo(() => {
     if (!truyVan.data) return undefined
     const gop = new Map<string, DongChuDe>()
     for (const d of truyVan.data) {
-      const cu = gop.get(d.clusterId) ?? {
-        id: d.clusterId,
+      const cu = gop.get(d.topicKey) ?? {
+        id: d.topicKey,
         topicLabel: d.topicLabel,
         conversationCount: 0,
         botResolvedCount: 0,
@@ -49,7 +63,7 @@ export function TopicsPage() {
       cu.conversationCount += d.conversationCount
       cu.botResolvedCount += d.botResolvedCount ?? 0
       cu.refusalCount += d.refusalCount ?? 0
-      gop.set(d.clusterId, cu)
+      gop.set(d.topicKey, cu)
     }
     const ds = [...gop.values()]
     const khoa = sapXep[0]
@@ -77,6 +91,7 @@ export function TopicsPage() {
         accessorKey: 'topicLabel',
         header: 'Chủ đề',
         enableSorting: true,
+        // Nhãn cụm do mô hình đặt trên nội dung khách — chỉ hiển thị như văn bản thuần
         cell: ({ row }) => <span className="font-medium">{row.original.topicLabel}</span>,
       },
       {
@@ -148,7 +163,21 @@ export function TopicsPage() {
   return (
     <ListPage
       tieuDe="Chủ đề hội thoại"
-      moTa="Nhóm theo cụm ngữ nghĩa. Sắp mặc định theo tỉ lệ từ chối — chỗ tác tử đang bí, không phải chỗ khách hỏi nhiều."
+      moTa={MO_TA[lop]}
+      thaoTacPhu={[
+        {
+          nhan: 'Theo ý định',
+          BieuTuong: Tags,
+          bienThe: lop === 'INTENT' ? 'default' : 'outline',
+          onClick: () => datLop('INTENT'),
+        },
+        {
+          nhan: 'Theo cụm chủ đề',
+          BieuTuong: Boxes,
+          bienThe: lop === 'CLUSTER' ? 'default' : 'outline',
+          onClick: () => datLop('CLUSTER'),
+        },
+      ]}
       cot={cot}
       trang={trang}
       dangTai={truyVan.isLoading}
@@ -157,7 +186,10 @@ export function TopicsPage() {
       khiChuaCoDuLieu={{
         BieuTuong: MessagesSquare,
         tieuDe: 'Chưa có số liệu chủ đề',
-        moTa: 'Cụm chủ đề được tính theo mẻ hằng đêm từ nội dung hội thoại.',
+        moTa:
+          lop === 'INTENT'
+            ? 'Số liệu xuất hiện ngay sau lượt chat đầu tiên mà tác tử AI xử lý.'
+            : 'Cụm chủ đề được tính hằng tuần, khi doanh nghiệp có đủ hội thoại trong 30 ngày gần nhất.',
       }}
     />
   )
