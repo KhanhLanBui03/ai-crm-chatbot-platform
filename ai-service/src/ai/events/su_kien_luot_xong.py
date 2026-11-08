@@ -36,6 +36,10 @@ LOAI_SU_KIEN = "TurnCompleted"
 PHIEN_BAN = 1
 # total_ms đã có ở latency_ms — không lặp lại trong latency_breakdown
 _BO_CHANG = frozenset({"total_ms"})
+# Bảy ý định của taxonomy UC022 — khớp enum ``payload.intent`` trong lược đồ sự kiện
+Y_DINH = frozenset({
+    "GREETING", "KB_SEARCH", "PRICING_POLICY", "COMPLAINT_SUPPORT", "TECH_ERROR", "HANDOFF_HUMAN", "BUYING_INTENT",
+})
 
 
 def dung_su_kien(rec: TurnRecord, occurred_at: datetime | None = None) -> dict:
@@ -51,6 +55,9 @@ def dung_su_kien(rec: TurnRecord, occurred_at: datetime | None = None) -> dict:
         "payload": {
             "conversation_id": rec.conversation_id,
             "branch": rec.branch,
+            # UC038 lớp 1 — thống kê chủ đề theo ý định. Ngoài 7 nhãn đã cam kết thì gửi null, không gửi
+            # chuỗi lạ: tầng tổng hợp sẽ mở một "chủ đề" mới cho mỗi chuỗi lạ.
+            "intent": rec.intent if rec.intent in Y_DINH else None,
             "status": rec.status,
             "is_answered": rec.is_answered,
             "refusal_reason": rec.refusal_reason,

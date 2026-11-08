@@ -4749,10 +4749,16 @@ export interface paths {
          *     đề về sau không làm số liệu cũ đổi theo.
          *
          *     `refusalCount` cao ở một chủ đề là gợi ý trực tiếp: bổ sung tài liệu cho chủ đề đó.
+         *
+         *     Hai lớp chủ đề (`dimension`): `INTENT` — 7 ý định router (UC022), cộng theo từng sự kiện
+         *     `ai.turn.completed`; `CLUSTER` — cụm ngữ nghĩa từ công việc phân cụm hằng tuần. Số đếm theo
+         *     **hội thoại**, không theo lượt: hội thoại hỏi giá ba lượt là một hội thoại. Chỉ quản trị viên.
          */
         get: {
             parameters: {
                 query?: {
+                    /** @description Lớp chủ đề. Mặc định `INTENT`. */
+                    dimension?: "INTENT" | "CLUSTER";
                     /** @description Ngày bắt đầu khoảng thống kê, tính theo múi giờ của doanh nghiệp */
                     from?: components["parameters"]["TuNgay"];
                     /** @description Ngày kết thúc khoảng thống kê */
@@ -4774,6 +4780,84 @@ export interface paths {
                             data?: components["schemas"]["ThongKeChuDe"][];
                         };
                     };
+                };
+                /** @description INVALID_DIMENSION · INVALID_RANGE */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN — không phải quản trị viên */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description AI_SERVICE_UNAVAILABLE — lớp CLUSTER không lấy được cụm từ ai-service */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analytics/topics/cluster-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * SCR052 — kỳ phân cụm đang dùng cho lớp CLUSTER
+         * @description UC038. Nguồn vector, thời điểm và lý do bỏ kỳ — để màn nói rõ "phân cụm theo chữ" hay "theo nghĩa",
+         *     và VÌ SAO chưa có cụm (dưới ngưỡng hội thoại, dịch vụ nhúng không sẵn sàng). `data = null` khi
+         *     doanh nghiệp chưa có kỳ nào. Chỉ quản trị viên.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Kỳ phân cụm */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"] & {
+                            data?: components["schemas"]["KyPhanCum"] | null;
+                        };
+                    };
+                };
+                /** @description FORBIDDEN — không phải quản trị viên */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description AI_SERVICE_UNAVAILABLE — không lấy được kỳ từ ai-service */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -6618,17 +6702,48 @@ export interface components {
         ThongKeChuDe: {
             /** Format: date */
             statDate: string;
-            /** Format: uuid */
-            clusterId: string;
+            /** @enum {string} */
+            dimension: "INTENT" | "CLUSTER";
+            /** @description Khoá gộp ở giao diện: mã ý định (`PRICING_POLICY`…) ở lớp INTENT, mã cụm ở lớp CLUSTER. */
+            topicKey: string;
+            /**
+             * Format: uuid
+             * @description Chỉ có ở lớp CLUSTER.
+             */
+            clusterId?: string | null;
             /**
              * @description Nhãn **chụp lại tại thời điểm tổng hợp** — đổi tên chủ đề về sau không làm số liệu cũ
              *     đổi theo.
              */
             topicLabel: string;
             conversationCount: number;
-            botResolvedCount?: number;
-            /** @description Cao ở một chủ đề là gợi ý trực tiếp — bổ sung tài liệu cho chủ đề đó */
-            refusalCount?: number;
+            /** @description Hội thoại tác tử tự xử lý trọn — có trả lời, không từ chối, không chuyển giao */
+            botResolvedCount: number;
+            /**
+             * @description Hội thoại có ≥ 1 lượt bị từ chối. Cao ở một chủ đề là gợi ý trực tiếp — bổ sung tài liệu
+             *     cho chủ đề đó. Hỏi lại (CLARIFY), chuyển giao và lỗi hệ thống KHÔNG tính là từ chối.
+             */
+            refusalCount: number;
+        };
+        KyPhanCum: {
+            /** @enum {string} */
+            status: "DONE" | "SKIPPED" | "FAILED";
+            /** @enum {string|null} */
+            skipReason?: "TOO_FEW_CONVERSATIONS" | "EMBED_UNAVAILABLE" | "CLUSTER_SERVICE_ERROR" | null;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            windowFrom: string;
+            /** Format: date-time */
+            windowTo: string;
+            conversationCount: number;
+            minConversations: number;
+            /** @description `bge-m3` (theo nghĩa, đúng đặc tả) · `router-tfidf-ngram` (theo chữ, nguồn thay thế) */
+            vectorSource?: string | null;
+            k?: number | null;
+            silhouette?: number | null;
+            /** @description llm · tu-khoa · hon-hop */
+            namingMethod?: string | null;
         };
         /**
          * @description Mô hình đọc `analytics.metrics_daily`, consumer `analytics-cg` cộng dồn từ `ai.turn.completed`.

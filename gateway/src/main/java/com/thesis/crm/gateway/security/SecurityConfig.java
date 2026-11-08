@@ -42,6 +42,8 @@ public class SecurityConfig {
                         // UC040: cảnh báo an toàn chỉ java-core gọi trong mạng nội bộ — ai-service không kiểm vai
                         // trò, để lộ qua /ai/v1/** là nhân viên thường đọc được màn dành cho quản trị viên.
                         .pathMatchers("/ai/v1/safety-events", "/ai/v1/safety-events/**").denyAll()
+                        // UC038: cụm chủ đề cũng chỉ java-core gọi — thống kê chủ đề là màn của quản trị viên
+                        .pathMatchers("/ai/v1/topic-clusters", "/ai/v1/topic-clusters/**").denyAll()
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}))
                 .build();

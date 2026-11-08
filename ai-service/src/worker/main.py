@@ -9,8 +9,8 @@ Group riêng cho từng kênh (docs/events/README.md): một job nạp 3 phút k
 phải chờ tóm tắt, và offset của kênh này không bao giờ xác nhận hộ kênh kia. Bốn luật dưới đây áp
 cho MỖI kênh. Đặt ``KAFKA_TOPIC_HOI_THOAI_DONG`` rỗng thì tắt kênh tóm tắt.
 
-Hai vòng nền chạy cạnh consumer: bộ quét job kẹt (UC019, ADR-0024) và bộ chấm tự động (UC027 bước
-6, mẫu 5% lượt RAG đã trả lời — chỉ khi ``LLM_MODE=remote``).
+Ba vòng nền chạy cạnh consumer: bộ quét job kẹt (UC019, ADR-0024), bộ chấm tự động (UC027 bước
+6, mẫu 5% lượt RAG đã trả lời — chỉ khi ``LLM_MODE=remote``) và phân cụm chủ đề hằng tuần (UC038).
 
 BỐN LUẬT KHÔNG ĐƯỢC BỎ — mỗi luật ứng với một cách hỏng đã biết trước
 ---------------------------------------------------------------------
@@ -43,15 +43,18 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Protocol
 
+import httpx
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, ConsumerRecord, TopicPartition
 from aiokafka.errors import CommitFailedError
 
 from src.ai import service
+from src.ai.clustering import cong_viec as phan_cum_chu_de
 from src.ai.config import Settings, get_settings
 from src.ai.db import session as db_session
 from src.ai.events.dlq import dung_header_dlq
 from src.ai.inference.clients import EmbedClient, tao_embed_client
 from src.ai.integrations.java_core import JavaCoreClient
+from src.ai.integrations.llm import tao_llm_chiu_loi
 from src.ai.rag.ingest.tien_trinh import bo_phan_tich
 from src.ai.telemetry.logging import setup_logging
 from src.worker.consumers.tai_lieu import KetQuaBanTin, XuLyTaiLieu
@@ -243,6 +246,35 @@ class Worker:
         finally:
             await giam_khao.aclose()
 
+    async def _vong_phan_cum(self) -> None:
+        """Phân cụm chủ đề (UC038): mỗi ``chu_de_chu_ky_s`` (một tuần) một kỳ cho mọi doanh nghiệp.
+
+        Chờ MỘT chu kỳ rồi mới chạy lần đầu — khởi động lại worker không kéo theo một kỳ phân cụm.
+        Kỳ chạy chồng (hai replica) bị chặn bằng advisory lock trong ``cong_viec.chay_ky``.
+        """
+        s = self.settings
+        if s.chu_de_chu_ky_s <= 0:
+            logger.info("Vòng phân cụm chủ đề tắt (CHU_DE_CHU_KY_S=0)")
+            return
+        llm = tao_llm_chiu_loi(s) if s.llm_mode == "remote" else None
+        try:
+            async with httpx.AsyncClient() as http:
+                while not self.dung.is_set():
+                    with suppress(TimeoutError):
+                        await asyncio.wait_for(self.dung.wait(), timeout=s.chu_de_chu_ky_s)
+                    if self.dung.is_set():
+                        break
+                    try:
+                        await phan_cum_chu_de.chay_moi_tenant(
+                            http=http, embed=self.embed, llm=llm, settings=s, bay_gio=service.bay_gio(),
+                            factory=self.factory,
+                        )
+                    except Exception:  # noqa: BLE001 — vòng nền không được chết vì một kỳ hỏng
+                        logger.exception("Kỳ phân cụm chủ đề hỏng — thử lại ở chu kỳ sau")
+        finally:
+            if llm is not None:
+                await llm.aclose()
+
     async def chay(self) -> None:
         """Chạy tới khi ``self.dung`` được đặt, rồi dừng sạch: xong việc dở → rời group → trả tài
         nguyên. Một kênh hỏng (ví dụ DLQ không ghi được) thì cả worker dừng — các kênh còn lại làm
@@ -257,6 +289,7 @@ class Worker:
                 da_chay.append(consumer)
             quet = asyncio.create_task(self._vong_quet(), name="quet-job-ket")
             cham = asyncio.create_task(self._vong_cham_tu_dong(), name="cham-tu-dong")
+            phan_cum = asyncio.create_task(self._vong_phan_cum(), name="phan-cum-chu-de")
             vong = [
                 asyncio.create_task(self._vong_kafka(k, c, producer), name=f"kafka-{k.group}")
                 for k, c in cac_consumer
@@ -268,6 +301,7 @@ class Worker:
                 # quét sẽ giữ tiến trình sống mãi. Tài liệu dở dang để bộ quét lần sau nhặt.
                 quet.cancel()
                 cham.cancel()
+                phan_cum.cancel()
                 for t in vong:
                     t.cancel()
                 raise
@@ -280,10 +314,13 @@ class Worker:
                 # SIGTERM: bộ quét đang giữa một job thì chờ nó xong — cùng tinh thần luật 4.
                 # Bộ chấm thì không đáng chờ: lượt đang chấm dở sẽ được xét lại sau khởi động.
                 cham.cancel()
+                phan_cum.cancel()
                 with suppress(asyncio.CancelledError):
                     await quet
                 with suppress(asyncio.CancelledError):
                     await cham
+                with suppress(asyncio.CancelledError):
+                    await phan_cum
         finally:
             # stop() rời group ngay (không chờ session timeout) — partition được chia lại cho
             # replica khác trong vài giây. KHÔNG tự xác nhận offset nào (luật 1).

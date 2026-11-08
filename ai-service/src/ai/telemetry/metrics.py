@@ -81,3 +81,9 @@ turn_event_failures = Counter(
     "ai_turn_event_failures_total",
     "Số lượt chat không phát được sự kiện ai.turn.completed",
 )
+
+topic_cluster_runs = Counter(
+    "ai_topic_cluster_runs_total",
+    "Số kỳ phân cụm chủ đề hội thoại (UC038) theo kết quả",
+    labelnames=("status", "reason"),  # DONE | SKIPPED | FAILED · lý do bỏ kỳ hoặc "-"
+)

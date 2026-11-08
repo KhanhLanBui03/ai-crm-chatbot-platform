@@ -357,7 +357,9 @@ export const thongKeChuDe: ThongKeChuDe[] = daySoNgay(7, NGAY_MOC).flatMap((ngay
     const tuChoi = k === 7 ? Math.round(soHT * 0.34) : Math.round(soHT * 0.06)
     return {
       statDate: ngay,
-      clusterId: `cl-${k}`,
+      dimension: 'CLUSTER' as const,
+      topicKey: `cl-${k}`,
+      clusterId: null,
       topicLabel: ten,
       conversationCount: soHT,
       botResolvedCount: soHT - tuChoi - 2,

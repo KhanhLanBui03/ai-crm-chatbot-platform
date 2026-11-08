@@ -95,6 +95,31 @@ public class AiServiceClient {
         }
     }
 
+    /**
+     * UC038 bước 7 — kỳ phân cụm chủ đề mới nhất ({@code GET /v1/topic-clusters/latest}). Trống khi doanh
+     * nghiệp chưa có kỳ nào (204). Kỳ DONE gần nhất được ưu tiên phía ai-service — kỳ mới hỏng không che nó.
+     */
+    public java.util.Optional<TopicClusterRun> latestTopicClusters(UUID tenantId, String traceId) {
+        try {
+            return rest.get()
+                    .uri("/v1/topic-clusters/latest")
+                    .header(HEADER_TENANT, tenantId.toString())
+                    .header(HEADER_TRACE, traceId)
+                    .exchange((req, resp) -> {
+                        int ma = resp.getStatusCode().value();
+                        if (ma == HttpStatus.NO_CONTENT.value()) {
+                            return java.util.Optional.<TopicClusterRun>empty();
+                        }
+                        if (ma == HttpStatus.OK.value()) {
+                            return java.util.Optional.of(objectMapper.readValue(resp.getBody(), TopicClusterRun.class));
+                        }
+                        throw loiTuPhanHoi(ma, resp.getBody().readAllBytes());
+                    });
+        } catch (ResourceAccessException e) {
+            throw AiServiceException.unreachable(e);
+        }
+    }
+
     /** Đọc {@code {code, message}} của ai-service; thân không đúng khuôn thì vẫn giữ mã HTTP. */
     private AiServiceException loiTuPhanHoi(int status, byte[] than) {
         String code = null;
@@ -151,5 +176,36 @@ public class AiServiceClient {
             String actionTaken,
             Map<String, String> evidence,
             Instant occurredAt) {
+    }
+
+    /** Gương của {@code TopicClusterRun} (ai-service/src/ai/schemas.py) — UC038. */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record TopicClusterRun(
+            UUID runId,
+            Instant startedAt,
+            Instant finishedAt,
+            Instant windowFrom,
+            Instant windowTo,
+            int conversationCount,
+            int minConversations,
+            String status,
+            String skipReason,
+            String vectorSource,
+            Integer k,
+            Double silhouette,
+            String namingMethod,
+            List<Cluster> clusters,
+            List<Assignment> assignments) {
+
+        @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public record Cluster(UUID clusterId, String label, int size) {
+        }
+
+        @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public record Assignment(UUID conversationId, UUID clusterId) {
+        }
     }
 }

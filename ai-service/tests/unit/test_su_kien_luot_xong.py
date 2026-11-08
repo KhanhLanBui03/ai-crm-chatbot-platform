@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 
 from src.ai.events import su_kien_luot_xong as mod
-from src.ai.events.su_kien_luot_xong import TurnEventPublisher, dung_su_kien
+from src.ai.events.su_kien_luot_xong import Y_DINH, TurnEventPublisher, dung_su_kien
 from src.ai.orchestrator.turn import TurnRecord
 
 LUOC_DO = json.loads(
@@ -91,6 +91,15 @@ def test_luot_mau_cau_va_tu_choi_van_dung_luoc_do(branch):
     _kiem_theo_luoc_do(sk)
     assert sk["payload"]["prompt_tokens"] == 0
     assert sk["payload"]["latency_breakdown"] == {}
+
+
+def test_mang_y_dinh_cho_thong_ke_chu_de():
+    """UC038 lớp 1 — ý định đi kèm sự kiện; nhãn lạ hoặc bộ phân loại hỏng thì null, không gửi chuỗi lạ."""
+    enum = LUOC_DO["properties"]["payload"]["properties"]["intent"]["enum"]
+    assert dung_su_kien(_luot())["payload"]["intent"] == "KB_SEARCH"
+    assert dung_su_kien(_luot(intent="NHAN_LA"))["payload"]["intent"] is None
+    assert dung_su_kien(_luot(intent=None))["payload"]["intent"] is None
+    assert set(enum) - {None} == Y_DINH  # hai nơi khai báo bảy nhãn phải khớp nhau
 
 
 class _ProducerHong:

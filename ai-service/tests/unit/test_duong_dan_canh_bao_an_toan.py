@@ -12,3 +12,10 @@ def test_duong_dan_dung_hop_dong_khong_lap_tien_to():
     duong = {getattr(r, "path", "") for r in create_app().routes}
     assert "/v1/safety-events" in duong
     assert "/v1/v1/safety-events" not in duong
+
+
+def test_duong_dan_ky_phan_cum_chu_de():
+    """UC038 — java-core gọi đúng ``/v1/topic-clusters/latest``."""
+    duong = {getattr(r, "path", "") for r in create_app().routes}
+    assert "/v1/topic-clusters/latest" in duong
+    assert "/v1/v1/topic-clusters/latest" not in duong
