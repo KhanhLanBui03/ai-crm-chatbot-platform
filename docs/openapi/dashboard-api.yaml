@@ -578,9 +578,12 @@ paths:
       tags: [Doanh nghiệp]
       summary: SCR015 — mức sử dụng theo ngày
       description: |
-        UC006 bước 5–7. Tách theo kênh **hoặc** theo nhánh xử lý AI — cả hai đều là phép cộng trên
-        `analytics.usage_metrics_daily`. Không gộp hai chiều trong một lần gọi vì một hội thoại đi
-        qua nhiều nhánh, gộp lại sẽ nhân đôi số đếm.
+        UC006 bước 5–7. Tách theo kênh **hoặc** theo nhánh xử lý AI. Token, chi phí, số lượt cộng trên
+        `analytics.metrics_daily` (bảng `usage_metrics_daily` ghi trong đặc tả không tồn tại — đặc tả đã
+        nêu phải chốt một tên). Số hội thoại: theo kênh = hội thoại MỞ trong ngày; theo nhánh = hội thoại
+        có ít nhất một lượt đi qua nhánh đó (`analytics.topic_conversations`, chiều ROUTE, V139). Không
+        gộp hai chiều trong một lần gọi vì một hội thoại đi qua nhiều nhánh, gộp lại sẽ nhân đôi số đếm.
+        Chỉ quản trị viên.
       parameters:
         - $ref: '#/components/parameters/TuNgay'
         - $ref: '#/components/parameters/DenNgay'
@@ -591,9 +594,19 @@ paths:
             type: string
             enum: [channel, route]
             default: channel
+        - name: sort
+          in: query
+          description: "`-statDate` (mặc định) · `±statDate|conversations|promptTokens|completionTokens|costVnd`"
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
       responses:
         '200':
-          description: Chuỗi số liệu theo ngày
+          description: Chuỗi số liệu theo ngày, phân trang
           content:
             application/json:
               schema:
@@ -601,8 +614,16 @@ paths:
                   - $ref: '#/components/schemas/ApiResponse'
                   - properties:
                       data:
-                        type: array
-                        items: { $ref: '#/components/schemas/DiemSuDungNgay' }
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/DiemSuDungNgay' }
+        '400':
+          description: INVALID_GROUP_BY (gộp hai chiều không được hỗ trợ) · INVALID_RANGE
+        '403':
+          description: FORBIDDEN — không phải quản trị viên
 
   # ══════════════════════════════════════════════════════════════════════════════
   # D. Kênh kết nối — UC008, UC009
@@ -3801,29 +3822,45 @@ components:
         tokens: { $ref: '#/components/schemas/MotHanMuc' }
         users: { $ref: '#/components/schemas/MotHanMuc' }
         documents: { $ref: '#/components/schemas/MotHanMuc' }
-        costVnd: { type: number }
+        costVnd:
+          type: number
+          description: |
+            Chi phí AI từ ngày mở chu kỳ tới nay (VND, 4 chữ số thập phân). Cộng từ sự kiện
+            `ai.turn.completed` (UC039), không gọi đồng bộ sang ai-service.
         warnedAt:
           type: [string, 'null']
           format: date-time
-          description: Mốc chạm 80%
+          description: Mốc chạm 80% SỚM NHẤT trong bốn chỉ số — đọc từ `usage_records.warned_at`, không tính lại
         blockedAt:
           type: [string, 'null']
           format: date-time
           description: |
-            Mốc chạm 100%. Từ đây ngừng xử lý tự động nhưng **vẫn nhận tin nhắn** của khách —
-            không mất dữ liệu, chỉ mất phần trả lời tự động.
+            Mốc chạm 100% sớm nhất của **hội thoại hoặc token AI**. Từ đây ngừng xử lý tự động nhưng
+            **vẫn nhận tin nhắn** của khách — không mất dữ liệu, chỉ mất phần trả lời tự động. Tài liệu và
+            người dùng chạm trần chỉ chặn việc thêm mới, xem mốc riêng ở từng `MotHanMuc`.
 
     MotHanMuc:
       type: object
       required: [used, quota]
       properties:
         used: { type: integer, format: int64 }
-        quota: { type: integer, format: int64 }
+        quota:
+          type: integer
+          format: int64
+          description: Ảnh chụp của gói lúc mở chu kỳ (usage_records.quota_value), không đọc qua gói hiện tại
         percent: { type: number }
+        warnedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Lần đầu chỉ số này chạm 80% trong chu kỳ (V128)
+        blockedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Lần đầu chỉ số này chạm 100% trong chu kỳ (V128)
 
     DiemSuDungNgay:
       type: object
-      required: [statDate, conversations, promptTokens, completionTokens, costVnd]
+      required: [statDate, conversations, turns, promptTokens, completionTokens, costVnd, cachedHits]
       properties:
         statDate: { type: string, format: date }
         channelType: { type: [string, 'null'] }
@@ -3831,14 +3868,19 @@ components:
           oneOf:
             - { $ref: '#/components/schemas/NhanhXuLyAi' }
             - { type: 'null' }
-        conversations: { type: integer }
+        conversations:
+          type: integer
+          description: Theo kênh — hội thoại mở trong ngày. Theo nhánh — hội thoại có lượt đi qua nhánh đó.
+        turns:
+          type: integer
+          format: int64
+          description: Số lượt tác tử AI xử lý — mẫu số đúng cho tỉ lệ dùng đệm
         promptTokens: { type: integer, format: int64 }
         completionTokens: { type: integer, format: int64 }
         costVnd: { type: number }
         cachedHits:
           type: integer
           description: Lượt dùng đệm ngữ nghĩa — không tính chi phí gọi mô hình
-        modelVersion: { type: string }
 
     # ── D. Kênh ────────────────────────────────────────────────────────────────
 

@@ -63,6 +63,27 @@ public class TopicMetricsService {
     }
 
     /**
+     * UC006 bước 5–7 — đếm hội thoại theo NHÁNH xử lý. Nhánh là trường bắt buộc của sự kiện (đã kiểm ở
+     * {@link TurnMetricsService}), nên mọi lượt thuộc một hội thoại có ở CRM đều vào đây.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean congTheoNhanh(UUID tenantId, LocalDate ngay, JsonNode p, Instant luc) {
+        String nhanh = p.path("branch").asText(null);
+        UUID hoiThoai = uuid(p.path("conversation_id").asText(null));
+        if (nhanh == null || hoiThoai == null || !coHoiThoai(tenantId, hoiThoai)) {
+            return false;
+        }
+        Key k = new Key(tenantId, TopicConversation.ROUTE, nhanh, ngay, hoiThoai);
+        TopicConversation dong = em.find(TopicConversation.class, k, LockModeType.PESSIMISTIC_WRITE);
+        if (dong == null) {
+            dong = new TopicConversation(k, nhanh, luc);
+            em.persist(dong);
+        }
+        dong.cong(phanLoai(p), luc);
+        return true;
+    }
+
+    /**
      * Từ chối = lượt chạy XONG mà tác tử không trả lời được và không đưa cho người. Ba trường hợp không tính:
      * chuyển giao (đưa cho người là đúng việc), hỏi lại (CLARIFY — chưa hiểu câu, không phải thiếu tài liệu)
      * và lỗi hệ thống (status ≠ SUCCESS — lỗi hạ tầng, không phải lỗ hổng tri thức).

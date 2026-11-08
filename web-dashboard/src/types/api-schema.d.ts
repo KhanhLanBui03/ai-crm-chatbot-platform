@@ -972,9 +972,12 @@ export interface paths {
         };
         /**
          * SCR015 — mức sử dụng theo ngày
-         * @description UC006 bước 5–7. Tách theo kênh **hoặc** theo nhánh xử lý AI — cả hai đều là phép cộng trên
-         *     `analytics.usage_metrics_daily`. Không gộp hai chiều trong một lần gọi vì một hội thoại đi
-         *     qua nhiều nhánh, gộp lại sẽ nhân đôi số đếm.
+         * @description UC006 bước 5–7. Tách theo kênh **hoặc** theo nhánh xử lý AI. Token, chi phí, số lượt cộng trên
+         *     `analytics.metrics_daily` (bảng `usage_metrics_daily` ghi trong đặc tả không tồn tại — đặc tả đã
+         *     nêu phải chốt một tên). Số hội thoại: theo kênh = hội thoại MỞ trong ngày; theo nhánh = hội thoại
+         *     có ít nhất một lượt đi qua nhánh đó (`analytics.topic_conversations`, chiều ROUTE, V139). Không
+         *     gộp hai chiều trong một lần gọi vì một hội thoại đi qua nhiều nhánh, gộp lại sẽ nhân đôi số đếm.
+         *     Chỉ quản trị viên.
          */
         get: {
             parameters: {
@@ -985,6 +988,10 @@ export interface paths {
                     to?: components["parameters"]["DenNgay"];
                     /** @description Chiều tách số liệu */
                     groupBy?: "channel" | "route";
+                    /** @description `-statDate` (mặc định) · `±statDate|conversations|promptTokens|completionTokens|costVnd` */
+                    sort?: string;
+                    page?: number;
+                    size?: number;
                 };
                 header?: never;
                 path?: never;
@@ -992,16 +999,32 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Chuỗi số liệu theo ngày */
+                /** @description Chuỗi số liệu theo ngày, phân trang */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": components["schemas"]["ApiResponse"] & {
-                            data?: components["schemas"]["DiemSuDungNgay"][];
+                            data?: components["schemas"]["Page"] & {
+                                items?: components["schemas"]["DiemSuDungNgay"][];
+                            };
                         };
                     };
+                };
+                /** @description INVALID_GROUP_BY (gộp hai chiều không được hỗ trợ) · INVALID_RANGE */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN — không phải quản trị viên */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -5664,40 +5687,63 @@ export interface components {
             tokens: components["schemas"]["MotHanMuc"];
             users: components["schemas"]["MotHanMuc"];
             documents: components["schemas"]["MotHanMuc"];
+            /**
+             * @description Chi phí AI từ ngày mở chu kỳ tới nay (VND, 4 chữ số thập phân). Cộng từ sự kiện
+             *     `ai.turn.completed` (UC039), không gọi đồng bộ sang ai-service.
+             */
             costVnd?: number;
             /**
              * Format: date-time
-             * @description Mốc chạm 80%
+             * @description Mốc chạm 80% SỚM NHẤT trong bốn chỉ số — đọc từ `usage_records.warned_at`, không tính lại
              */
             warnedAt?: string | null;
             /**
              * Format: date-time
-             * @description Mốc chạm 100%. Từ đây ngừng xử lý tự động nhưng **vẫn nhận tin nhắn** của khách —
-             *     không mất dữ liệu, chỉ mất phần trả lời tự động.
+             * @description Mốc chạm 100% sớm nhất của **hội thoại hoặc token AI**. Từ đây ngừng xử lý tự động nhưng
+             *     **vẫn nhận tin nhắn** của khách — không mất dữ liệu, chỉ mất phần trả lời tự động. Tài liệu và
+             *     người dùng chạm trần chỉ chặn việc thêm mới, xem mốc riêng ở từng `MotHanMuc`.
              */
             blockedAt?: string | null;
         };
         MotHanMuc: {
             /** Format: int64 */
             used: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Ảnh chụp của gói lúc mở chu kỳ (usage_records.quota_value), không đọc qua gói hiện tại
+             */
             quota: number;
             percent?: number;
+            /**
+             * Format: date-time
+             * @description Lần đầu chỉ số này chạm 80% trong chu kỳ (V128)
+             */
+            warnedAt?: string | null;
+            /**
+             * Format: date-time
+             * @description Lần đầu chỉ số này chạm 100% trong chu kỳ (V128)
+             */
+            blockedAt?: string | null;
         };
         DiemSuDungNgay: {
             /** Format: date */
             statDate: string;
             channelType?: string | null;
             route?: components["schemas"]["NhanhXuLyAi"] | null;
+            /** @description Theo kênh — hội thoại mở trong ngày. Theo nhánh — hội thoại có lượt đi qua nhánh đó. */
             conversations: number;
+            /**
+             * Format: int64
+             * @description Số lượt tác tử AI xử lý — mẫu số đúng cho tỉ lệ dùng đệm
+             */
+            turns: number;
             /** Format: int64 */
             promptTokens: number;
             /** Format: int64 */
             completionTokens: number;
             costVnd: number;
             /** @description Lượt dùng đệm ngữ nghĩa — không tính chi phí gọi mô hình */
-            cachedHits?: number;
-            modelVersion?: string;
+            cachedHits: number;
         };
         /** @description Không bao giờ chứa bí mật của kênh — chúng là bề mặt tấn công T1. */
         Kenh: {

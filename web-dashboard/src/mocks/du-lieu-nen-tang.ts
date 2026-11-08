@@ -265,13 +265,14 @@ export const mucSuDungTheoNgay: DiemSuDungNgay[] = daySoNgay(21, new Date('2026-
       return {
         statDate: ngay,
         channelType: kenh,
-        route: (['RAG', 'TOOL_CALL', 'SMALL_TALK'] as const)[(i + k) % 3],
+        // Theo kênh thì không có nhánh — hai chiều không gộp trong một lần gọi (UC006 6.1)
+        route: null,
         conversations: nen,
+        turns: nen * 3,
         promptTokens,
         completionTokens,
         costVnd: Math.round((promptTokens + completionTokens) * 0.062),
         cachedHits: Math.round(nen * 0.18),
-        modelVersion: 'gpt-oss-20b@v2026.07',
       }
     }),
 )

@@ -23,6 +23,7 @@ import { dangXuat } from '@/app/store/authSlice'
 import { useAppDispatch, useAppSelector } from '@/app/store/hooks'
 import { useDanhSachGoiCongCuQuery } from '@/api/ai-agent'
 import { useSoHoiThoaiChoQuery } from '@/api/conversations'
+import { useHanMucHienTaiQuery } from '@/api/platform'
 import { useSoViecCuaToiQuery } from '@/api/sales'
 import { XacNhanDangXuatDialog } from '@/components/layout/XacNhanDangXuatDialog'
 import {
@@ -405,14 +406,7 @@ export function AppSidebar() {
 
       <SidebarFooter>
         {/* Hạn mức là nhắc thường trực — UC006 chặn trả lời tự động khi chạm trần */}
-        <div className="bg-card ring-foreground/10 flex flex-col gap-2 rounded-lg p-3 ring-1 group-data-[collapsible=icon]:hidden">
-          <div className="flex items-baseline justify-between">
-            <span className="text-xs font-medium">Hạn mức hội thoại</span>
-            <span className="text-muted-foreground text-xs tabular-nums">1.842/2.000</span>
-          </div>
-          <Progress value={92} className="h-1.5" />
-          <span className="text-warning text-xs">Còn 158 lượt trong chu kỳ này</span>
-        </div>
+        <TheHanMucHoiThoai />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -475,5 +469,33 @@ export function AppSidebar() {
         />
       </SidebarFooter>
     </Sidebar>
+  )
+}
+
+const soVi = (v: number) => new Intl.NumberFormat('vi-VN').format(v)
+
+/**
+ * Số THẬT của chu kỳ từ `GET /api/v1/usage` (UC006). Trước đây là hằng số viết cứng "1.842/2.000" — hiện
+ * cùng một con số cho mọi doanh nghiệp. Chưa tải xong hoặc lỗi thì ẩn, không hiện số đoán.
+ */
+function TheHanMucHoiThoai() {
+  const { data } = useHanMucHienTaiQuery()
+  const hoiThoai = data?.conversations
+  if (!hoiThoai) return null
+  const phanTram = hoiThoai.quota > 0 ? Math.min(100, (hoiThoai.used / hoiThoai.quota) * 100) : 0
+  const con = Math.max(0, hoiThoai.quota - hoiThoai.used)
+  return (
+    <div className="bg-card ring-foreground/10 flex flex-col gap-2 rounded-lg p-3 ring-1 group-data-[collapsible=icon]:hidden">
+      <div className="flex items-baseline justify-between">
+        <span className="text-xs font-medium">Hạn mức hội thoại</span>
+        <span className="text-muted-foreground text-xs tabular-nums">
+          {soVi(hoiThoai.used)}/{soVi(hoiThoai.quota)}
+        </span>
+      </div>
+      <Progress value={phanTram} className="h-1.5" />
+      <span className={cn('text-xs', phanTram >= 80 ? 'text-warning' : 'text-muted-foreground')}>
+        {con > 0 ? `Còn ${soVi(con)} hội thoại trong chu kỳ này` : 'Đã hết — tác tử ngừng trả lời tự động'}
+      </span>
+    </div>
   )
 }

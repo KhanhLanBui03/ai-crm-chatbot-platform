@@ -37,6 +37,12 @@ class WidgetIntegrationTest extends EngagementIntegrationTestBase {
     static final String KEY_X = "wk_x_" + UUID.randomUUID().toString().substring(0, 8);
     static final String KEY_S = "wk_s_" + UUID.randomUUID().toString().substring(0, 8);
     static final String KEY_Q = "wk_q_" + UUID.randomUUID().toString().substring(0, 8);
+    /** UC006 — doanh nghiệp còn hội thoại nhưng đã cạn token AI. */
+    static final UUID TENANT_T = UUID.randomUUID();
+    static final String KEY_T = "wk_t_" + UUID.randomUUID().toString().substring(0, 8);
+    /** UC006 — hạn mức hội thoại 5, đã dùng 3: hội thoại mới đưa lên 4/5 = 80%. */
+    static final UUID TENANT_M = UUID.randomUUID();
+    static final String KEY_M = "wk_m_" + UUID.randomUUID().toString().substring(0, 8);
 
     static final String ORIGIN_W = "https://shop-w.vn";
     static final String ORIGIN_X = "https://shop-x.vn";
@@ -59,6 +65,17 @@ class WidgetIntegrationTest extends EngagementIntegrationTestBase {
             channel(c, TENANT_X, KEY_X, "[\"shop-x.vn\"]");
             channel(c, TENANT_S, KEY_S, "[\"shop-s.vn\"]");
             channel(c, TENANT_Q, KEY_Q, "[\"shop-q.vn\"]");
+            tenant(c, TENANT_T, "ACTIVE", 200, 0);
+            channel(c, TENANT_T, KEY_T, "[\"shop-t.vn\"]");
+            try (PreparedStatement ps = c.prepareStatement("""
+                    INSERT INTO platform.usage_records (tenant_id, subscription_id, metric, used_value, quota_value)
+                    SELECT tenant_id, subscription_id, 'AI_TOKEN', 1000, 1000
+                    FROM platform.usage_records WHERE tenant_id = ? AND metric = 'CONVERSATION'""")) {
+                ps.setObject(1, TENANT_T);
+                ps.executeUpdate();
+            }
+            tenant(c, TENANT_M, "ACTIVE", 5, 3);
+            channel(c, TENANT_M, KEY_M, "[\"shop-m.vn\"]");
         }
         AI.respond(FakeAiServer.answer("Gói Pro giá 3.990.000đ mỗi tháng."));
     }
@@ -274,6 +291,28 @@ class WidgetIntegrationTest extends EngagementIntegrationTestBase {
         assertThat(turn.get("conversationStatus").asText()).isEqualTo("PENDING_AGENT");
         assertThat(handoverReason(turn)).isEqualTo("QUOTA_EXCEEDED");
         assertThat(turn.get("messages")).hasSize(2);   // tin khách vẫn được lưu + câu báo
+    }
+
+    @Test
+    void hetTokenAi_vanLuuTin_khongGoiAi_QUOTA_EXCEEDED() throws Exception {
+        String token = newToken(KEY_T, "https://shop-t.vn");
+        int before = AI.calls.get();
+        JsonNode turn = turnOf(send(token, "https://shop-t.vn", "máy giặt bảo hành bao lâu?"));
+        assertThat(AI.calls.get()).isEqualTo(before);                    // UC006 4.2 — ngừng trả lời tự động
+        assertThat(turn.get("conversationStatus").asText()).isEqualTo("PENDING_AGENT");
+        assertThat(handoverReason(turn)).isEqualTo("QUOTA_EXCEEDED");
+        assertThat(turn.get("messages")).hasSize(2);                       // tin khách vẫn được lưu
+    }
+
+    @Test
+    void hoiThoaiMoiChamTamMuoiPhanTram_ghiMocMotLan() throws Exception {
+        String token = newToken(KEY_M, "https://shop-m.vn");
+        turnOf(send(token, "https://shop-m.vn", "xin chào"));
+        String moc = sqlRow("SELECT warned_at::text FROM platform.usage_records "
+                + "WHERE metric = 'CONVERSATION' AND tenant_id = ?", TENANT_M);
+        assertThat(moc).isNotNull();
+        assertThat(sqlRow("SELECT blocked_at::text FROM platform.usage_records "
+                + "WHERE metric = 'CONVERSATION' AND tenant_id = ?", TENANT_M)).isNull();   // 4/5 chưa chạm trần
     }
 
     @Test
