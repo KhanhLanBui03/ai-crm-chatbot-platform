@@ -27,8 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class UsageQuotaServiceImpl implements UsageQuotaService {
 
-    /** UC006 "Tham số và ngưỡng": cảnh báo 80%, chặn 100%. */
-    static final int NGUONG_CANH_BAO_PHAN_TRAM = 80;
+    /** UC006 "Tham số và ngưỡng": cảnh báo 80%, chặn 100% — một nguồn ở {@link UsageRecord}. */
+    static final int NGUONG_CANH_BAO_PHAN_TRAM = UsageRecord.NGUONG_CANH_BAO_PHAN_TRAM;
 
     /**
      * Chỉ hai trạng thái này được tiêu thụ; PAST_DUE/EXPIRED là chế độ chỉ đọc. Cột {@code status}
@@ -78,27 +78,8 @@ public class UsageQuotaServiceImpl implements UsageQuotaService {
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public QuotaUsageResponse consume(UsageRecord locked, long amount) {
-        Instant now = Instant.now();
-        locked.setUsedValue(locked.getUsedValue() + amount);
-        locked.setLastCalculatedAt(now);
-        ghiMocNeuTrong(locked, now);
+        locked.cong(amount, Instant.now());
         return QuotaUsageResponse.from(locked);
-    }
-
-    /**
-     * Ghi mốc theo mức dùng HIỆN TẠI của dòng. Thứ tự 80% rồi 100% là bắt buộc: ràng buộc
-     * {@code ck_usage_moc_theo_thu_tu} (V128) từ chối dòng có {@code blocked_at} mà thiếu
-     * {@code warned_at}. Nhân chéo thay vì chia để khỏi sai số dấu phẩy động ở đúng ngưỡng.
-     */
-    private static void ghiMocNeuTrong(UsageRecord r, Instant now) {
-        long used = r.getUsedValue();
-        long quota = r.getQuotaValue();
-        if (r.getWarnedAt() == null && used * 100 >= quota * NGUONG_CANH_BAO_PHAN_TRAM) {
-            r.setWarnedAt(now);
-        }
-        if (r.getBlockedAt() == null && used >= quota) {
-            r.setBlockedAt(now);
-        }
     }
 
     /**

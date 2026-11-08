@@ -95,4 +95,36 @@ public class UsageRecord {
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+
+    /** UC006 "Tham số và ngưỡng": cảnh báo 80%, chặn 100%. */
+    public static final int NGUONG_CANH_BAO_PHAN_TRAM = 80;
+
+    /**
+     * Cộng mức dùng rồi ghi mốc chạm 80% / 100% nếu vừa chạm (V128). MỌI chỗ cộng tiêu thụ đi qua đây — cộng
+     * bằng câu UPDATE thẳng là mất mốc: màn hạn mức không bao giờ biết đã chạm ngưỡng lúc nào.
+     */
+    public void cong(long soLuong, Instant luc) {
+        usedValue += soLuong;
+        lastCalculatedAt = luc;
+        ghiMocTheoMucDung(luc);
+    }
+
+    /**
+     * Ghi mốc theo mức dùng HIỆN TẠI. Thứ tự 80% rồi 100% là bắt buộc: ràng buộc {@code ck_usage_moc_theo_thu_tu}
+     * (V128) từ chối dòng có {@code blocked_at} mà thiếu {@code warned_at}. Nhân chéo thay vì chia để khỏi sai
+     * số dấu phẩy động ở đúng ngưỡng. Mỗi mốc ghi MỘT LẦN mỗi chu kỳ — không ghi đè.
+     */
+    public void ghiMocTheoMucDung(Instant luc) {
+        if (warnedAt == null && usedValue * 100 >= quotaValue * NGUONG_CANH_BAO_PHAN_TRAM) {
+            warnedAt = luc;
+        }
+        if (blockedAt == null && usedValue >= quotaValue) {
+            blockedAt = luc;
+        }
+    }
+
+    /** Đã hết hạn mức của chu kỳ — dùng để quyết định tác tử còn trả lời tự động hay không. */
+    public boolean daHet() {
+        return usedValue >= quotaValue;
+    }
 }

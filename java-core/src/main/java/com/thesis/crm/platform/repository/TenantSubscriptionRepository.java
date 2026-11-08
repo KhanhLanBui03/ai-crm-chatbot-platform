@@ -16,6 +16,10 @@ public interface TenantSubscriptionRepository extends JpaRepository<TenantSubscr
 
     Optional<TenantSubscription> findFirstByTenantIdOrderByCreatedAtDesc(UUID tenantId);
 
+    /** UC006 — thuê bao trạng thái còn hiệu lực mới nhất, không xét hạn chu kỳ (cùng cách widget đếm hội thoại). */
+    Optional<TenantSubscription> findFirstByTenantIdAndStatusInOrderByPeriodStartDesc(UUID tenantId,
+            Collection<String> statuses);
+
     /**
      * Các thuê bao của {@code tenantId} đang hiệu lực tại {@code now}, mới nhất trước — UC018 tiêu
      * thụ hạn mức. {@code UNIQUE (tenant_id, period_start)} không cấm hai chu kỳ chồng nhau, nên trả

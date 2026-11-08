@@ -186,7 +186,9 @@ public class WidgetService {
             if (WITH_AGENT.contains(status)) {
                 return new Accepted(conversationId, Next.NONE, out, history, hoursNote);   // 6.3–6.4
             }
-            if (quotaExceeded) {
+            // UC006 4.2 — hết hội thoại (chỉ xét lúc mở hội thoại mới) HOẶC hết token AI (xét mọi lượt): tin của
+            // khách đã lưu ở trên, chỉ ngừng phần trả lời tự động và đưa cho nhân viên.
+            if (quotaExceeded || repo.aiTokenExhausted(s.tenantId())) {
                 handoffWithNotice(s.tenantId(), conversationId, "QUOTA_EXCEEDED", "SYSTEM", hoursNote, out);
                 return new Accepted(conversationId, Next.NONE, out, history, hoursNote);
             }

@@ -3801,25 +3801,41 @@ components:
         tokens: { $ref: '#/components/schemas/MotHanMuc' }
         users: { $ref: '#/components/schemas/MotHanMuc' }
         documents: { $ref: '#/components/schemas/MotHanMuc' }
-        costVnd: { type: number }
+        costVnd:
+          type: number
+          description: |
+            Chi phí AI từ ngày mở chu kỳ tới nay (VND, 4 chữ số thập phân). Cộng từ sự kiện
+            `ai.turn.completed` (UC039), không gọi đồng bộ sang ai-service.
         warnedAt:
           type: [string, 'null']
           format: date-time
-          description: Mốc chạm 80%
+          description: Mốc chạm 80% SỚM NHẤT trong bốn chỉ số — đọc từ `usage_records.warned_at`, không tính lại
         blockedAt:
           type: [string, 'null']
           format: date-time
           description: |
-            Mốc chạm 100%. Từ đây ngừng xử lý tự động nhưng **vẫn nhận tin nhắn** của khách —
-            không mất dữ liệu, chỉ mất phần trả lời tự động.
+            Mốc chạm 100% sớm nhất của **hội thoại hoặc token AI**. Từ đây ngừng xử lý tự động nhưng
+            **vẫn nhận tin nhắn** của khách — không mất dữ liệu, chỉ mất phần trả lời tự động. Tài liệu và
+            người dùng chạm trần chỉ chặn việc thêm mới, xem mốc riêng ở từng `MotHanMuc`.
 
     MotHanMuc:
       type: object
       required: [used, quota]
       properties:
         used: { type: integer, format: int64 }
-        quota: { type: integer, format: int64 }
+        quota:
+          type: integer
+          format: int64
+          description: Ảnh chụp của gói lúc mở chu kỳ (usage_records.quota_value), không đọc qua gói hiện tại
         percent: { type: number }
+        warnedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Lần đầu chỉ số này chạm 80% trong chu kỳ (V128)
+        blockedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Lần đầu chỉ số này chạm 100% trong chu kỳ (V128)
 
     DiemSuDungNgay:
       type: object

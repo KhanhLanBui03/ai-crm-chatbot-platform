@@ -5664,25 +5664,43 @@ export interface components {
             tokens: components["schemas"]["MotHanMuc"];
             users: components["schemas"]["MotHanMuc"];
             documents: components["schemas"]["MotHanMuc"];
+            /**
+             * @description Chi phí AI từ ngày mở chu kỳ tới nay (VND, 4 chữ số thập phân). Cộng từ sự kiện
+             *     `ai.turn.completed` (UC039), không gọi đồng bộ sang ai-service.
+             */
             costVnd?: number;
             /**
              * Format: date-time
-             * @description Mốc chạm 80%
+             * @description Mốc chạm 80% SỚM NHẤT trong bốn chỉ số — đọc từ `usage_records.warned_at`, không tính lại
              */
             warnedAt?: string | null;
             /**
              * Format: date-time
-             * @description Mốc chạm 100%. Từ đây ngừng xử lý tự động nhưng **vẫn nhận tin nhắn** của khách —
-             *     không mất dữ liệu, chỉ mất phần trả lời tự động.
+             * @description Mốc chạm 100% sớm nhất của **hội thoại hoặc token AI**. Từ đây ngừng xử lý tự động nhưng
+             *     **vẫn nhận tin nhắn** của khách — không mất dữ liệu, chỉ mất phần trả lời tự động. Tài liệu và
+             *     người dùng chạm trần chỉ chặn việc thêm mới, xem mốc riêng ở từng `MotHanMuc`.
              */
             blockedAt?: string | null;
         };
         MotHanMuc: {
             /** Format: int64 */
             used: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Ảnh chụp của gói lúc mở chu kỳ (usage_records.quota_value), không đọc qua gói hiện tại
+             */
             quota: number;
             percent?: number;
+            /**
+             * Format: date-time
+             * @description Lần đầu chỉ số này chạm 80% trong chu kỳ (V128)
+             */
+            warnedAt?: string | null;
+            /**
+             * Format: date-time
+             * @description Lần đầu chỉ số này chạm 100% trong chu kỳ (V128)
+             */
+            blockedAt?: string | null;
         };
         DiemSuDungNgay: {
             /** Format: date */

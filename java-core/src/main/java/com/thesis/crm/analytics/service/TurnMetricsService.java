@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.thesis.crm.analytics.entity.MetricsDaily;
 import com.thesis.crm.analytics.entity.MetricsDaily.LuotXong;
 import com.thesis.crm.platform.entity.Tenant;
+import com.thesis.crm.platform.service.AiTokenUsageService;
 import com.thesis.crm.security.TenantTransactionScope;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -43,11 +44,14 @@ public class TurnMetricsService {
     private final EntityManager em;
     private final TenantTransactionScope scope;
     private final TopicMetricsService chuDe;
+    private final AiTokenUsageService hanMuc;
 
-    public TurnMetricsService(EntityManager em, TenantTransactionScope scope, TopicMetricsService chuDe) {
+    public TurnMetricsService(EntityManager em, TenantTransactionScope scope, TopicMetricsService chuDe,
+            AiTokenUsageService hanMuc) {
         this.em = em;
         this.scope = scope;
         this.chuDe = chuDe;
+        this.hanMuc = hanMuc;
     }
 
     /**
@@ -87,6 +91,9 @@ public class TurnMetricsService {
         dong.cong(luot(p), bayGio);
         // UC038 lớp 1 — cùng sự kiện, cùng transaction, đã qua chống trùng ở trên
         chuDe.congTheoYDinh(tenantId, ngay, p, bayGio);
+        // UC006 — token của lượt vào hạn mức AI_TOKEN của chu kỳ đang hiệu lực lúc lượt chạy
+        hanMuc.cong(tenantId, Math.max(p.path("prompt_tokens").asLong(0), 0)
+                + Math.max(p.path("completion_tokens").asLong(0), 0), occurredAt);
         em.flush();
         return true;
     }
