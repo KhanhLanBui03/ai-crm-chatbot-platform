@@ -1,6 +1,6 @@
 """``MODEL_ROLE=classify`` — router ý định (UC022) + lead scorer (UC030).
 
-Endpoint: ``POST /v1/classify`` · ``POST /v1/lead-score`` · ``GET /v1/model``
+Endpoint: ``POST /v1/classify`` · ``POST /v1/lead-score`` · ``GET /v1/model`` · ``POST /v1/topics/cluster`` (UC038)
 Ngân sách độ trễ: Router p95 60 ms, Lead Scorer p95 < 1.000 ms (§5.3).
 """
 
@@ -340,4 +340,82 @@ async def model_info() -> dict[str, Any]:
         "taxonomies": INTENT_TAXONOMY,
         "device": "CPU",
         "status": "READY",
+    }
+
+
+# ---------------------------------------------------------------------------
+# UC038 — phân cụm chủ đề hội thoại (bước 3–5)
+# ---------------------------------------------------------------------------
+NGUON_VECTOR_ROUTER = "router-tfidf-ngram"
+SO_DIEM_TOI_DA = 5000
+
+
+class PhanCumRequest(BaseModel):
+    """Gửi ``vectors`` (bge-m3 từ ai-embed — đúng đặc tả) HOẶC ``texts`` (container này tự biến thành
+    vector n-gram ký tự của router — nguồn thay thế khi chưa chạy được bge-m3)."""
+
+    texts: list[str] | None = Field(default=None, max_length=SO_DIEM_TOI_DA)
+    vectors: list[list[float]] | None = Field(default=None, max_length=SO_DIEM_TOI_DA)
+    k_min: int = Field(default=5, ge=2, le=50)
+    k_max: int = Field(default=25, ge=2, le=50)
+    so_chieu: int = Field(default=50, ge=2, le=512)
+    hat_giong: int = 42
+    so_mau: int = Field(default=10, ge=1, le=50)
+
+
+class PhanCumResponse(BaseModel):
+    vector_source: str
+    k: int
+    silhouette: float
+    scores_by_k: dict[int, float]
+    labels: list[int]
+    representatives: dict[int, list[int]]
+    reduced_dims: int
+
+
+_PHAN_CUM: Any = None
+
+
+def _phan_cum_mod() -> Any:
+    global _PHAN_CUM
+    if _PHAN_CUM is None:
+        _PHAN_CUM = _load_sibling("inference_phan_cum", Path(__file__).resolve().with_name("phan_cum.py"))
+    return _PHAN_CUM
+
+
+@router.post("/v1/topics/cluster", response_model=PhanCumResponse)
+async def phan_cum_chu_de(req: PhanCumRequest) -> Any:
+    from fastapi import HTTPException
+    import numpy as np
+
+    if (req.texts is None) == (req.vectors is None):
+        raise HTTPException(422, "Gửi đúng một trong hai: texts hoặc vectors.")
+    if req.k_min > req.k_max:
+        raise HTTPException(422, "k_min phải ≤ k_max.")
+    if req.vectors is not None:
+        nguon = "provided"
+        x = np.asarray(req.vectors, dtype=np.float64)
+    else:
+        _init_router_model()
+        if _EMBEDDER is None:
+            # Fail-closed: không có embedder thì không phân cụm trên thứ gì khác
+            raise HTTPException(503, f"EMBED_UNAVAILABLE: {_ROUTER_LOAD_ERROR}")
+        nguon = NGUON_VECTOR_ROUTER
+        x = np.stack([_EMBEDDER.transform_single(t) for t in req.texts]).astype(np.float64)
+    try:
+        kq = _phan_cum_mod().phan_cum(
+            x, k_min=req.k_min, k_max=req.k_max, so_chieu=req.so_chieu,
+            hat_giong=req.hat_giong, so_mau=req.so_mau,
+        )
+    except ValueError as e:
+        raise HTTPException(422, f"TOO_FEW_CONVERSATIONS: {e}") from e
+    logger.info("Phân cụm %d điểm (%s): k=%d silhouette=%.4f", len(x), nguon, kq.k, kq.silhouette)
+    return {
+        "vector_source": nguon,
+        "k": kq.k,
+        "silhouette": kq.silhouette,
+        "scores_by_k": kq.diem_theo_k,
+        "labels": kq.nhan,
+        "representatives": kq.dai_dien,
+        "reduced_dims": kq.so_chieu_da_giam,
     }

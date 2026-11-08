@@ -2,6 +2,7 @@ import { apiSlice } from '@/api/apiSlice'
 import type {
   BacPheu,
   DiemHoiThoaiNgay,
+  KyPhanCum,
   LoaiBaoCao,
   ThongKeChuDe,
   TongQuan,
@@ -53,6 +54,12 @@ export const analyticsApi = apiSlice.injectEndpoints({
       providesTags: ['BaoCao'],
     }),
 
+    // UC038 — kỳ phân cụm đang dùng: nguồn vector, thời điểm, lý do bỏ kỳ. null = chưa có kỳ nào
+    kyPhanCum: build.query<KyPhanCum | null, void>({
+      query: () => ({ url: '/api/v1/analytics/topics/cluster-run' }),
+      providesTags: ['BaoCao'],
+    }),
+
     // UC042 nhánh 4.2 — máy chủ sinh tệp đồng bộ và trả thẳng nội dung, không có
     // mã công việc để hỏi lại. Vì vậy đây là mutation trả Blob, không trả thực thể.
     yeuCauXuatBaoCao: build.mutation<
@@ -79,5 +86,6 @@ export const {
   useHoiThoaiTheoNgayQuery,
   usePheuChuyenDoiQuery,
   useThongKeChuDeQuery,
+  useKyPhanCumQuery,
   useYeuCauXuatBaoCaoMutation,
 } = analyticsApi

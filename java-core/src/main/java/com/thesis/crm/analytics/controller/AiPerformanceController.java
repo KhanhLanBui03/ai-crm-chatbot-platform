@@ -4,6 +4,7 @@ import static com.thesis.crm.security.CurrentActor.isTenantAdmin;
 import static com.thesis.crm.security.CurrentActor.requireTenantId;
 
 import com.thesis.crm.analytics.dto.response.AiPerformanceDtos.HieuQuaAi;
+import com.thesis.crm.analytics.dto.response.TopicDtos.KyPhanCum;
 import com.thesis.crm.analytics.dto.response.TopicDtos.ThongKeChuDe;
 import com.thesis.crm.analytics.service.AiPerformanceService;
 import com.thesis.crm.analytics.service.TopicReportService;
@@ -47,5 +48,11 @@ public class AiPerformanceController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return ResponseEntity.ok(ApiResponse.ok(topics.report(requireTenantId(), isTenantAdmin(), dimension, from,
                 to)));
+    }
+
+    /** UC038 — kỳ phân cụm đang dùng cho lớp CLUSTER: nguồn vector, thời điểm, lý do bỏ kỳ. {@code data = null} khi chưa có kỳ nào. */
+    @GetMapping("/topics/cluster-run")
+    public ResponseEntity<ApiResponse<KyPhanCum>> clusterRun() {
+        return ResponseEntity.ok(ApiResponse.ok(topics.kyPhanCum(requireTenantId(), isTenantAdmin())));
     }
 }

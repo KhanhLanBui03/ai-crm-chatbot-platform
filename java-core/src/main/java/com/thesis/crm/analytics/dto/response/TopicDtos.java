@@ -1,5 +1,6 @@
 package com.thesis.crm.analytics.dto.response;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -28,5 +29,27 @@ public final class TopicDtos {
             long conversationCount,
             long botResolvedCount,
             long refusalCount) {
+    }
+
+    /**
+     * Kỳ phân cụm đang dùng cho lớp {@code CLUSTER} — để màn nói rõ nguồn vector, thời điểm, và VÌ SAO trống.
+     *
+     * @param status {@code DONE} · {@code SKIPPED} · {@code FAILED}
+     * @param skipReason {@code TOO_FEW_CONVERSATIONS} · {@code EMBED_UNAVAILABLE} · {@code CLUSTER_SERVICE_ERROR}
+     * @param vectorSource {@code bge-m3} (đúng đặc tả) hoặc {@code router-tfidf-ngram} (nguồn thay thế theo chữ)
+     * @param namingMethod {@code llm} · {@code tu-khoa} · {@code hon-hop}
+     */
+    public record KyPhanCum(
+            String status,
+            String skipReason,
+            Instant startedAt,
+            Instant windowFrom,
+            Instant windowTo,
+            int conversationCount,
+            int minConversations,
+            String vectorSource,
+            Integer k,
+            Double silhouette,
+            String namingMethod) {
     }
 }

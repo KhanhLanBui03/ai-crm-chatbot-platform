@@ -2901,6 +2901,8 @@ paths:
           description: INVALID_DIMENSION · INVALID_RANGE
         '403':
           description: FORBIDDEN — không phải quản trị viên
+        '503':
+          description: AI_SERVICE_UNAVAILABLE — lớp CLUSTER không lấy được cụm từ ai-service
         '200':
           description: Thống kê theo chủ đề
           content:
@@ -2912,6 +2914,32 @@ paths:
                       data:
                         type: array
                         items: { $ref: '#/components/schemas/ThongKeChuDe' }
+
+  /api/v1/analytics/topics/cluster-run:
+    get:
+      tags: [Phân tích]
+      summary: SCR052 — kỳ phân cụm đang dùng cho lớp CLUSTER
+      description: |
+        UC038. Nguồn vector, thời điểm và lý do bỏ kỳ — để màn nói rõ "phân cụm theo chữ" hay "theo nghĩa",
+        và VÌ SAO chưa có cụm (dưới ngưỡng hội thoại, dịch vụ nhúng không sẵn sàng). `data = null` khi
+        doanh nghiệp chưa có kỳ nào. Chỉ quản trị viên.
+      responses:
+        '200':
+          description: Kỳ phân cụm
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        nullable: true
+                        allOf:
+                          - $ref: '#/components/schemas/KyPhanCum'
+        '403':
+          description: FORBIDDEN — không phải quản trị viên
+        '503':
+          description: AI_SERVICE_UNAVAILABLE — không lấy được kỳ từ ai-service
 
   /api/v1/analytics/ai-performance:
     get:
@@ -5001,6 +5029,28 @@ components:
           description: |
             Hội thoại có ≥ 1 lượt bị từ chối. Cao ở một chủ đề là gợi ý trực tiếp — bổ sung tài liệu
             cho chủ đề đó. Hỏi lại (CLARIFY), chuyển giao và lỗi hệ thống KHÔNG tính là từ chối.
+
+    KyPhanCum:
+      type: object
+      required: [status, startedAt, windowFrom, windowTo, conversationCount, minConversations]
+      properties:
+        status: { type: string, enum: [DONE, SKIPPED, FAILED] }
+        skipReason:
+          type: string
+          nullable: true
+          enum: [TOO_FEW_CONVERSATIONS, EMBED_UNAVAILABLE, CLUSTER_SERVICE_ERROR]
+        startedAt: { type: string, format: date-time }
+        windowFrom: { type: string, format: date-time }
+        windowTo: { type: string, format: date-time }
+        conversationCount: { type: integer }
+        minConversations: { type: integer }
+        vectorSource:
+          type: string
+          nullable: true
+          description: "`bge-m3` (theo nghĩa, đúng đặc tả) · `router-tfidf-ngram` (theo chữ, nguồn thay thế)"
+        k: { type: integer, nullable: true }
+        silhouette: { type: number, nullable: true }
+        namingMethod: { type: string, nullable: true, description: "llm · tu-khoa · hon-hop" }
 
     HieuQuaAi:
       type: object

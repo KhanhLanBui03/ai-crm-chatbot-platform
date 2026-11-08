@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -147,6 +148,71 @@ class TopicIntegrationTest extends EngagementIntegrationTestBase {
                 .andExpect(status().isBadRequest());
     }
 
+    @AfterEach
+    void traLaiAiGia() {
+        AI.topicClusters.set(new FakeAiServer.Script(204, "", 0));
+    }
+
+    @Test
+    void lopCum_ghepGanCumVoiSoLieuTuChoi_guiDungTenant() throws Exception {
+        UUID a = hoiThoai();
+        UUID b = hoiThoai();
+        UUID c = hoiThoai();
+        // a: hai ý định trong cùng ngày, cả hai trả lời được → MỘT hội thoại tự xử lý của cụm
+        nhan(a, "PRICING_POLICY", "RAG", true, false, "SUCCESS");
+        nhan(a, "KB_SEARCH", "RAG", true, false, "SUCCESS");
+        nhan(b, "KB_SEARCH", "RAG", false, false, "SUCCESS");          // bị từ chối
+        nhan(c, "KB_SEARCH", "RAG", true, false, "SUCCESS");
+        UUID hoaDon = UUID.randomUUID();
+        UUID giaoHang = UUID.randomUUID();
+        AI.topicClusters.set(new FakeAiServer.Script(200, """
+                {"run_id":"%s","started_at":"%s","window_from":"%s","window_to":"%s","conversation_count":3,
+                 "min_conversations":3,"status":"DONE","skip_reason":null,"vector_source":"router-tfidf-ngram",
+                 "k":2,"silhouette":0.31,"naming_method":"tu-khoa",
+                 "clusters":[{"cluster_id":"%s","label":"Hoá đơn · VAT","size":2},
+                             {"cluster_id":"%s","label":"Giao hàng","size":1}],
+                 "assignments":[{"conversation_id":"%s","cluster_id":"%s"},{"conversation_id":"%s","cluster_id":"%s"},
+                                {"conversation_id":"%s","cluster_id":"%s"}]}""".formatted(UUID.randomUUID(), Instant.now(),
+                Instant.now().minusSeconds(86400), Instant.now(), hoaDon, giaoHang, a, hoaDon, b, hoaDon, c, giaoHang), 0));
+
+        Map<String, JsonNode> cum = theoKhoa(baoCao("?dimension=CLUSTER"));
+        JsonNode hd = cum.get(hoaDon.toString());
+        assertThat(hd.get("topicLabel").asText()).isEqualTo("Hoá đơn · VAT");
+        assertThat(hd.get("conversationCount").asLong()).isEqualTo(2);       // a tính MỘT lần dù hai ý định
+        assertThat(hd.get("botResolvedCount").asLong()).isEqualTo(1);
+        assertThat(hd.get("refusalCount").asLong()).isEqualTo(1);
+        assertThat(hd.get("clusterId").asText()).isEqualTo(hoaDon.toString());
+        assertThat(cum.get(giaoHang.toString()).get("conversationCount").asLong()).isEqualTo(1);
+        assertThat(AI.lastTopicTenant.get()).isEqualTo(tenant.toString());   // tenant từ JWT, qua header
+
+        JsonNode ky = kyPhanCum();
+        assertThat(ky.get("vectorSource").asText()).isEqualTo("router-tfidf-ngram");
+        assertThat(ky.get("k").asInt()).isEqualTo(2);
+        assertThat(ky.get("namingMethod").asText()).isEqualTo("tu-khoa");
+    }
+
+    @Test
+    void lopCum_kyBiBoQua_traRongVaNoiLyDo() throws Exception {
+        AI.topicClusters.set(new FakeAiServer.Script(200, """
+                {"run_id":"%s","started_at":"%s","window_from":"%s","window_to":"%s","conversation_count":5,
+                 "min_conversations":200,"status":"SKIPPED","skip_reason":"TOO_FEW_CONVERSATIONS",
+                 "clusters":[],"assignments":[]}""".formatted(UUID.randomUUID(), Instant.now(),
+                Instant.now().minusSeconds(86400), Instant.now()), 0));
+        assertThat(baoCao("?dimension=CLUSTER")).isEmpty();
+        JsonNode ky = kyPhanCum();
+        assertThat(ky.get("skipReason").asText()).isEqualTo("TOO_FEW_CONVERSATIONS");
+        assertThat(ky.get("minConversations").asInt()).isEqualTo(200);
+    }
+
+    @Test
+    void lopCum_chuaCoKyNao_traRong_aiHong503() throws Exception {
+        assertThat(baoCao("?dimension=CLUSTER")).isEmpty();
+        assertThat(kyPhanCum().isNull()).isTrue();
+        AI.topicClusters.set(new FakeAiServer.Script(500, "{\"code\":\"INTERNAL\",\"message\":\"x\"}", 0));
+        mvc.perform(get("/api/v1/analytics/topics?dimension=CLUSTER").with(asUser(tenant, admin, "TENANT_ADMIN")))
+                .andExpect(status().isServiceUnavailable());
+    }
+
     // ── tiện ích ────────────────────────────────────────────────────────────────
 
     private UUID hoiThoai() throws Exception {
@@ -163,6 +229,12 @@ class TopicIntegrationTest extends EngagementIntegrationTestBase {
         String body = mvc.perform(get("/api/v1/analytics/topics" + query).with(asUser(tenant, admin, "TENANT_ADMIN")))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         return data(body);
+    }
+
+    private JsonNode kyPhanCum() throws Exception {
+        String body = mvc.perform(get("/api/v1/analytics/topics/cluster-run").with(asUser(tenant, admin, "TENANT_ADMIN")))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return json.readTree(body).get("data");
     }
 
     /** Một ngày duy nhất trong test → mỗi chủ đề đúng một dòng. */

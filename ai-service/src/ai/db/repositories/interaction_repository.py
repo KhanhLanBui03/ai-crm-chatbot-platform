@@ -440,4 +440,9 @@ async def xoa_theo_hoi_thoai(
     xoa = await session.execute(
         text("DELETE FROM ai.ai_interactions WHERE conversation_id = ANY(:ids)"), tham_so
     )
+    # UC038: hội thoại đã xoá thì cũng rời khỏi các cụm chủ đề (V215). Cụm vẫn giữ nhãn và cỡ của
+    # kỳ đó — đó là số tổng hợp, không chứa nội dung của khách.
+    await session.execute(
+        text("DELETE FROM ai.topic_cluster_assignments WHERE conversation_id = ANY(:ids)"), tham_so
+    )
     return KetQuaXoaLuot(xoa.rowcount, so_danh_gia, so_goi)

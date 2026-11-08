@@ -513,3 +513,39 @@ class SafetyEventItem(BaseModel):
     occurred_at: datetime
     # Trường cũ của hợp đồng, giữ cho bên đọc phiên bản trước — = event_type
     reason: str
+
+
+class TopicClusterItem(BaseModel):
+    """Một cụm chủ đề của một kỳ (UC038). ``label`` do máy sinh trên nội dung khách — chỉ hiển thị."""
+
+    cluster_id: UUID
+    label: str
+    size: int
+
+
+class TopicClusterAssignment(BaseModel):
+    conversation_id: UUID
+    cluster_id: UUID
+
+
+class TopicClusterRun(BaseModel):
+    """Kỳ phân cụm mới nhất — hợp đồng ``TopicClusterRun`` (docs/openapi/ai-service-to-java-core.yaml).
+
+    Kỳ bị bỏ qua cũng trả về (``status`` + ``skip_reason``) để màn hình nói được VÌ SAO chưa có cụm.
+    Khi đó ``clusters`` và ``assignments`` rỗng."""
+
+    run_id: UUID
+    started_at: datetime
+    finished_at: datetime | None = None
+    window_from: datetime
+    window_to: datetime
+    conversation_count: int
+    min_conversations: int
+    status: Literal["DONE", "SKIPPED", "FAILED"]
+    skip_reason: Literal["TOO_FEW_CONVERSATIONS", "EMBED_UNAVAILABLE", "CLUSTER_SERVICE_ERROR"] | None = None
+    vector_source: str | None = None
+    k: int | None = None
+    silhouette: float | None = None
+    naming_method: str | None = None
+    clusters: list[TopicClusterItem] = Field(default_factory=list)
+    assignments: list[TopicClusterAssignment] = Field(default_factory=list)
