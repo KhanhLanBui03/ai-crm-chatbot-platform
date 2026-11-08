@@ -34,6 +34,9 @@ class UsageIntegrationTest extends EngagementIntegrationTestBase {
 
     private UUID tenant;
     private UUID admin;
+    private UUID channel;
+    private UUID contact;
+    private UUID identity;
 
     @BeforeEach
     void doanhNghiepMoi() throws Exception {
@@ -49,6 +52,16 @@ class UsageIntegrationTest extends EngagementIntegrationTestBase {
                     INSERT INTO platform.tenant_subscriptions (tenant_id, plan_id, status, period_start, period_end)
                     SELECT ?, id, 'TRIALING', now() - interval '1 day', now() + interval '13 days'
                     FROM platform.subscription_plans WHERE code = 'TRIAL'""", tenant);
+            channel = UUID.randomUUID();
+            contact = UUID.randomUUID();
+            identity = UUID.randomUUID();
+            exec(c, "INSERT INTO engagement.channels (id, tenant_id, type, name, status) VALUES (?, ?, 'ZALO', 'Zalo', 'ACTIVE')",
+                    channel, tenant);
+            exec(c, "INSERT INTO engagement.contacts (id, tenant_id, full_name, primary_channel) VALUES (?, ?, 'Khách', 'ZALO')",
+                    contact, tenant);
+            exec(c, """
+                    INSERT INTO engagement.channel_identities (id, tenant_id, channel_id, contact_id, external_user_id)
+                    VALUES (?, ?, ?, ?, ?)""", identity, tenant, channel, contact, "zl-" + identity);
         }
     }
 
@@ -99,6 +112,48 @@ class UsageIntegrationTest extends EngagementIntegrationTestBase {
     }
 
     @Test
+    void theoNgay_theoNhanh_demHoiThoaiMotLanMoiNhanh() throws Exception {
+        UUID a = hoiThoai();
+        UUID b = hoiThoai();
+        nhanCho(a, "RAG", 100, 20, "1.0000");
+        nhanCho(a, "RAG", 50, 10, "0.5000");          // cùng hội thoại, cùng nhánh — vẫn là MỘT hội thoại RAG
+        nhanCho(a, "SMALL_TALK", 0, 0, "0");
+        nhanCho(b, "RAG", 30, 5, "0.2500");
+
+        Map<String, JsonNode> nhanh = theoKhoa(theoNgay("?groupBy=route"), "route");
+        assertThat(nhanh.get("RAG").get("conversations").asLong()).isEqualTo(2);
+        assertThat(nhanh.get("RAG").get("turns").asLong()).isEqualTo(3);
+        assertThat(nhanh.get("RAG").get("promptTokens").asLong()).isEqualTo(180);
+        assertThat(new BigDecimal(nhanh.get("RAG").get("costVnd").asText())).isEqualByComparingTo("1.75");
+        assertThat(nhanh.get("SMALL_TALK").get("conversations").asLong()).isEqualTo(1);   // a có mặt ở cả hai nhánh
+        assertThat(nhanh.get("RAG").get("channelType").isNull()).isTrue();
+    }
+
+    @Test
+    void theoNgay_theoKenh_demHoiThoaiMoTrongNgay() throws Exception {
+        UUID a = hoiThoai();
+        UUID b = hoiThoai();
+        nhanCho(a, "RAG", 100, 20, "1.0000");
+        nhanCho(a, "SMALL_TALK", 0, 0, "0");
+        nhanCho(b, "RAG", 30, 5, "0.2500");
+        JsonNode trang = theoNgay("?groupBy=channel");
+        assertThat(trang.get("totalItems").asLong()).isEqualTo(1);
+        JsonNode zalo = trang.get("items").get(0);
+        assertThat(zalo.get("channelType").asText()).isEqualTo("ZALO");
+        assertThat(zalo.get("conversations").asLong()).isEqualTo(2);
+        assertThat(zalo.get("turns").asLong()).isEqualTo(3);
+        assertThat(zalo.get("completionTokens").asLong()).isEqualTo(25);
+    }
+
+    @Test
+    void theoNgay_gopHaiChieu400_nhanVien403() throws Exception {
+        mvc.perform(get("/api/v1/usage/daily?groupBy=both").with(asUser(tenant, admin, "TENANT_ADMIN")))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/usage/daily").with(asUser(tenant, admin, "AGENT")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void chuaDungGi_khongCoMoc_chiPhi0() throws Exception {
         JsonNode d = hanMuc();
         assertThat(d.has("warnedAt")).isFalse();
@@ -108,6 +163,36 @@ class UsageIntegrationTest extends EngagementIntegrationTestBase {
     }
 
     // ── tiện ích ────────────────────────────────────────────────────────────────
+
+    private JsonNode theoNgay(String query) throws Exception {
+        String body = mvc.perform(get("/api/v1/usage/daily" + query).with(asUser(tenant, admin, "TENANT_ADMIN")))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return data(body);
+    }
+
+    private static Map<String, JsonNode> theoKhoa(JsonNode trang, String truong) {
+        Map<String, JsonNode> m = new LinkedHashMap<>();
+        trang.get("items").forEach(d -> m.put(d.get(truong).asText(), d));
+        return m;
+    }
+
+    private UUID hoiThoai() throws Exception {
+        UUID id = UUID.randomUUID();
+        try (Connection c = owner()) {
+            exec(c, """
+                    INSERT INTO engagement.conversations (id, tenant_id, channel_id, channel_identity_id, contact_id)
+                    VALUES (?, ?, ?, ?, ?)""", id, tenant, channel, identity, contact);
+        }
+        return id;
+    }
+
+    private void nhanCho(UUID conv, String nhanh, long prompt, long completion, String chiPhi) {
+        JsonNode sk = suKien(prompt, completion, chiPhi);
+        ((com.fasterxml.jackson.databind.node.ObjectNode) sk.get("payload")).put("conversation_id", conv.toString())
+                .put("branch", nhanh);
+        ((com.fasterxml.jackson.databind.node.ObjectNode) sk).put("aggregate_id", conv.toString());
+        assertThat(metrics.ghiNhan(sk)).isTrue();
+    }
 
     private JsonNode hanMuc() throws Exception {
         String body = mvc.perform(get("/api/v1/usage").with(asUser(tenant, admin, "TENANT_ADMIN")))

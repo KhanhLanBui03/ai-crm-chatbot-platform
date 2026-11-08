@@ -972,9 +972,12 @@ export interface paths {
         };
         /**
          * SCR015 — mức sử dụng theo ngày
-         * @description UC006 bước 5–7. Tách theo kênh **hoặc** theo nhánh xử lý AI — cả hai đều là phép cộng trên
-         *     `analytics.usage_metrics_daily`. Không gộp hai chiều trong một lần gọi vì một hội thoại đi
-         *     qua nhiều nhánh, gộp lại sẽ nhân đôi số đếm.
+         * @description UC006 bước 5–7. Tách theo kênh **hoặc** theo nhánh xử lý AI. Token, chi phí, số lượt cộng trên
+         *     `analytics.metrics_daily` (bảng `usage_metrics_daily` ghi trong đặc tả không tồn tại — đặc tả đã
+         *     nêu phải chốt một tên). Số hội thoại: theo kênh = hội thoại MỞ trong ngày; theo nhánh = hội thoại
+         *     có ít nhất một lượt đi qua nhánh đó (`analytics.topic_conversations`, chiều ROUTE, V139). Không
+         *     gộp hai chiều trong một lần gọi vì một hội thoại đi qua nhiều nhánh, gộp lại sẽ nhân đôi số đếm.
+         *     Chỉ quản trị viên.
          */
         get: {
             parameters: {
@@ -985,6 +988,10 @@ export interface paths {
                     to?: components["parameters"]["DenNgay"];
                     /** @description Chiều tách số liệu */
                     groupBy?: "channel" | "route";
+                    /** @description `-statDate` (mặc định) · `±statDate|conversations|promptTokens|completionTokens|costVnd` */
+                    sort?: string;
+                    page?: number;
+                    size?: number;
                 };
                 header?: never;
                 path?: never;
@@ -992,16 +999,32 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Chuỗi số liệu theo ngày */
+                /** @description Chuỗi số liệu theo ngày, phân trang */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": components["schemas"]["ApiResponse"] & {
-                            data?: components["schemas"]["DiemSuDungNgay"][];
+                            data?: components["schemas"]["Page"] & {
+                                items?: components["schemas"]["DiemSuDungNgay"][];
+                            };
                         };
                     };
+                };
+                /** @description INVALID_GROUP_BY (gộp hai chiều không được hỗ trợ) · INVALID_RANGE */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN — không phải quản trị viên */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -5707,15 +5730,20 @@ export interface components {
             statDate: string;
             channelType?: string | null;
             route?: components["schemas"]["NhanhXuLyAi"] | null;
+            /** @description Theo kênh — hội thoại mở trong ngày. Theo nhánh — hội thoại có lượt đi qua nhánh đó. */
             conversations: number;
+            /**
+             * Format: int64
+             * @description Số lượt tác tử AI xử lý — mẫu số đúng cho tỉ lệ dùng đệm
+             */
+            turns: number;
             /** Format: int64 */
             promptTokens: number;
             /** Format: int64 */
             completionTokens: number;
             costVnd: number;
             /** @description Lượt dùng đệm ngữ nghĩa — không tính chi phí gọi mô hình */
-            cachedHits?: number;
-            modelVersion?: string;
+            cachedHits: number;
         };
         /** @description Không bao giờ chứa bí mật của kênh — chúng là bề mặt tấn công T1. */
         Kenh: {

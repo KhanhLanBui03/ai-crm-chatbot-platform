@@ -18,7 +18,8 @@ import org.hibernate.annotations.DynamicUpdate;
  * <p>Báo cáo đếm theo HỘI THOẠI còn sự kiện đến theo LƯỢT, nên mỗi lượt cộng vào đúng một dòng: hội thoại
  * hỏi giá ba lượt vẫn là một hội thoại "hỏi giá", với {@code turnCount = 3}.
  *
- * <p>{@code dimension} tách hai lớp: {@code INTENT} (7 ý định router) và {@code CLUSTER} (cụm ngữ nghĩa).
+ * <p>{@code dimension}: {@code INTENT} (7 ý định router) · {@code CLUSTER} (cụm ngữ nghĩa) · {@code ROUTE} (7 nhánh
+ * xử lý — UC006, V139).
  */
 @Entity
 @DynamicUpdate
@@ -28,6 +29,8 @@ public class TopicConversation {
 
     public static final String INTENT = "INTENT";
     public static final String CLUSTER = "CLUSTER";
+    /** UC006 — 7 nhánh xử lý, để đếm hội thoại theo nhánh trên màn mức sử dụng theo ngày. */
+    public static final String ROUTE = "ROUTE";
 
     /** Khoá chính kép — JPA bắt buộc có constructor rỗng, {@code equals} và {@code hashCode}. */
     public static class Key implements Serializable {

@@ -91,6 +91,8 @@ public class TurnMetricsService {
         dong.cong(luot(p), bayGio);
         // UC038 lớp 1 — cùng sự kiện, cùng transaction, đã qua chống trùng ở trên
         chuDe.congTheoYDinh(tenantId, ngay, p, bayGio);
+        // UC006 — đếm hội thoại theo nhánh cho màn mức sử dụng theo ngày
+        chuDe.congTheoNhanh(tenantId, ngay, p, bayGio);
         // UC006 — token của lượt vào hạn mức AI_TOKEN của chu kỳ đang hiệu lực lúc lượt chạy
         hanMuc.cong(tenantId, Math.max(p.path("prompt_tokens").asLong(0), 0)
                 + Math.max(p.path("completion_tokens").asLong(0), 0), occurredAt);
