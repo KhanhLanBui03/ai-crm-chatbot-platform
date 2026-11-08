@@ -22,7 +22,7 @@ api_router.include_router(feedback.router)
 api_router.include_router(kho.router)
 api_router.include_router(tom_tat.router)  # /v1/ai/summarize — UC026 (Ngày 12)
 api_router.include_router(rieng_tu.router)  # /v1/ai/privacy/contacts/{id} — UC041 (Ngày 12)
-api_router.include_router(an_toan.router)  # /v1/safety-events — UC040 bước 8, chỉ java-core gọi
+api_router.include_router(an_toan.router)  # /v1/safety-events (tiền tố /v1 gắn ở main.py) — UC040 bước 8, chỉ java-core gọi
 
 # TODO: scoring
 # Đặc tả giao ước: docs/openapi/ai-service-to-java-core.yaml (hạn chốt 07/09)

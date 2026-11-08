@@ -65,7 +65,7 @@ def thanh_su_kien(d: DongAnToan) -> SafetyEventItem:
     )
 
 
-@router.get("/v1/safety-events", response_model=list[SafetyEventItem], operation_id="listSafetyEvents",
+@router.get("/safety-events", response_model=list[SafetyEventItem], operation_id="listSafetyEvents",
             responses={401: {"description": "TENANT_CONTEXT_MISSING — thiếu X-Tenant-Id"}})
 async def danh_sach_canh_bao(
     tenant_id: TenantIdDep,
