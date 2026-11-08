@@ -21,6 +21,7 @@ import { IngestionProgressPage } from '@/features/knowledge/IngestionProgressPag
 import { KnowledgeGapsPage } from '@/features/knowledge/KnowledgeGapsPage'
 import { KnowledgeSearchPage } from '@/features/knowledge/KnowledgeSearchPage'
 import { AuditLogPage } from '@/features/audit/AuditLogPage'
+import { SafetyEventsPage } from '@/features/audit/SafetyEventsPage'
 import { ErasurePreviewPage } from '@/features/audit/ErasurePreviewPage'
 import { ErasureProgressPage } from '@/features/audit/ErasureProgressPage'
 import { ErasureRequestsPage } from '@/features/audit/ErasureRequestsPage'
@@ -164,6 +165,7 @@ export function Router() {
         {/* Kiểm toán và quyền xoá dữ liệu cá nhân — SCR054–SCR058, Nghị định 13/2023/NĐ-CP */}
         <Route path="/kiem-toan" element={<Navigate to="/kiem-toan/nhat-ky" replace />} />
         <Route path="/kiem-toan/nhat-ky" element={<AuditLogPage />} />
+        <Route path="/kiem-toan/canh-bao-an-toan" element={<SafetyEventsPage />} />
         <Route path="/kiem-toan/yeu-cau-xoa" element={<ErasureRequestsPage />} />
         <Route path="/kiem-toan/yeu-cau-xoa/:id" element={<ErasureProgressPage />} />
         <Route path="/kiem-toan/xem-truoc-xoa" element={<ErasurePreviewPage />} />

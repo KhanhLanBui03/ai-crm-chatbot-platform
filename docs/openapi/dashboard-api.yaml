@@ -2247,6 +2247,14 @@ paths:
                               items:
                                 type: array
                                 items: { $ref: '#/components/schemas/SuKienAnToan' }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '503':
+          description: |
+            `AI_SERVICE_UNAVAILABLE` — không lấy được phần cảnh báo phía AI. Báo lỗi thay vì trả mỗi phần
+            java-core: màn thiếu hai phần ba nguồn mà trông như "không có sự cố" là nói dối người xem.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
 
   # ══════════════════════════════════════════════════════════════════════════════
   # I. Bán hàng — UC030, UC032, UC033, UC034, UC035
@@ -4509,7 +4517,11 @@ components:
       type: object
       required: [id, eventType, severity, actionTaken, occurredAt]
       properties:
-        id: { type: integer, format: int64 }
+        id:
+          type: string
+          description: |
+            Chuỗi vì ba nguồn có ba kiểu khoá: lượt xử lý và lời gọi công cụ là UUID, nhật ký kiểm toán là số
+            (trả dạng `audit-<số>`).
         eventType: { $ref: '#/components/schemas/LoaiSuKienAnToan' }
         severity: { $ref: '#/components/schemas/MucNghiemTrong' }
         threatSurface:

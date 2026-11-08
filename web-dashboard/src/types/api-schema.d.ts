@@ -3743,6 +3743,19 @@ export interface paths {
                         };
                     };
                 };
+                403: components["responses"]["KhongDuQuyen"];
+                /**
+                 * @description `AI_SERVICE_UNAVAILABLE` — không lấy được phần cảnh báo phía AI. Báo lỗi thay vì trả mỗi phần
+                 *     java-core: màn thiếu hai phần ba nguồn mà trông như "không có sự cố" là nói dối người xem.
+                 */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
+                    };
+                };
             };
         };
         put?: never;
@@ -6202,8 +6215,11 @@ export interface components {
             createdAt: string;
         };
         SuKienAnToan: {
-            /** Format: int64 */
-            id: number;
+            /**
+             * @description Chuỗi vì ba nguồn có ba kiểu khoá: lượt xử lý và lời gọi công cụ là UUID, nhật ký kiểm toán là số
+             *     (trả dạng `audit-<số>`).
+             */
+            id: string;
             eventType: components["schemas"]["LoaiSuKienAnToan"];
             severity: components["schemas"]["MucNghiemTrong"];
             threatSurface?: components["schemas"]["BeMatDeDoa"] | null;

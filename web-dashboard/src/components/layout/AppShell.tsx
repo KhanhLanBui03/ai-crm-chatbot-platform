@@ -48,6 +48,7 @@ const NHAN_DUONG_DAN: Record<string, string> = {
   'phan-tich': 'Phân tích',
   'kiem-toan': 'Kiểm toán',
   'nhat-ky': 'Nhật ký kiểm toán',
+  'canh-bao-an-toan': 'Cảnh báo an toàn',
   'yeu-cau-xoa': 'Yêu cầu xoá dữ liệu',
   'xem-truoc-xoa': 'Xem trước phạm vi xoá',
   'cai-dat': 'Cài đặt',

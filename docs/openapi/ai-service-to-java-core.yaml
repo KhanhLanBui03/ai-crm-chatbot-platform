@@ -778,9 +778,25 @@ paths:
     get:
       operationId: listSafetyEvents
       summary: Phần Track B của cảnh báo an toàn — UC040 bước 8
+      description: |
+        Hai nguồn: `ai.ai_interactions.safety_flag` và `ai.ai_tool_calls` với `decision = 'BLOCKED'`, mới
+        nhất trước. java-core gộp thêm `platform.audit_logs` mức CRITICAL. **Chỉ java-core gọi** (mạng nội
+        bộ) — gateway chặn `/ai/v1/safety-events/**` vì ai-service không kiểm vai trò người dùng.
       parameters:
         - $ref: '#/components/parameters/TenantId'
         - $ref: '#/components/parameters/TraceId'
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+          description: Mặc định 30 ngày trước `to`
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+          description: Mặc định bây giờ (không tính mốc này)
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 200 }
+          description: Tối đa mỗi nguồn
       responses:
         '200':
           description: Danh sách cảnh báo an toàn từ phía AI
@@ -1211,7 +1227,25 @@ components:
 
     SafetyEventItem:
       type: object
+      required: [event_id, event_type, severity, detector, action_taken, occurred_at]
       properties:
-        event_id: { type: string, format: uuid }
-        severity: { type: string }
-        reason: { type: string }
+        event_id: { type: string, format: uuid, description: id lượt xử lý hoặc id lời gọi công cụ }
+        event_type:
+          type: string
+          enum: [PROMPT_INJECTION_INPUT, PROMPT_INJECTION_TOOL_RESULT, PROMPT_INJECTION_DOCUMENT,
+                 CROSS_TENANT_PROBE, INTERNAL_DATA_PROBE, TOOL_CALL_BLOCKED]
+        severity: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+        threat_surface:
+          type: [string, 'null']
+          enum: [T1, T2, T3, T4, T5, T6, T7, T8, null]
+          description: Nối tới docs/threat-model.md
+        conversation_id: { type: [string, 'null'], format: uuid }
+        interaction_id: { type: [string, 'null'], format: uuid }
+        detector: { type: string, description: Lớp phòng thủ nào phát hiện }
+        action_taken: { type: string, enum: [TREATED_AS_DATA, BLOCKED, REFUSED, ESCALATED] }
+        evidence:
+          type: object
+          additionalProperties: { type: string }
+          description: Trích đoạn NGẮN (≤ 40 ký tự) của câu hỏi đã che PII — không trả nguyên văn câu tấn công
+        occurred_at: { type: string, format: date-time }
+        reason: { type: string, description: Trường cũ, giữ tương thích — bằng event_type }

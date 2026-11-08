@@ -103,6 +103,7 @@ const MUC_TAC_TU = [
  */
 const MUC_KIEM_TOAN = [
   { duongDan: '/kiem-toan/nhat-ky', nhan: 'Nhật ký kiểm toán' },
+  { duongDan: '/kiem-toan/canh-bao-an-toan', nhan: 'Cảnh báo an toàn' },
   { duongDan: '/kiem-toan/yeu-cau-xoa', nhan: 'Yêu cầu xoá dữ liệu' },
   { duongDan: '/kiem-toan/xem-truoc-xoa', nhan: 'Xem trước phạm vi xoá' },
 ] as const
