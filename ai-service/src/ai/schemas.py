@@ -510,3 +510,64 @@ class ErasureResult(BaseModel):
     items: list[ErasureItem]
     # Giới hạn PHẢI hiện cho người duyệt (đặc tả UC041 bước 6) — java-core hiển thị nguyên văn.
     note: str
+
+
+# ── UC040 bước 8 — cảnh báo an toàn phía AI (java-core gộp với audit_logs CRITICAL) ─────────────
+
+
+class SafetyEventItem(BaseModel):
+    """Một cảnh báo an toàn — hợp đồng ``SafetyEventItem`` (docs/openapi/ai-service-to-java-core.yaml).
+
+    ``evidence`` chỉ là trích đoạn NGẮN đã che PII, không phải nguyên văn nội dung tấn công."""
+
+    event_id: UUID
+    event_type: Literal[
+        "PROMPT_INJECTION_INPUT", "PROMPT_INJECTION_TOOL_RESULT", "PROMPT_INJECTION_DOCUMENT",
+        "CROSS_TENANT_PROBE", "INTERNAL_DATA_PROBE", "TOOL_CALL_BLOCKED",
+    ]
+    severity: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    threat_surface: Literal["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8"] | None = None
+    conversation_id: UUID | None = None
+    interaction_id: UUID | None = None
+    detector: str
+    action_taken: Literal["TREATED_AS_DATA", "BLOCKED", "REFUSED", "ESCALATED"]
+    evidence: dict[str, str] = Field(default_factory=dict)
+    occurred_at: datetime
+    # Trường cũ của hợp đồng, giữ cho bên đọc phiên bản trước — = event_type
+    reason: str
+
+
+class TopicClusterItem(BaseModel):
+    """Một cụm chủ đề của một kỳ (UC038). ``label`` do máy sinh trên nội dung khách — chỉ hiển thị."""
+
+    cluster_id: UUID
+    label: str
+    size: int
+
+
+class TopicClusterAssignment(BaseModel):
+    conversation_id: UUID
+    cluster_id: UUID
+
+
+class TopicClusterRun(BaseModel):
+    """Kỳ phân cụm mới nhất — hợp đồng ``TopicClusterRun`` (docs/openapi/ai-service-to-java-core.yaml).
+
+    Kỳ bị bỏ qua cũng trả về (``status`` + ``skip_reason``) để màn hình nói được VÌ SAO chưa có cụm.
+    Khi đó ``clusters`` và ``assignments`` rỗng."""
+
+    run_id: UUID
+    started_at: datetime
+    finished_at: datetime | None = None
+    window_from: datetime
+    window_to: datetime
+    conversation_count: int
+    min_conversations: int
+    status: Literal["DONE", "SKIPPED", "FAILED"]
+    skip_reason: Literal["TOO_FEW_CONVERSATIONS", "EMBED_UNAVAILABLE", "CLUSTER_SERVICE_ERROR"] | None = None
+    vector_source: str | None = None
+    k: int | None = None
+    silhouette: float | None = None
+    naming_method: str | None = None
+    clusters: list[TopicClusterItem] = Field(default_factory=list)
+    assignments: list[TopicClusterAssignment] = Field(default_factory=list)

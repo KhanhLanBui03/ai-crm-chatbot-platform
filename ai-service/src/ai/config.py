@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # ── Kafka ────────────────────────────────────────────────────────────
     kafka_bootstrap: str = "kafka:9092"
     kafka_consumer_group: str = "ingestion-cg"
+    # UC039: phát ai.turn.completed sau mỗi lượt chat. Tắt ở test HTTP và môi trường không có Kafka —
+    # tắt thì trang "Hiệu quả tác tử AI" không có số liệu, lượt chat vẫn chạy bình thường.
+    turn_events_enabled: bool = True
 
     # ── Eureka ───────────────────────────────────────────────────────────
     eureka_url: str = "http://eureka-server:8761/eureka"
@@ -225,6 +228,17 @@ class Settings(BaseSettings):
     # thắng ``.env``.
     inference_rerank_url: str = "http://ai-rerank:8080"
     inference_classify_url: str = "http://ai-classify:8080"
+
+    # ── UC038 phân cụm chủ đề hội thoại ─────────────────────────────────
+    # Ngưỡng đặc tả: dưới 200 hội thoại trong cửa sổ thì bỏ kỳ (TOO_FEW_CONVERSATIONS) — phân cụm mẫu
+    # quá nhỏ cho nhãn vô nghĩa. Hạ khi DEMO thì báo cáo phải ghi rõ đã hạ (người dùng chốt 08/11).
+    chu_de_toi_thieu_hoi_thoai: int = Field(default=200, ge=6)
+    chu_de_cua_so_ngay: int = Field(default=30, ge=1, le=365)
+    # Vòng nền trong worker: mỗi tuần một kỳ. 0 = tắt vòng (vẫn chạy tay được bằng
+    # ``python -m src.ai.clustering``).
+    chu_de_chu_ky_s: float = Field(default=7 * 24 * 3600, ge=0)
+    # Phân cụm trên CPU có thể mất vài chục giây với vài nghìn hội thoại — job nền, không bị ALB chặn
+    chu_de_timeout_s: float = Field(default=180.0, gt=0)
 
     @field_validator("inference_rerank_url", "inference_classify_url", mode="before")
     @classmethod

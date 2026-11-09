@@ -69,9 +69,14 @@ abstract class EngagementIntegrationTestBase {
         r.add("spring.data.redis.host", REDIS::getHost);
         r.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         r.add("ai-service.url", AI::baseUrl);
+        // RestClient của AiServiceClient đi qua LoadBalancer → trỏ instance "ai-service" vào cùng server giả (UC040)
+        r.add("spring.cloud.discovery.client.simple.instances.ai-service[0].uri", AI::baseUrl);
         r.add("ai-service.chat-timeout", () -> "2s");
         // Job quá hạn hàng chờ: test gọi runOnce() trực tiếp, không để lịch chạy chen ngang
         r.add("inbox.watchdog.enabled", () -> "false");
+        // UC040: khoá mã hoá bản gốc dữ liệu cá nhân của nhật ký — 32 byte cố định, CHỈ dùng cho test
+        r.add("AUDIT_PII_KEY", () -> "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=");
+        r.add("AUDIT_PII_KEY_ID", () -> "test-k1");
     }
 
     static final UUID TENANT_A = UUID.randomUUID();

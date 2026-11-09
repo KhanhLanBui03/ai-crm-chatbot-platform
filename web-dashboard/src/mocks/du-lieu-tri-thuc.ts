@@ -1322,7 +1322,7 @@ export const danhSachLuotXuLy: LuotXuLyAi[] = [
 
 export const danhSachSuKienAnToan: SuKienAnToan[] = [
   {
-    id: 5_512,
+    id: 'audit-5512',
     eventType: 'PROMPT_INJECTION_DOCUMENT',
     severity: 'HIGH',
     threatSurface: 'T3',
@@ -1337,7 +1337,7 @@ export const danhSachSuKienAnToan: SuKienAnToan[] = [
     occurredAt: gio('2026-08-21T17:53:10'),
   },
   {
-    id: 5_511,
+    id: 'audit-5511',
     eventType: 'CROSS_TENANT_PROBE',
     severity: 'CRITICAL',
     threatSurface: 'T6',
@@ -1352,7 +1352,7 @@ export const danhSachSuKienAnToan: SuKienAnToan[] = [
     occurredAt: gio('2026-08-22T08:33:51'),
   },
   {
-    id: 5_510,
+    id: 'audit-5510',
     eventType: 'PROMPT_INJECTION_INPUT',
     severity: 'MEDIUM',
     threatSurface: 'T2',
@@ -1365,7 +1365,7 @@ export const danhSachSuKienAnToan: SuKienAnToan[] = [
     occurredAt: gio('2026-08-20T20:47:52'),
   },
   {
-    id: 5_509,
+    id: 'audit-5509',
     eventType: 'TOOL_CALL_BLOCKED',
     severity: 'MEDIUM',
     threatSurface: 'T4',
@@ -1376,7 +1376,7 @@ export const danhSachSuKienAnToan: SuKienAnToan[] = [
     occurredAt: gio('2026-08-20T20:48:07'),
   },
   {
-    id: 5_508,
+    id: 'audit-5508',
     eventType: 'INTERNAL_DATA_PROBE',
     severity: 'LOW',
     threatSurface: 'T5',
@@ -1387,7 +1387,7 @@ export const danhSachSuKienAnToan: SuKienAnToan[] = [
     occurredAt: gio('2026-08-20T09:41:18'),
   },
   {
-    id: 5_507,
+    id: 'audit-5507',
     eventType: 'PROMPT_INJECTION_TOOL_RESULT',
     severity: 'HIGH',
     threatSurface: 'T4',

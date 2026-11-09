@@ -20,6 +20,8 @@ export interface BoLocKiemToan {
   tuNgay?: string
   denNgay?: string
   trang?: number
+  /** Chỉ sắp theo thời điểm: `-occurredAt` mới nhất trước (mặc định), `occurredAt` cũ nhất trước. */
+  sapXep?: 'occurredAt' | '-occurredAt'
 }
 
 const CA_YEU_CAU_XOA = { type: 'NhatKyKiemToan' as const, id: 'YEU-CAU-XOA' }
@@ -38,6 +40,7 @@ export const auditApi = apiSlice.injectEndpoints({
           entityType: bo.loaiThucThe,
           from: bo.tuNgay,
           to: bo.denNgay,
+          sort: bo.sapXep,
           page: bo.trang ?? 0,
           size: 10,
         },

@@ -107,6 +107,12 @@ class TurnRecord:
     # Cột V212 — tỉ lệ suy giảm và tỉ lệ chuyển giao là hai trong bốn tín hiệu rẻ của UC027
     degraded: bool = False
     handoff: bool = False
+    # UC039 — không phải cột: chỉ đi trong sự kiện ai.turn.completed để trang "Hiệu quả tác tử AI"
+    # chỉ ra chặng nào gây chậm. Cùng số với ChatResponse.latency_breakdown.
+    latency_breakdown: dict[str, int] = field(default_factory=dict)
+    # Trả từ bộ đệm ngữ nghĩa — chưa có bộ đệm (Ngày 16 đã bỏ), luôn False; giữ trường để hợp đồng
+    # sự kiện không phải đổi khi có.
+    cached: bool = False
 
 
 class TurnRecorder(Protocol):
@@ -199,6 +205,11 @@ async def run_turn(
         raise
     finally:
         latency_ms = int((time.perf_counter() - started) * 1000)
+        cac_chang = {
+            "guard_ms": int((guard_xong - started) * 1000),
+            "classify_ms": int((classify_xong - guard_xong) * 1000),
+            **(result.latency_breakdown if result else {}),
+        }
         await recorder.record(
             _build_record(
                 interaction_id=interaction_id,
@@ -213,6 +224,7 @@ async def run_turn(
                 error_message=error_message,
                 safety_flag=injection.safety_flag,
                 nhanh_chuyen_giao=nhanh_chuyen_giao,
+                latency_breakdown=cac_chang,
             )
         )
 
@@ -251,6 +263,7 @@ def _build_record(
     error_message: str | None,
     safety_flag: str | None,
     nhanh_chuyen_giao: bool,
+    latency_breakdown: dict[str, int] | None = None,
 ) -> TurnRecord:
     # Che PII ở TẦNG GHI (UC040, NĐ 13/2023) — redact, không partial.
     masked_query, _ = mask_pii(request.message, mode="redact")
@@ -289,4 +302,5 @@ def _build_record(
         completion_tokens=result.completion_tokens if result else None,
         degraded=result.degraded if result else False,
         handoff=nhanh_chuyen_giao or (result.handoff if result else False),
+        latency_breakdown=dict(latency_breakdown or {}),
     )

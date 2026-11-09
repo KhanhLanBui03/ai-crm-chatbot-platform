@@ -304,13 +304,33 @@ public class WidgetRepository {
         });
     }
 
+    /**
+     * Cộng một hội thoại qua Entity — dòng đã bị khoá ở {@link #lockConversationQuota} trong cùng transaction.
+     * Không dùng câu UPDATE thẳng: như thế mốc chạm 80% / 100% (V128, UC006) không bao giờ được ghi.
+     */
     public void incrementUsage(UUID tenantId, UUID usageId) {
-        em.createQuery("""
-                UPDATE UsageRecord u SET u.usedValue = u.usedValue + 1, u.lastCalculatedAt = current_timestamp
-                WHERE u.tenantId = :t AND u.id = :u""")
+        UsageRecord u = em.find(UsageRecord.class, usageId);
+        if (u != null && tenantId.equals(u.getTenantId())) {
+            u.cong(1, Instant.now());
+        }
+    }
+
+    /**
+     * UC006 4.2 — hạn mức token AI của chu kỳ đang hiệu lực đã cạn: tác tử ngừng trả lời tự động. Chưa có
+     * dòng token (thuê bao cũ chưa sinh dòng) thì coi như còn — không chặn khách vì thiếu dữ liệu.
+     */
+    public boolean aiTokenExhausted(UUID tenantId) {
+        return em.createQuery("""
+                SELECT u FROM UsageRecord u, TenantSubscription s
+                WHERE s.id = u.subscriptionId AND s.tenantId = u.tenantId AND u.tenantId = :t
+                  AND u.metric = 'AI_TOKEN' AND s.status IN :live
+                ORDER BY s.periodStart DESC""", UsageRecord.class)
                 .setParameter("t", tenantId)
-                .setParameter("u", usageId)
-                .executeUpdate();
+                .setParameter("live", THUE_BAO_HIEU_LUC)
+                .setMaxResults(1)
+                .getResultStream().findFirst()
+                .map(UsageRecord::daHet)
+                .orElse(false);
     }
 
     /**

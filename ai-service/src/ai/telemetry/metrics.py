@@ -74,3 +74,16 @@ privacy_erasures = Counter(
     "Số dòng dữ liệu cá nhân đã xoá theo bảng",
     labelnames=("table",),
 )
+
+# UC039 — phát ai.turn.completed. Khác 0 nghĩa là bảng tổng hợp analytics.metrics_daily thiếu lượt
+# (trang "Hiệu quả tác tử AI" báo thấp hơn thực tế) dù lượt chat vẫn trả lời bình thường.
+turn_event_failures = Counter(
+    "ai_turn_event_failures_total",
+    "Số lượt chat không phát được sự kiện ai.turn.completed",
+)
+
+topic_cluster_runs = Counter(
+    "ai_topic_cluster_runs_total",
+    "Số kỳ phân cụm chủ đề hội thoại (UC038) theo kết quả",
+    labelnames=("status", "reason"),  # DONE | SKIPPED | FAILED · lý do bỏ kỳ hoặc "-"
+)

@@ -235,6 +235,10 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-changeme}
       DB_MIGRATION_USER: ${DB_MIGRATION_USER:-crm_owner}
       DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:-changeme}
+      # UC040: khoá AES-256 mã hoá bản gốc dữ liệu cá nhân trong nhật ký kiểm toán. Để trống thì
+      # dòng có dữ liệu cá nhân bỏ phần trước/sau (không bao giờ lưu bản rõ) — xem .env.example.
+      AUDIT_PII_KEY: ${AUDIT_PII_KEY:-}
+      AUDIT_PII_KEY_ID: ${AUDIT_PII_KEY_ID:-k1}
       REDIS_HOST: redis
       KAFKA_BOOTSTRAP: kafka:9092
       # Kho tệp S3 (ADR-0022). java-core GHI tệp gốc của UC018, ai-service đọc.
@@ -346,6 +350,11 @@ services:
       # ai-rerank chạy ở compose riêng (inference/), ra máy chủ cổng 8082. Rerank bật từ Ngày 15.
       INFERENCE_RERANK_URL: ${INFERENCE_RERANK_URL:-http://host.docker.internal:8082}
       CLASSIFY_URL: ${CLASSIFY_URL:-}
+      # UC038 phân cụm chủ đề: POST /v1/topics/cluster ở ai-classify (compose inference/, cổng 8083).
+      # Chat ở AI_MODE=mock vẫn dùng bộ phân loại giả — biến này chỉ cho công việc phân cụm.
+      INFERENCE_CLASSIFY_URL: ${INFERENCE_CLASSIFY_URL:-http://host.docker.internal:8083}
+      # Ngưỡng đặc tả 200 hội thoại; hạ khi demo thì báo cáo phải ghi rõ (màn hình tự nói ra)
+      CHU_DE_TOI_THIEU_HOI_THOAI: ${CHU_DE_TOI_THIEU_HOI_THOAI:-200}
       # ADR-0002: bề mặt DUY NHẤT để chạm dữ liệu nghiệp vụ
       JAVA_CORE_URL: http://java-core:8081
       # mcp-server-mock ở REPOSITORY RIÊNG, chạy ngoài compose này (ADR-0005)
@@ -394,6 +403,9 @@ services:
       KAFKA_CONSUMER_GROUP: ingestion-cg
       AI_MODE: ${AI_MODE:-mock}
       EMBED_URL: ${EMBED_URL:-http://host.docker.internal:8081}
+      # UC038 — vòng phân cụm chủ đề hằng tuần (xem ai-service ở trên)
+      INFERENCE_CLASSIFY_URL: ${INFERENCE_CLASSIFY_URL:-http://host.docker.internal:8083}
+      CHU_DE_TOI_THIEU_HOI_THOAI: ${CHU_DE_TOI_THIEU_HOI_THOAI:-200}
       S3_ENDPOINT: rustfs:9000
       S3_SECURE: "false"
       S3_REGION: ${S3_REGION:-us-east-1}

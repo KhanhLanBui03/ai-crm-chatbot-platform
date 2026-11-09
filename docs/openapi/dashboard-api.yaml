@@ -578,9 +578,12 @@ paths:
       tags: [Doanh nghiệp]
       summary: SCR015 — mức sử dụng theo ngày
       description: |
-        UC006 bước 5–7. Tách theo kênh **hoặc** theo nhánh xử lý AI — cả hai đều là phép cộng trên
-        `analytics.usage_metrics_daily`. Không gộp hai chiều trong một lần gọi vì một hội thoại đi
-        qua nhiều nhánh, gộp lại sẽ nhân đôi số đếm.
+        UC006 bước 5–7. Tách theo kênh **hoặc** theo nhánh xử lý AI. Token, chi phí, số lượt cộng trên
+        `analytics.metrics_daily` (bảng `usage_metrics_daily` ghi trong đặc tả không tồn tại — đặc tả đã
+        nêu phải chốt một tên). Số hội thoại: theo kênh = hội thoại MỞ trong ngày; theo nhánh = hội thoại
+        có ít nhất một lượt đi qua nhánh đó (`analytics.topic_conversations`, chiều ROUTE, V139). Không
+        gộp hai chiều trong một lần gọi vì một hội thoại đi qua nhiều nhánh, gộp lại sẽ nhân đôi số đếm.
+        Chỉ quản trị viên.
       parameters:
         - $ref: '#/components/parameters/TuNgay'
         - $ref: '#/components/parameters/DenNgay'
@@ -591,9 +594,19 @@ paths:
             type: string
             enum: [channel, route]
             default: channel
+        - name: sort
+          in: query
+          description: "`-statDate` (mặc định) · `±statDate|conversations|promptTokens|completionTokens|costVnd`"
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
       responses:
         '200':
-          description: Chuỗi số liệu theo ngày
+          description: Chuỗi số liệu theo ngày, phân trang
           content:
             application/json:
               schema:
@@ -601,8 +614,16 @@ paths:
                   - $ref: '#/components/schemas/ApiResponse'
                   - properties:
                       data:
-                        type: array
-                        items: { $ref: '#/components/schemas/DiemSuDungNgay' }
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - properties:
+                              items:
+                                type: array
+                                items: { $ref: '#/components/schemas/DiemSuDungNgay' }
+        '400':
+          description: INVALID_GROUP_BY (gộp hai chiều không được hỗ trợ) · INVALID_RANGE
+        '403':
+          description: FORBIDDEN — không phải quản trị viên
 
   # ══════════════════════════════════════════════════════════════════════════════
   # D. Kênh kết nối — UC008, UC009
@@ -2331,6 +2352,14 @@ paths:
                               items:
                                 type: array
                                 items: { $ref: '#/components/schemas/SuKienAnToan' }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '503':
+          description: |
+            `AI_SERVICE_UNAVAILABLE` — không lấy được phần cảnh báo phía AI. Báo lỗi thay vì trả mỗi phần
+            java-core: màn thiếu hai phần ba nguồn mà trông như "không có sự cố" là nói dối người xem.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
 
   # ══════════════════════════════════════════════════════════════════════════════
   # I. Bán hàng — UC030, UC032, UC033, UC034, UC035
@@ -2961,10 +2990,24 @@ paths:
         đề về sau không làm số liệu cũ đổi theo.
 
         `refusalCount` cao ở một chủ đề là gợi ý trực tiếp: bổ sung tài liệu cho chủ đề đó.
+
+        Hai lớp chủ đề (`dimension`): `INTENT` — 7 ý định router (UC022), cộng theo từng sự kiện
+        `ai.turn.completed`; `CLUSTER` — cụm ngữ nghĩa từ công việc phân cụm hằng tuần. Số đếm theo
+        **hội thoại**, không theo lượt: hội thoại hỏi giá ba lượt là một hội thoại. Chỉ quản trị viên.
       parameters:
+        - name: dimension
+          in: query
+          description: Lớp chủ đề. Mặc định `INTENT`.
+          schema: { type: string, enum: [INTENT, CLUSTER], default: INTENT }
         - $ref: '#/components/parameters/TuNgay'
         - $ref: '#/components/parameters/DenNgay'
       responses:
+        '400':
+          description: INVALID_DIMENSION · INVALID_RANGE
+        '403':
+          description: FORBIDDEN — không phải quản trị viên
+        '503':
+          description: AI_SERVICE_UNAVAILABLE — lớp CLUSTER không lấy được cụm từ ai-service
         '200':
           description: Thống kê theo chủ đề
           content:
@@ -2976,6 +3019,32 @@ paths:
                       data:
                         type: array
                         items: { $ref: '#/components/schemas/ThongKeChuDe' }
+
+  /api/v1/analytics/topics/cluster-run:
+    get:
+      tags: [Phân tích]
+      summary: SCR052 — kỳ phân cụm đang dùng cho lớp CLUSTER
+      description: |
+        UC038. Nguồn vector, thời điểm và lý do bỏ kỳ — để màn nói rõ "phân cụm theo chữ" hay "theo nghĩa",
+        và VÌ SAO chưa có cụm (dưới ngưỡng hội thoại, dịch vụ nhúng không sẵn sàng). `data = null` khi
+        doanh nghiệp chưa có kỳ nào. Chỉ quản trị viên.
+      responses:
+        '200':
+          description: Kỳ phân cụm
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        nullable: true
+                        allOf:
+                          - $ref: '#/components/schemas/KyPhanCum'
+        '403':
+          description: FORBIDDEN — không phải quản trị viên
+        '503':
+          description: AI_SERVICE_UNAVAILABLE — không lấy được kỳ từ ai-service
 
   /api/v1/analytics/ai-performance:
     get:
@@ -3084,6 +3153,11 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Trang'
         - $ref: '#/components/parameters/CoSize'
+        - $ref: '#/components/parameters/TuKhoa'
+        - name: sort
+          in: query
+          description: Nhật ký chỉ sắp theo thời điểm — `-occurredAt` mới nhất trước (mặc định), `occurredAt` cũ nhất trước.
+          schema: { type: string, enum: ['-occurredAt', occurredAt], default: '-occurredAt' }
         - name: action
           in: query
           schema: { type: string }
@@ -3147,6 +3221,14 @@ paths:
                   - $ref: '#/components/schemas/ApiResponse'
                   - properties: { data: { $ref: '#/components/schemas/BanGhiKiemToan' } }
         '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '404': { $ref: '#/components/responses/KhongThay' }
+        '422':
+          description: |
+            `REASON_REQUIRED` — thiếu lý do hoặc lý do ngắn hơn 10 ký tự sau khi bỏ khoảng trắng (UC040
+            luồng 6.2). Không có dòng nhật ký nào được ghi.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
 
   /api/v1/erasure-requests:
     get:
@@ -3832,29 +3914,45 @@ components:
         tokens: { $ref: '#/components/schemas/MotHanMuc' }
         users: { $ref: '#/components/schemas/MotHanMuc' }
         documents: { $ref: '#/components/schemas/MotHanMuc' }
-        costVnd: { type: number }
+        costVnd:
+          type: number
+          description: |
+            Chi phí AI từ ngày mở chu kỳ tới nay (VND, 4 chữ số thập phân). Cộng từ sự kiện
+            `ai.turn.completed` (UC039), không gọi đồng bộ sang ai-service.
         warnedAt:
           type: [string, 'null']
           format: date-time
-          description: Mốc chạm 80%
+          description: Mốc chạm 80% SỚM NHẤT trong bốn chỉ số — đọc từ `usage_records.warned_at`, không tính lại
         blockedAt:
           type: [string, 'null']
           format: date-time
           description: |
-            Mốc chạm 100%. Từ đây ngừng xử lý tự động nhưng **vẫn nhận tin nhắn** của khách —
-            không mất dữ liệu, chỉ mất phần trả lời tự động.
+            Mốc chạm 100% sớm nhất của **hội thoại hoặc token AI**. Từ đây ngừng xử lý tự động nhưng
+            **vẫn nhận tin nhắn** của khách — không mất dữ liệu, chỉ mất phần trả lời tự động. Tài liệu và
+            người dùng chạm trần chỉ chặn việc thêm mới, xem mốc riêng ở từng `MotHanMuc`.
 
     MotHanMuc:
       type: object
       required: [used, quota]
       properties:
         used: { type: integer, format: int64 }
-        quota: { type: integer, format: int64 }
+        quota:
+          type: integer
+          format: int64
+          description: Ảnh chụp của gói lúc mở chu kỳ (usage_records.quota_value), không đọc qua gói hiện tại
         percent: { type: number }
+        warnedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Lần đầu chỉ số này chạm 80% trong chu kỳ (V128)
+        blockedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Lần đầu chỉ số này chạm 100% trong chu kỳ (V128)
 
     DiemSuDungNgay:
       type: object
-      required: [statDate, conversations, promptTokens, completionTokens, costVnd]
+      required: [statDate, conversations, turns, promptTokens, completionTokens, costVnd, cachedHits]
       properties:
         statDate: { type: string, format: date }
         channelType: { type: [string, 'null'] }
@@ -3862,14 +3960,19 @@ components:
           oneOf:
             - { $ref: '#/components/schemas/NhanhXuLyAi' }
             - { type: 'null' }
-        conversations: { type: integer }
+        conversations:
+          type: integer
+          description: Theo kênh — hội thoại mở trong ngày. Theo nhánh — hội thoại có lượt đi qua nhánh đó.
+        turns:
+          type: integer
+          format: int64
+          description: Số lượt tác tử AI xử lý — mẫu số đúng cho tỉ lệ dùng đệm
         promptTokens: { type: integer, format: int64 }
         completionTokens: { type: integer, format: int64 }
         costVnd: { type: number }
         cachedHits:
           type: integer
           description: Lượt dùng đệm ngữ nghĩa — không tính chi phí gọi mô hình
-        modelVersion: { type: string }
 
     # ── D. Kênh ────────────────────────────────────────────────────────────────
 
@@ -4600,7 +4703,11 @@ components:
       type: object
       required: [id, eventType, severity, actionTaken, occurredAt]
       properties:
-        id: { type: integer, format: int64 }
+        id:
+          type: string
+          description: |
+            Chuỗi vì ba nguồn có ba kiểu khoá: lượt xử lý và lời gọi công cụ là UUID, nhật ký kiểm toán là số
+            (trả dạng `audit-<số>`).
         eventType: { $ref: '#/components/schemas/LoaiSuKienAnToan' }
         severity: { $ref: '#/components/schemas/MucNghiemTrong' }
         threatSurface:
@@ -5041,26 +5148,73 @@ components:
 
     ThongKeChuDe:
       type: object
-      required: [statDate, clusterId, topicLabel, conversationCount]
+      required: [statDate, dimension, topicKey, topicLabel, conversationCount, botResolvedCount, refusalCount]
       properties:
         statDate: { type: string, format: date }
-        clusterId: { type: string, format: uuid }
+        dimension: { type: string, enum: [INTENT, CLUSTER] }
+        topicKey:
+          type: string
+          description: |
+            Khoá gộp ở giao diện: mã ý định (`PRICING_POLICY`…) ở lớp INTENT, mã cụm ở lớp CLUSTER.
+        clusterId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Chỉ có ở lớp CLUSTER.
         topicLabel:
           type: string
           description: |
             Nhãn **chụp lại tại thời điểm tổng hợp** — đổi tên chủ đề về sau không làm số liệu cũ
             đổi theo.
         conversationCount: { type: integer }
-        botResolvedCount: { type: integer }
+        botResolvedCount:
+          type: integer
+          description: Hội thoại tác tử tự xử lý trọn — có trả lời, không từ chối, không chuyển giao
         refusalCount:
           type: integer
-          description: Cao ở một chủ đề là gợi ý trực tiếp — bổ sung tài liệu cho chủ đề đó
+          description: |
+            Hội thoại có ≥ 1 lượt bị từ chối. Cao ở một chủ đề là gợi ý trực tiếp — bổ sung tài liệu
+            cho chủ đề đó. Hỏi lại (CLARIFY), chuyển giao và lỗi hệ thống KHÔNG tính là từ chối.
+
+    KyPhanCum:
+      type: object
+      required: [status, startedAt, windowFrom, windowTo, conversationCount, minConversations]
+      properties:
+        status: { type: string, enum: [DONE, SKIPPED, FAILED] }
+        skipReason:
+          type: string
+          nullable: true
+          enum: [TOO_FEW_CONVERSATIONS, EMBED_UNAVAILABLE, CLUSTER_SERVICE_ERROR]
+        startedAt: { type: string, format: date-time }
+        windowFrom: { type: string, format: date-time }
+        windowTo: { type: string, format: date-time }
+        conversationCount: { type: integer }
+        minConversations: { type: integer }
+        vectorSource:
+          type: string
+          nullable: true
+          description: "`bge-m3` (theo nghĩa, đúng đặc tả) · `router-tfidf-ngram` (theo chữ, nguồn thay thế)"
+        k: { type: integer, nullable: true }
+        silhouette: { type: number, nullable: true }
+        namingMethod: { type: string, nullable: true, description: "llm · tu-khoa · hon-hop" }
 
     HieuQuaAi:
       type: object
       required: [updatedAt, routeDistribution, handoffReasons, latencyBreakdown]
+      description: |
+        Mô hình đọc `analytics.metrics_daily`, consumer `analytics-cg` cộng dồn từ `ai.turn.completed`.
+        **Không có p95:** phân vị không cộng dồn qua nhiều ngày (UC039 6.2) — `avgLatencyMs` là tổng độ
+        trễ ÷ số lượt. `routeDistribution` luôn đủ 7 nhánh, nhánh 0 lượt vẫn có dòng (UC039 5.1).
       properties:
-        updatedAt: { type: string, format: date-time }
+        updatedAt:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Mốc cộng dồn gần nhất của CẢ doanh nghiệp (không theo khoảng lọc). `null` khi chưa từng có lượt
+            nào. Consumer đọng thì mốc này lùi lại — giao diện phải hiện ra (UC039 6.1).
+        llmFreeRate:
+          type: number
+          description: KPI §1.6 — tỉ lệ lượt KHÔNG gọi LLM (ngưỡng ≥ 0,55).
         totalInteractions: { type: integer }
         refusalRate: { type: number }
         positiveFeedbackRate:

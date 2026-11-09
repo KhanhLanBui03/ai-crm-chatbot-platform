@@ -15,7 +15,10 @@ Hệ quả cần biết: ``interaction_id`` trong response có thể trỏ vào 
 giá gửi lên cho lượt đó nhận 404. Chấp nhận: hiếm, và đúng hành vi — không gắn đánh giá vào hư
 không.
 
-``Phát ai.turn.completed`` (UC022 bước 10) vẫn là việc của UC039 — chưa làm ở đây.
+PHÁT ai.turn.completed (UC022 bước 10, UC039)
+---------------------------------------------
+Có ``publisher`` thì mỗi lượt phát sự kiện trên task nền, KHÔNG phụ thuộc việc ghi bảng thành công:
+bước telemetry phải luôn chạy (UC039), và java-core cộng dồn từ sự kiện chứ không đọc bảng này.
 """
 
 import logging
@@ -24,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.ai.db.repositories import interaction_repository
 from src.ai.db.session import get_tenant_session
+from src.ai.events.su_kien_luot_xong import TurnEventPublisher
 from src.ai.orchestrator.turn import TurnRecord
 from src.ai.telemetry.metrics import chat_turns, refusals, turn_record_failures
 
@@ -31,10 +35,17 @@ logger = logging.getLogger(__name__)
 
 
 class DbTurnRecorder:
-    def __init__(self, factory: async_sessionmaker[AsyncSession] | None = None) -> None:
+    def __init__(
+        self,
+        factory: async_sessionmaker[AsyncSession] | None = None,
+        publisher: TurnEventPublisher | None = None,
+    ) -> None:
         self._factory = factory
+        self._publisher = publisher
 
     async def record(self, rec: TurnRecord) -> None:
+        if self._publisher is not None:
+            self._publisher.phat_nen(rec)
         chat_turns.labels(branch=rec.branch, llm_called=str(rec.llm_called).lower()).inc()
         if not rec.is_answered and rec.refusal_reason and rec.status == "SUCCESS":
             refusals.labels(reason=rec.refusal_reason).inc()

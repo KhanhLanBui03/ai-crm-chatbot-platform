@@ -2,6 +2,7 @@ import { apiSlice } from '@/api/apiSlice'
 import type {
   BacPheu,
   DiemHoiThoaiNgay,
+  KyPhanCum,
   LoaiBaoCao,
   ThongKeChuDe,
   TongQuan,
@@ -44,11 +45,18 @@ export const analyticsApi = apiSlice.injectEndpoints({
       providesTags: ['BaoCao'],
     }),
 
-    thongKeChuDe: build.query<ThongKeChuDe[], KhoangNgay>({
+    // UC038 — lớp INTENT (7 ý định router) hoặc CLUSTER (cụm ngữ nghĩa); mặc định INTENT
+    thongKeChuDe: build.query<ThongKeChuDe[], KhoangNgay & { lop?: ThongKeChuDe['dimension'] }>({
       query: (bo) => ({
         url: '/api/v1/analytics/topics',
-        params: { from: bo.tuNgay, to: bo.denNgay },
+        params: { dimension: bo.lop, from: bo.tuNgay, to: bo.denNgay },
       }),
+      providesTags: ['BaoCao'],
+    }),
+
+    // UC038 — kỳ phân cụm đang dùng: nguồn vector, thời điểm, lý do bỏ kỳ. null = chưa có kỳ nào
+    kyPhanCum: build.query<KyPhanCum | null, void>({
+      query: () => ({ url: '/api/v1/analytics/topics/cluster-run' }),
       providesTags: ['BaoCao'],
     }),
 
@@ -78,5 +86,6 @@ export const {
   useHoiThoaiTheoNgayQuery,
   usePheuChuyenDoiQuery,
   useThongKeChuDeQuery,
+  useKyPhanCumQuery,
   useYeuCauXuatBaoCaoMutation,
 } = analyticsApi

@@ -7,6 +7,7 @@ import com.thesis.crm.platform.dto.response.HanMucSuDungResponse;
 import com.thesis.crm.platform.dto.response.MotHanMucDto;
 import com.thesis.crm.platform.dto.response.ThueBaoResponse;
 import com.thesis.crm.platform.entity.SubscriptionPlan;
+import com.thesis.crm.platform.entity.Tenant;
 import com.thesis.crm.platform.entity.TenantSubscription;
 import com.thesis.crm.platform.entity.UsageRecord;
 import com.thesis.crm.platform.repository.SubscriptionPlanRepository;
@@ -15,14 +16,18 @@ import com.thesis.crm.platform.repository.UsageRecordRepository;
 import com.thesis.crm.platform.repository.UserRepository;
 import com.thesis.crm.platform.service.SubscriptionService;
 import com.thesis.crm.security.SecurityUtils;
+import jakarta.persistence.EntityManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -36,16 +41,19 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final TenantSubscriptionRepository tenantSubscriptionRepository;
     private final UsageRecordRepository usageRecordRepository;
     private final UserRepository userRepository;
+    private final EntityManager em;
 
     public SubscriptionServiceImpl(
             SubscriptionPlanRepository subscriptionPlanRepository,
             TenantSubscriptionRepository tenantSubscriptionRepository,
             UsageRecordRepository usageRecordRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            EntityManager em) {
         this.subscriptionPlanRepository = subscriptionPlanRepository;
         this.tenantSubscriptionRepository = tenantSubscriptionRepository;
         this.usageRecordRepository = usageRecordRepository;
         this.userRepository = userRepository;
+        this.em = em;
     }
 
     @Override
@@ -149,21 +157,19 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         SubscriptionPlan plan = subscriptionPlanRepository.findById(sub.getPlanId())
                 .orElseThrow(() -> new AppException("Không tìm thấy thông tin gói dịch vụ.", HttpStatus.NOT_FOUND));
 
-        long usedConvs = getMetricUsage(sub.getId(), "CONVERSATION");
-        long usedTokens = getMetricUsage(sub.getId(), "AI_TOKEN");
-        long usedDocs = getMetricUsage(sub.getId(), "DOCUMENT");
-        long usedUsers = Math.max(1L, userRepository.countActiveUsersByTenantId(tenantId));
+        // Hạn mức đọc từ ẢNH CHỤP của chu kỳ (usage_records.quota_value), không đọc qua gói hiện tại: đổi gói
+        // giữa chừng mà đọc qua plan_id thì báo cáo chu kỳ cũ sai ngay (đặc tả UC006). Chưa có dòng thì lấy gói.
+        MotHanMucDto convs = mucCua(sub.getId(), "CONVERSATION", null, plan.getConversationQuota());
+        MotHanMucDto tokens = mucCua(sub.getId(), "AI_TOKEN", null, plan.getAiTokenQuota());
+        // Người dùng là TỒN KHO đếm tức thời — số đang hoạt động, mốc vẫn lấy từ dòng hạn mức
+        MotHanMucDto users = mucCua(sub.getId(), "USER",
+                Math.max(1L, userRepository.countActiveUsersByTenantId(tenantId)), plan.getMaxUsers());
+        MotHanMucDto docs = mucCua(sub.getId(), "DOCUMENT", null, plan.getMaxDocuments());
 
-        MotHanMucDto convs = MotHanMucDto.of(usedConvs, plan.getConversationQuota());
-        MotHanMucDto tokens = MotHanMucDto.of(usedTokens, plan.getAiTokenQuota());
-        MotHanMucDto users = MotHanMucDto.of(usedUsers, plan.getMaxUsers());
-        MotHanMucDto docs = MotHanMucDto.of(usedDocs, plan.getMaxDocuments());
-
-        boolean hasWarning = convs.percent() >= 80.0 || tokens.percent() >= 80.0 || users.percent() >= 80.0 || docs.percent() >= 80.0;
-        boolean hasBlocked = convs.percent() >= 100.0 || tokens.percent() >= 100.0;
-
-        String warnedAt = hasWarning ? Instant.now().toString() : null;
-        String blockedAt = hasBlocked ? Instant.now().toString() : null;
+        // Mốc THẬT đã ghi trong chu kỳ (V128) — trước đây trả Instant.now() mỗi lần mở màn, tức "thời điểm
+        // chạm 80%" đổi theo lúc người xem bấm vào.
+        Instant warnedAt = somNhat(convs.warnedAt(), tokens.warnedAt(), users.warnedAt(), docs.warnedAt());
+        Instant blockedAt = somNhat(convs.blockedAt(), tokens.blockedAt());
 
         return new HanMucSuDungResponse(
                 sub.getPeriodStart().toString(),
@@ -172,10 +178,54 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 tokens,
                 users,
                 docs,
-                0L,
+                chiPhiAiTuDauChuKy(tenantId, sub.getPeriodStart()),
                 warnedAt,
                 blockedAt
         );
+    }
+
+    private MotHanMucDto mucCua(UUID subId, String metric, Long dungTucThoi, long quotaGoi) {
+        Optional<UsageRecord> r = usageRecordRepository.findBySubscriptionIdAndMetric(subId, metric);
+        long used = dungTucThoi != null ? dungTucThoi : r.map(UsageRecord::getUsedValue).orElse(0L);
+        long quota = r.map(UsageRecord::getQuotaValue).orElse(quotaGoi);
+        return MotHanMucDto.of(used, quota, r.map(UsageRecord::getWarnedAt).orElse(null),
+                r.map(UsageRecord::getBlockedAt).orElse(null));
+    }
+
+    private static Instant somNhat(Instant... cac) {
+        Instant kq = null;
+        for (Instant i : cac) {
+            if (i != null && (kq == null || i.isBefore(kq))) {
+                kq = i;
+            }
+        }
+        return kq;
+    }
+
+    /**
+     * Chi phí AI từ ngày mở chu kỳ (theo múi giờ doanh nghiệp) tới nay — cộng từ mô hình đọc theo ngày mà
+     * consumer {@code ai.turn.completed} đã dựng (UC039). Đặc tả bước 3 ghi "gọi sang ai-service"; người dùng
+     * chốt 08/11/2026 dùng đường sự kiện vì chính đặc tả yêu cầu token đi qua sự kiện, và hai nguồn số dễ lệch.
+     * Độ phân giải là NGÀY: lượt trước giờ mở chu kỳ trong cùng ngày đầu cũng được tính.
+     */
+    private BigDecimal chiPhiAiTuDauChuKy(UUID tenantId, Instant batDau) {
+        LocalDate tu = batDau.atZone(muiGio(tenantId)).toLocalDate();
+        BigDecimal tong = em.createQuery("""
+                        SELECT coalesce(sum(m.costVnd), 0) FROM MetricsDaily m
+                        WHERE m.tenantId = :t AND m.metricDate >= :tu""", BigDecimal.class)
+                .setParameter("t", tenantId)
+                .setParameter("tu", tu)
+                .getSingleResult();
+        return tong == null ? BigDecimal.ZERO : tong;
+    }
+
+    private ZoneId muiGio(UUID tenantId) {
+        Tenant t = em.find(Tenant.class, tenantId);
+        try {
+            return ZoneId.of(t == null || t.getTimezone() == null ? "Asia/Ho_Chi_Minh" : t.getTimezone());
+        } catch (Exception e) {
+            return ZoneId.of("Asia/Ho_Chi_Minh");
+        }
     }
 
     private TenantSubscription getOrCreateSubscription(UUID tenantId) {
@@ -218,12 +268,6 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         record.setQuotaValue(quotaValue);
         record.setUpdatedAt(Instant.now());
         usageRecordRepository.save(record);
-    }
-
-    private long getMetricUsage(UUID subId, String metric) {
-        return usageRecordRepository.findBySubscriptionIdAndMetric(subId, metric)
-                .map(UsageRecord::getUsedValue)
-                .orElse(0L);
     }
 
     private UUID requireCurrentTenantId() {

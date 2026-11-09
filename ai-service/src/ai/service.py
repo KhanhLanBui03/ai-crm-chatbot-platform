@@ -124,6 +124,7 @@ from src.ai.integrations.llm import (
     tao_llm_chiu_loi,
     tao_llm_client,
 )
+from src.ai.events.su_kien_luot_xong import TurnEventPublisher
 from src.ai.orchestrator.ghi_luot import DbTurnRecorder
 from src.ai.orchestrator.turn import (
     KnowledgeAnswerer,
@@ -217,9 +218,29 @@ async def dong_tra_loi() -> None:
         await tra_loi.aclose()
 
 
+_PHAT_LUOT: list[TurnEventPublisher] = []
+
+
+def _phat_luot() -> TurnEventPublisher | None:
+    """Bộ phát ``ai.turn.completed`` dùng chung cả tiến trình — một producer Kafka, không phải mỗi lượt một."""
+    settings = get_settings()
+    if not settings.turn_events_enabled:
+        return None
+    if not _PHAT_LUOT:
+        _PHAT_LUOT.append(TurnEventPublisher(settings.kafka_bootstrap))
+    return _PHAT_LUOT[0]
+
+
+async def dong_phat_luot() -> None:
+    """Gọi trong lifespan lúc tắt — chờ nốt sự kiện đang gửi rồi dừng producer."""
+    while _PHAT_LUOT:
+        await _PHAT_LUOT.pop().aclose()
+
+
 def _ghi_luot() -> TurnRecorder:
-    """Recorder mặc định — ghi ``ai.ai_interactions`` (Ngày 10). Test HTTP thay bằng bản giả."""
-    return DbTurnRecorder()
+    """Recorder mặc định — ghi ``ai.ai_interactions`` (Ngày 10) và phát ``ai.turn.completed`` (UC039).
+    Test HTTP thay bằng bản giả."""
+    return DbTurnRecorder(publisher=_phat_luot())
 
 
 async def answer_turn(
