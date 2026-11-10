@@ -60,6 +60,10 @@ export const NHAN_HANH_DONG: Record<string, string> = {
   WIDGET_CONFIG_UPDATED: 'Đổi cấu hình khung chat',
   WIDGET_ORIGIN_REJECTED: 'Chặn khung chat nhúng trên tên miền lạ',
   AUDIT_LOG_REVEALED: 'Xem đầy đủ bản ghi kiểm toán',
+  // UC020 (Dev A, GD1) — KnowledgeDocumentServiceImpl
+  DOCUMENT_UPDATED: 'Sửa thông tin tài liệu tri thức',
+  DOCUMENT_REINDEXED: 'Nạp lại tài liệu tri thức',
+  DOCUMENT_ARCHIVED: 'Gỡ tài liệu khỏi kho tri thức',
   // UC041 (Dev A) — sắp ghi qua AuditLogWriter.recordWithPersonalData
   CONTACT_MERGED: 'Hợp nhất hồ sơ khách hàng',
   ERASURE_EXECUTED: 'Thực thi xoá dữ liệu cá nhân',
