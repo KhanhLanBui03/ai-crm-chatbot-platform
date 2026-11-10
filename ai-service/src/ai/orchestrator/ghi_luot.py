@@ -77,6 +77,7 @@ class DbTurnRecorder:
                     llm_called=rec.llm_called,
                     is_degraded=rec.degraded,
                     is_handoff=rec.handoff,
+                    latency_breakdown=rec.latency_breakdown,
                 )
         except Exception:  # noqa: BLE001 — xem docstring: telemetry hỏng không được làm hỏng lượt chat
             turn_record_failures.inc()

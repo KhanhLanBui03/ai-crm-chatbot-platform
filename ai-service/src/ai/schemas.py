@@ -272,6 +272,85 @@ class KnowledgeGapPage(BaseModel):
     size: int
 
 
+# ── Danh sách lượt xử lý — UC023 bước 10 · UC025 bước 4 · UC027 bước 8, SCR036 ─
+# Hình dạng của ``LuotXuLyAi`` (dashboard-api.yaml) ở snake_case — java-core chỉ đổi tên trường và
+# gộp chặng độ trễ. Đợt GD2, nháp ở docs/contracts/giao-dien-gd.md mục 4.
+
+# Bảy nhánh nội bộ — khớp TỪNG CHỮ với CHECK của ai.ai_interactions.branch (V204).
+InteractionBranch = Literal[
+    "SMALL_TALK", "RAG", "TOOL_CALL", "CLARIFY", "HANDOFF", "SUMMARY", "EXTRACTION"
+]
+
+
+class InteractionCitation(BaseModel):
+    chunk_id: UUID
+    document_id: UUID
+    document_title: str
+    section_path: str | None = None
+    snippet: str | None = None
+
+
+class InteractionFeedback(BaseModel):
+    """Một đánh giá của NGƯỜI. ``AUTO_EVAL`` chỉ vào tổng hợp ``/v1/ai/quality``, không có ở đây."""
+
+    id: UUID
+    rater_type: Literal["CUSTOMER", "AGENT"]
+    # java-core tra tên nhân viên từ đây (platform.users) — ai-service không biết tên người dùng
+    rater_user_id: UUID | None = None
+    rating: Literal["POSITIVE", "NEGATIVE"]
+    reason_code: FeedbackReason | None = None
+    comment: str | None = None
+    corrected_answer: str | None = None
+    # Lần ghi gần nhất: đánh giá lại (luồng phụ 2.1) cập nhật dòng cũ và đẩy mốc này lên
+    rated_at: datetime
+
+
+class InteractionItem(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    message_id: UUID | None = None
+    route: InteractionBranch
+    intent: str | None = None
+    intent_confidence: float | None = None
+    # Đã che PII lúc ghi (mask_pii, UC040) — không phải câu gốc của khách
+    user_query: str | None = None
+    # Câu khách đã nhận khi lượt TRẢ LỜI được; None khi từ chối (câu từ chối là mẫu theo lý do)
+    answer_text: str | None = None
+    refused: bool
+    refusal_reason: RefusalReason | None = None
+    # Câu ĐÃ SINH nhưng bị huỷ vì không bám nguồn — khách CHƯA TỪNG nhận (UC023 8.2). Chỉ có ở lượt
+    # LOW_CONFIDENCE sau hậu kiểm; lượt từ chối khác không có câu nào bị huỷ.
+    discarded_answer: str | None = None
+    # Hai điểm khác nhau: độ liên quan đoạn ↔ câu hỏi (trước sinh) và độ bám nguồn của câu trả lời
+    # (sau sinh). Truy hồi tốt mà mô hình vẫn bịa là trường hợp có thật (V209).
+    retrieval_top_score: float | None = None
+    groundedness_score: float | None = None
+    model_name: str
+    model_version: str | None = None
+    prompt_tokens: int
+    completion_tokens: int
+    cost_vnd: float
+    latency_ms: int | None = None
+    # Khoá ``<chặng>_ms`` như TurnRecord (V216); lượt ghi trước V216 là {}
+    latency_breakdown: dict[str, int] = Field(default_factory=dict)
+    status: Literal["SUCCESS", "FAILED", "TIMEOUT"]
+    llm_called: bool
+    degraded: bool
+    handoff: bool
+    cached: bool
+    citations: list[InteractionCitation] = Field(default_factory=list)
+    # Mới nhất trước; tối đa một dòng của khách và một dòng mỗi nhân viên (uq_feedback_rater)
+    feedback: list[InteractionFeedback] = Field(default_factory=list)
+    created_at: datetime
+
+
+class InteractionPage(BaseModel):
+    items: list[InteractionItem]
+    total: int
+    page: int
+    size: int
+
+
 # ── Tín hiệu chất lượng — UC027 bước 7 ───────────────────────────────────────
 
 

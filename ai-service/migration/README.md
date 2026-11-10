@@ -54,6 +54,8 @@ Nguồn: `docs/erd-ai-crm.md`. Sửa lược đồ thì sửa ERD trước, migr
 | V212 | `ai_interactions.llm_called` · `is_degraded` · `is_handoff` (tín hiệu rẻ UC027, KPI không gọi LLM) · hàm **`SECURITY DEFINER`** thứ hai `ai.tim_luot_can_cham()` chọn mẫu 5% cho bộ chấm tự động — UC025, UC027, ADR-0030 | — (3 cột + 1 hàm) |
 | V213 | `knowledge_documents.replaces_document_id` (bản bóng nạp lại) · chỉ mục duy nhất `uq_doc_mot_luot_nap_lai` · chỉ mục trigram `ix_doc_tim_kiem` (tìm không dấu) · `tim_job_ket` nhặt bản bóng ngay — UC020, ADR-0031 | — (1 cột + 2 chỉ mục + thay 1 hàm) |
 | V214 | `knowledge_documents.contact_id` (tài liệu mang dữ liệu của một khách) · chỉ mục bộ phận `ix_doc_khach` `WHERE contact_id IS NOT NULL` — UC041, ADR-0033 | — (1 cột + 1 chỉ mục) |
+| V215 | Kết quả phân cụm chủ đề mỗi kỳ chạy — UC038 | `topic_cluster_runs` `topic_clusters` `topic_cluster_assignments` |
+| V216 | `ai_interactions.latency_breakdown` (độ trễ từng chặng của từng lượt, cho màn Giám sát lượt xử lý) — UC023, UC027 | — (1 cột) |
 
 `ai_interactions` và `ai_feedback` là hai bảng đắt giá nhất về mặt điểm số. Không có
 `ai_interactions` thì không tính được chi phí mỗi hội thoại, không phân tích được độ trễ theo

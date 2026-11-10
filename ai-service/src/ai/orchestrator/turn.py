@@ -64,6 +64,9 @@ class KnowledgeAnswer:
     # UC025 — nhánh tri thức đề nghị chuyển nhân viên: câu cần dữ liệu nghiệp vụ, hoặc từ chối lặp
     # lại trong cùng hội thoại. java-core chuyển giao với lý do NO_GROUNDING khi kèm refused.
     handoff: bool = False
+    # UC023 8.2 · UC025 — câu ĐÃ SINH nhưng bị huỷ vì không bám nguồn (LOW_CONFIDENCE). Khách nhận
+    # ``answer`` (câu mẫu từ chối); câu này chỉ được LƯU để phân tích — xem ``_build_record``.
+    discarded_answer: str | None = None
 
 
 class KnowledgeAnswerer(Protocol):
@@ -107,8 +110,9 @@ class TurnRecord:
     # Cột V212 — tỉ lệ suy giảm và tỉ lệ chuyển giao là hai trong bốn tín hiệu rẻ của UC027
     degraded: bool = False
     handoff: bool = False
-    # UC039 — không phải cột: chỉ đi trong sự kiện ai.turn.completed để trang "Hiệu quả tác tử AI"
-    # chỉ ra chặng nào gây chậm. Cùng số với ChatResponse.latency_breakdown.
+    # Cột V216 (đợt GD2) + sự kiện ai.turn.completed (UC039): chặng nào gây chậm, theo TỪNG lượt cho
+    # màn Giám sát lượt xử lý và cộng dồn theo ngày cho trang "Hiệu quả tác tử AI". Cùng số với
+    # ChatResponse.latency_breakdown.
     latency_breakdown: dict[str, int] = field(default_factory=dict)
     # Trả từ bộ đệm ngữ nghĩa — chưa có bộ đệm (Ngày 16 đã bỏ), luôn False; giữ trường để hợp đồng
     # sự kiện không phải đổi khi có.
@@ -282,7 +286,10 @@ def _build_record(
         # numeric(4,3) — ba chữ số thập phân
         intent_confidence=round(classification.confidence, 3),
         user_query=masked_query,
-        response_text=result.answer if result else None,
+        # Lượt bị huỷ vì không bám nguồn: lưu câu ĐÃ SINH, không lưu câu mẫu từ chối khách nhận —
+        # câu mẫu suy lại được từ refusal_reason (MAU_TU_CHOI), còn câu bị huỷ thì mất hẳn nếu
+        # không lưu ở đây (UC023 8.2). Đây là nguồn của LuotXuLyAi.discardedAnswer (SCR036).
+        response_text=(result.discarded_answer or result.answer) if result else None,
         retrieved_chunk_ids=[str(c.chunk_id) for c in result.citations] if result else [],
         is_answered=is_answered,
         refusal_reason=None if is_answered else refusal_reason,

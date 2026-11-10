@@ -267,6 +267,8 @@ def test_khong_bam_nguon_thi_huy_cau_da_sinh():
     assert kq.refused and kq.refusal_reason == "LOW_CONFIDENCE"
     assert kq.answer == MAU_TU_CHOI["LOW_CONFIDENCE"] and kq.citations == []
     assert "trọn đời" not in kq.answer  # câu đã sinh bị HUỶ, không lộ ra ngoài
+    # …nhưng vẫn GIỮ để phân tích (UC023 8.2) — màn Giám sát lượt xử lý hiện nó là câu bị huỷ
+    assert kq.discarded_answer is not None and "trọn đời" in kq.discarded_answer
     # Đã tốn một lượt LLM — KPI phải đếm, và điểm vẫn ghi để hiệu chỉnh ngưỡng.
     assert kq.llm_called and llm.so_lan_goi == 1
     assert kq.groundedness_score == 0.0 and kq.retrieval_top_score == 0.7

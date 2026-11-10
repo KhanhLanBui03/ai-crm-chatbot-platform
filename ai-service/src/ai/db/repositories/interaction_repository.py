@@ -1,16 +1,18 @@
-"""Lượt xử lý của tác tử — ``ai.ai_interactions`` (V204, V208, V209, V212). [PRODUCTION]
+"""Lượt xử lý của tác tử — ``ai.ai_interactions`` (V204, V208, V209, V212, V216). [PRODUCTION]
 
-Ghi một dòng mỗi lượt chat (UC022 bước 9), rồi đọc lại cho ba việc:
+Ghi một dòng mỗi lượt chat (UC022 bước 9), rồi đọc lại cho bốn việc:
 
 - UC025: đếm lượt từ chối liên tiếp trong một hội thoại; danh sách khoảng trống tri thức.
 - UC027: tổng hợp tín hiệu rẻ (100% lượt) và tỉ lệ đánh giá tích cực.
 - UC027: đọc nội dung một lượt để bộ chấm tự động chấm.
+- UC023 bước 10 · UC027 bước 8: danh sách lượt cho màn Giám sát lượt xử lý (SCR036).
 
 Lọc tenant để RLS lo (``get_tenant_session``) — không tự thêm ``WHERE tenant_id``, như mọi
 repository khác của Track B. Riêng ``tim_luot_can_cham`` gọi hàm ``SECURITY DEFINER`` của V212.
 """
 
-from collections.abc import Sequence
+import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -31,13 +33,14 @@ _SQL_GHI_LUOT = text(
         response_text, retrieved_chunk_ids, retrieval_top_score, is_answered, refusal_reason,
         model_name, model_version, prompt_tokens, completion_tokens, total_tokens, cost_vnd,
         latency_ms, status, error_message, safety_flag, groundedness_score,
-        llm_called, is_degraded, is_handoff
+        llm_called, is_degraded, is_handoff, latency_breakdown
     ) VALUES (
         :id, ai.current_tenant(), :conversation_id, :branch, :intent, :intent_confidence,
         :user_query, :response_text, :retrieved_chunk_ids, :retrieval_top_score, :is_answered,
         :refusal_reason, :model_name, :model_version, :prompt_tokens, :completion_tokens,
         :total_tokens, :cost_vnd, :latency_ms, :status, :error_message, :safety_flag,
-        :groundedness_score, :llm_called, :is_degraded, :is_handoff
+        :groundedness_score, :llm_called, :is_degraded, :is_handoff,
+        CAST(:latency_breakdown AS jsonb)
     )
     """
 )
@@ -75,8 +78,12 @@ async def ghi_luot(
     llm_called: bool,
     is_degraded: bool,
     is_handoff: bool,
+    latency_breakdown: Mapping[str, int] | None = None,
 ) -> None:
-    """Một dòng ``ai_interactions``. ``user_query`` phải ĐÃ che PII (``_build_record`` lo)."""
+    """Một dòng ``ai_interactions``. ``user_query`` phải ĐÃ che PII (``_build_record`` lo).
+
+    ``latency_breakdown`` (V216): khoá ``<chặng>_ms``, bỏ ``total_ms`` (đã ở ``latency_ms``).
+    """
     vao, ra = prompt_tokens or 0, completion_tokens or 0
     await session.execute(
         _SQL_GHI_LUOT,
@@ -106,6 +113,9 @@ async def ghi_luot(
             "llm_called": llm_called,
             "is_degraded": is_degraded,
             "is_handoff": is_handoff,
+            "latency_breakdown": json.dumps(
+                {k: int(v) for k, v in (latency_breakdown or {}).items() if k != "total_ms"}
+            ),
         },
     )
 
@@ -328,6 +338,154 @@ async def danh_gia_theo_phia(
         DanhGiaTheoPhia(phia, g["so_danh_gia"], g["so_tich_cuc"], g["che"])
         for phia, g in sorted(gom.items())
     ]
+
+
+# ── UC023 bước 10 · UC027 bước 8 — danh sách lượt cho SCR036 ─────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class DongLuot:
+    """Một dòng ``ai_interactions`` đủ cho ``LuotXuLyAi`` — chưa có trích dẫn và đánh giá."""
+
+    id: UUID
+    conversation_id: UUID
+    message_id: UUID | None
+    branch: str
+    intent: str | None
+    intent_confidence: Decimal | None
+    user_query: str | None
+    response_text: str | None
+    is_answered: bool
+    refusal_reason: str | None
+    retrieval_top_score: Decimal | None
+    groundedness_score: Decimal | None
+    model_name: str
+    model_version: str | None
+    prompt_tokens: int
+    completion_tokens: int
+    cost_vnd: Decimal
+    latency_ms: int | None
+    latency_breakdown: dict[str, int]
+    status: str
+    llm_called: bool
+    is_degraded: bool
+    is_handoff: bool
+    is_cached: bool
+    created_at: datetime
+
+
+_COT_LUOT = """
+    i.id, i.conversation_id, i.message_id, i.branch, i.intent, i.intent_confidence,
+    i.user_query, i.response_text, i.is_answered, i.refusal_reason, i.retrieval_top_score,
+    i.groundedness_score, i.model_name, i.model_version, i.prompt_tokens, i.completion_tokens,
+    i.cost_vnd, i.latency_ms, i.latency_breakdown, i.status, i.llm_called, i.is_degraded,
+    i.is_handoff, i.is_cached, i.created_at
+"""
+
+
+async def danh_sach_luot(
+    session: AsyncSession,
+    *,
+    branch: str | None,
+    refused: bool | None,
+    rating: str | None,
+    conversation_id: UUID | None,
+    tu: datetime | None,
+    den: datetime | None,
+    gioi_han: int,
+    bo_qua: int,
+) -> tuple[list[DongLuot], int]:
+    """Lượt mới nhất trước, lọc theo các điều kiện có mặt. Tenant do RLS lọc.
+
+    Điều kiện ghép từ các mảnh SQL HẰNG — giá trị người dùng chỉ đi qua tham số ràng buộc, không
+    bao giờ nối vào chuỗi. ``rating`` lọc lượt có ít nhất một đánh giá của NGƯỜI (khách hoặc nhân
+    viên) mang giá trị đó — UC027 bước 8 "danh sách lượt bị chê"; nhãn máy ``AUTO_EVAL`` không tính.
+    """
+    dieu_kien: list[str] = []
+    tham_so: dict[str, Any] = {"gioi_han": gioi_han, "bo_qua": bo_qua}
+    if branch is not None:
+        dieu_kien.append("i.branch = :branch")
+        tham_so["branch"] = branch
+    if refused is not None:
+        dieu_kien.append("i.is_answered = :da_tra_loi")
+        tham_so["da_tra_loi"] = not refused
+    if conversation_id is not None:
+        dieu_kien.append("i.conversation_id = :hoi_thoai")
+        tham_so["hoi_thoai"] = conversation_id
+    if tu is not None:
+        dieu_kien.append("i.created_at >= :tu")
+        tham_so["tu"] = tu
+    if den is not None:
+        dieu_kien.append("i.created_at < :den")
+        tham_so["den"] = den
+    if rating is not None:
+        dieu_kien.append(
+            "EXISTS (SELECT 1 FROM ai.ai_feedback f WHERE f.ai_interaction_id = i.id"
+            " AND f.rater_type <> 'AUTO_EVAL' AND f.rating = :rating)"
+        )
+        tham_so["rating"] = rating
+    where = " AND ".join(dieu_kien) or "true"
+    ket_qua = await session.execute(
+        text(
+            f"""
+            SELECT {_COT_LUOT}, count(*) OVER ()
+              FROM ai.ai_interactions i
+             WHERE {where}
+             ORDER BY i.created_at DESC, i.id DESC
+             LIMIT :gioi_han OFFSET :bo_qua
+            """
+        ),
+        tham_so,
+    )
+    dong = ket_qua.all()
+    if dong:
+        return [DongLuot(*d[:25]) for d in dong], dong[0][25]
+    if bo_qua == 0:
+        return [], 0
+    # Trang vượt quá cuối: cửa sổ đếm không còn dòng nào để mang tổng — đếm riêng.
+    tong = await session.execute(
+        text(f"SELECT count(*) FROM ai.ai_interactions i WHERE {where}"), tham_so
+    )
+    return [], tong.scalar_one()
+
+
+@dataclass(frozen=True, slots=True)
+class DoanTrichDan:
+    interaction_id: UUID
+    chunk_id: UUID
+    document_id: UUID
+    document_title: str
+    heading: str | None
+    snippet: str
+
+
+async def trich_dan_cua_luot(
+    session: AsyncSession, interaction_ids: Sequence[UUID], do_dai: int = 240
+) -> list[DoanTrichDan]:
+    """Nối ``retrieved_chunk_ids`` với đoạn và tài liệu, GIỮ thứ tự trích dẫn ([1], [2]…).
+
+    Đoạn đã bị xoá (tài liệu gỡ, hoặc nạp lại xong thì đoạn cũ bị thay — ADR-0031) thì không còn
+    dòng để nối: trích dẫn đó vắng mặt ở đây. Bản chép của câu trả lời khách đã nhận vẫn còn ở tin
+    nhắn phía java-core. RLS của ``knowledge`` cũng lọc tenant như ``ai``.
+    """
+    if not interaction_ids:
+        return []
+    ket_qua = await session.execute(
+        text(
+            """
+            SELECT i.id, c.id, c.document_id, d.title, c.heading,
+                   left(btrim(regexp_replace(c.content, '\\s+', ' ', 'g')), :do_dai)
+              FROM ai.ai_interactions i
+             CROSS JOIN LATERAL unnest(i.retrieved_chunk_ids) WITH ORDINALITY AS u(chunk_id, thu_tu)
+              JOIN knowledge.knowledge_chunks c ON c.id = u.chunk_id
+              JOIN knowledge.knowledge_documents d ON d.id = c.document_id
+             WHERE i.id = ANY(:ids)
+             ORDER BY i.id, u.thu_tu
+            """
+        ),
+        {"ids": list(interaction_ids), "do_dai": do_dai},
+    )
+    return [DoanTrichDan(*d) for d in ket_qua.all()]
 
 
 # ── UC027 — bộ chấm tự động ──────────────────────────────────────────────────

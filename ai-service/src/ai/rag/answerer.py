@@ -279,6 +279,7 @@ class RagAnswerer:
                 request=request,
                 dong_ho=dong_ho,
                 groundedness_score=kiem.groundedness_score,
+                discarded_answer=kiem.cau_tra_loi,
                 **chung,
             )
         return KnowledgeAnswer(

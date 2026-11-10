@@ -294,6 +294,104 @@ async def test_ty_le_tich_cuc_chia_cho_so_luot_co_danh_gia(factory):
     assert nhan_vien.ty_le_tich_cuc.gia_tri == 0.0
 
 
+# ── Danh sách lượt — SCR036 (UC023 bước 10 · UC025 bước 4 · UC027 bước 8) ─────
+
+
+async def _ds(factory, tenant, **loc):
+    async with db_session.get_tenant_session(str(tenant), factory) as phien:
+        return await service.list_interactions(phien, **loc)
+
+
+async def test_danh_sach_luot_loc_phan_trang_trich_dan_va_rls(factory):
+    hc = uuid4()
+    rag = _ban_ghi(
+        TENANT_A, conversation_id=str(hc), retrieved_chunk_ids=[str(CHUNK_A)],
+        latency_breakdown={"guard_ms": 2, "retrieve_ms": 40, "generate_ms": 900, "total_ms": 999},
+    )
+    khong_co = _tu_choi(TENANT_A, "có bán máy pha cà phê không", conversation_id=str(hc))
+    # Bị huỷ sau hậu kiểm: response_text là câu ĐÃ SINH (turn._build_record), có điểm bám nguồn
+    bi_huy = _ban_ghi(
+        TENANT_A, user_query="bảo hành bao lâu", is_answered=False,
+        refusal_reason="LOW_CONFIDENCE", conversation_id=str(hc), llm_called=True,
+        groundedness_score=0.2, response_text="Đổi mới trọn đời ạ [1].",
+    )
+    chao = _ban_ghi(TENANT_A, conversation_id=str(hc), branch="SMALL_TALK", llm_called=False,
+                    model_name="template", response_text="Dạ em chào anh/chị.")
+    ma_rag, ma_khong, ma_huy, ma_chao = await _ghi(factory, rag, khong_co, bi_huy, chao)
+
+    nhan_vien = uuid4()
+    await _danh_gia(factory, TENANT_A, FeedbackRequest(interaction_id=ma_rag, rating=1))
+    await _danh_gia(factory, TENANT_A, FeedbackRequest(
+        interaction_id=ma_rag, rating=-1, reason_code="WRONG_INFO", rater_type="AGENT",
+        rater_user_id=nhan_vien, corrected_answer="Bảo hành 24 tháng kể từ ngày lắp.",
+    ))
+    # Nhãn máy: có trong bảng nhưng KHÔNG hiện cạnh lượt, KHÔNG làm lượt khớp bộ lọc rating
+    async with db_session.get_tenant_session(str(TENANT_A), factory) as phien:
+        await feedback_repository.ghi_danh_gia(
+            phien, interaction_id=ma_khong, rater_type="AUTO_EVAL", rater_user_id=None,
+            rating="POSITIVE", reason_code=None, comment=None, correction_text=None,
+        )
+
+    trang = await _ds(factory, TENANT_A, conversation_id=hc)
+    assert trang.total == 4
+    assert [i.id for i in trang.items] == [ma_chao, ma_huy, ma_khong, ma_rag]  # mới nhất trước
+    theo_id = {i.id: i for i in trang.items}
+
+    r = theo_id[ma_rag]
+    assert r.answer_text == "Dạ 24 tháng [1]." and not r.refused and r.discarded_answer is None
+    assert [(c.chunk_id, c.document_title) for c in r.citations] == [
+        (CHUNK_A, "So tay noi bo cua tenant A")
+    ]
+    assert r.citations[0].snippet == "Noi dung chi tenant A duoc doc."
+    # V216: lưu đúng chặng, bỏ total_ms (đã ở latency_ms)
+    assert r.latency_breakdown == {"guard_ms": 2, "retrieve_ms": 40, "generate_ms": 900}
+    assert (r.retrieval_top_score, r.groundedness_score) == (0.71, 1.0)
+    assert [f.rater_type for f in r.feedback] == ["AGENT", "CUSTOMER"]  # mới nhất trước
+    assert r.feedback[0].corrected_answer == "Bảo hành 24 tháng kể từ ngày lắp."
+    assert r.feedback[0].rater_user_id == nhan_vien
+
+    k = theo_id[ma_khong]
+    # Câu mẫu từ chối KHÁCH ĐÃ NHẬN — không được hiện thành "câu bị huỷ"
+    assert k.refused and k.refusal_reason == "NOT_COVERED"
+    assert k.discarded_answer is None and k.answer_text is None and k.feedback == []
+    assert theo_id[ma_huy].discarded_answer == "Đổi mới trọn đời ạ [1]."
+
+    assert {i.id for i in (await _ds(factory, TENANT_A, conversation_id=hc, refused=True)).items} \
+        == {ma_khong, ma_huy}
+    assert [i.id for i in (await _ds(factory, TENANT_A, conversation_id=hc,
+                                     route="SMALL_TALK")).items] == [ma_chao]
+    for gia_tri in ("POSITIVE", "NEGATIVE"):
+        loc = await _ds(factory, TENANT_A, conversation_id=hc, rating=gia_tri)
+        assert [i.id for i in loc.items] == [ma_rag]
+
+    dau = await _ds(factory, TENANT_A, conversation_id=hc, size=3)
+    sau = await _ds(factory, TENANT_A, conversation_id=hc, size=3, page=1)
+    qua = await _ds(factory, TENANT_A, conversation_id=hc, size=3, page=5)
+    assert (len(dau.items), len(sau.items), sau.items[0].id) == (3, 1, ma_rag)
+    assert (qua.items, qua.total) == ([], 4)  # trang vượt cuối vẫn biết tổng
+
+    gio = await _gio_csdl(factory)
+    assert (await _ds(factory, TENANT_A, conversation_id=hc, tu=gio)).total == 0
+    assert (await _ds(factory, TENANT_A, conversation_id=hc, den=gio)).total == 4
+
+    # RLS: tenant B biết id hội thoại cũng không thấy dòng nào
+    assert (await _ds(factory, TENANT_B, conversation_id=hc)).total == 0
+
+
+async def test_danh_gia_lai_hien_ket_qua_moi_va_moc_moi(factory):
+    hc = uuid4()
+    [ma] = await _ghi(factory, _ban_ghi(TENANT_A, conversation_id=str(hc)))
+    await _danh_gia(factory, TENANT_A, FeedbackRequest(interaction_id=ma, rating=1))
+    [truoc] = (await _ds(factory, TENANT_A, conversation_id=hc)).items[0].feedback
+    await _danh_gia(factory, TENANT_A, FeedbackRequest(
+        interaction_id=ma, rating=-1, reason_code="IRRELEVANT", comment="lạc đề"
+    ))
+    [sau] = (await _ds(factory, TENANT_A, conversation_id=hc)).items[0].feedback
+    assert sau.id == truoc.id  # cùng dòng (luồng phụ 2.1), không sinh dòng thứ hai
+    assert (sau.rating, sau.reason_code, sau.comment) == ("NEGATIVE", "IRRELEVANT", "lạc đề")
+    assert sau.rated_at > truoc.rated_at
+
+
 # ── Bộ chấm tự động — UC027 bước 6 ───────────────────────────────────────────
 
 
@@ -445,6 +543,26 @@ async def test_http_khoang_trong_va_tin_hieu(client, factory):
     assert r.status_code == 200
     d = r.json()
     assert d["so_luot"] == 1 and d["ty_le_tu_choi"] == {"tu_so": 1, "mau_so": 1, "gia_tri": 1.0}
+
+
+async def test_http_danh_sach_luot(client, factory):
+    t = uuid.uuid4()
+    hc = uuid.uuid4()
+    await _ghi(factory, _tu_choi(t, "có bán máy pha cà phê không", conversation_id=str(hc)),
+               _ban_ghi(t, conversation_id=str(hc)))
+    h = {"X-Tenant-Id": str(t)}
+    r = await client.get("/v1/ai-interactions",
+                         params={"refused": "true", "conversation_id": str(hc)}, headers=h)
+    assert r.status_code == 200
+    d = r.json()
+    assert (d["total"], d["page"], d["size"]) == (1, 0, 20)
+    assert d["items"][0]["refusal_reason"] == "NOT_COVERED" and d["items"][0]["refused"] is True
+    r = await client.get("/v1/ai-interactions", params={"route": "KHONG_CO"}, headers=h)
+    assert (r.status_code, r.json()["code"]) == (422, "INVALID_REQUEST")
+    r = await client.get("/v1/ai-interactions", params={"size": 101}, headers=h)
+    assert r.status_code == 422
+    r = await client.get("/v1/ai-interactions", headers={})
+    assert r.status_code == 401
 
 
 async def test_lo_day_thi_moc_tiep_khong_nhay_qua_ung_vien_con_lai(factory, monkeypatch):

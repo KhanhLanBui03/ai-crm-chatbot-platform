@@ -159,6 +159,10 @@ from src.ai.schemas import (
     IngestionJobPage,
     IngestionJobProgress,
     IngestionStep,
+    InteractionCitation,
+    InteractionFeedback,
+    InteractionItem,
+    InteractionPage,
     KbDocumentAccepted,
     KbDocumentCreate,
     KnowledgeGapItem,
@@ -786,6 +790,111 @@ async def knowledge_gaps(
         page=page,
         size=size,
     )
+
+
+# ── SCR036 — danh sách lượt xử lý (UC023 bước 10 · UC025 bước 4 · UC027 bước 8) ─
+
+
+def _so(gia_tri: object) -> float | None:
+    return None if gia_tri is None else float(gia_tri)  # numeric → float cho JSON
+
+
+async def list_interactions(
+    session: AsyncSession,
+    *,
+    route: str | None = None,
+    refused: bool | None = None,
+    rating: str | None = None,
+    conversation_id: UUID | None = None,
+    tu: datetime | None = None,
+    den: datetime | None = None,
+    page: int = 0,
+    size: int = 20,
+) -> InteractionPage:
+    """Một trang lượt xử lý kèm trích dẫn và đánh giá của người — ba truy vấn, không N+1.
+
+    ``discarded_answer`` chỉ có ở lượt bị HUỶ sau hậu kiểm: ``LOW_CONFIDENCE`` mà đã gọi LLM và có
+    điểm bám nguồn. Lượt từ chối khác (NOT_COVERED, OUT_OF_SCOPE_DATA…) lưu câu mẫu từ chối mà khách
+    ĐÃ nhận — hiện nó dưới nhãn "câu bị huỷ" là nói sai (dashboard-api.yaml ``discardedAnswer``).
+    """
+    cac_dong, tong = await interaction_repository.danh_sach_luot(
+        session,
+        branch=route,
+        refused=refused,
+        rating=rating,
+        conversation_id=conversation_id,
+        tu=tu,
+        den=den,
+        gioi_han=size,
+        bo_qua=page * size,
+    )
+    ids = [d.id for d in cac_dong]
+    trich_dan: dict[UUID, list[InteractionCitation]] = {}
+    for t in await interaction_repository.trich_dan_cua_luot(session, ids):
+        trich_dan.setdefault(t.interaction_id, []).append(
+            InteractionCitation(
+                chunk_id=t.chunk_id,
+                document_id=t.document_id,
+                document_title=t.document_title,
+                section_path=t.heading,
+                snippet=t.snippet or None,
+            )
+        )
+    danh_gia: dict[UUID, list[InteractionFeedback]] = {}
+    for f in await feedback_repository.doc_theo_luot(session, ids):
+        danh_gia.setdefault(f.interaction_id, []).append(
+            InteractionFeedback(
+                id=f.id,
+                rater_type=f.rater_type,
+                rater_user_id=f.rater_user_id,
+                rating=f.rating,
+                reason_code=f.reason_code,
+                comment=f.comment,
+                corrected_answer=f.correction_text,
+                rated_at=f.updated_at,
+            )
+        )
+    items = []
+    for d in cac_dong:
+        bi_huy = (
+            not d.is_answered
+            and d.refusal_reason == "LOW_CONFIDENCE"
+            and d.llm_called
+            and d.groundedness_score is not None
+        )
+        items.append(
+            InteractionItem(
+                id=d.id,
+                conversation_id=d.conversation_id,
+                message_id=d.message_id,
+                route=d.branch,
+                intent=d.intent,
+                intent_confidence=_so(d.intent_confidence),
+                user_query=d.user_query,
+                answer_text=d.response_text if d.is_answered else None,
+                refused=not d.is_answered,
+                refusal_reason=d.refusal_reason,
+                discarded_answer=d.response_text if bi_huy else None,
+                retrieval_top_score=_so(d.retrieval_top_score),
+                groundedness_score=_so(d.groundedness_score),
+                model_name=d.model_name,
+                model_version=d.model_version,
+                prompt_tokens=d.prompt_tokens,
+                completion_tokens=d.completion_tokens,
+                cost_vnd=float(d.cost_vnd),
+                latency_ms=d.latency_ms,
+                latency_breakdown=d.latency_breakdown or {},
+                status=d.status,
+                llm_called=d.llm_called,
+                degraded=d.is_degraded,
+                handoff=d.is_handoff,
+                cached=d.is_cached,
+                citations=trich_dan.get(d.id, []),
+                feedback=danh_gia.get(d.id, []),
+                created_at=d.created_at,
+            )
+        )
+    return InteractionPage(items=items, total=tong, page=page, size=size)
 
 
 # ── UC027 — bộ chấm tự động (worker) ─────────────────────────────────────────
