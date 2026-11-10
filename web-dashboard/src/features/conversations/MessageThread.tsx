@@ -1,14 +1,17 @@
 import { ArrowLeft, Bot, Check, Lock, Send, UserPlus } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { format } from 'date-fns'
 
+import { useDanhSachLuotXuLyQuery } from '@/api/ai-agent'
+import { useAppSelector } from '@/app/store/hooks'
+import { DanhSachDanhGia, NutDanhGia } from '@/components/ai/DanhGiaDialog'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusChip } from '@/components/ui/status-chip'
 import { Textarea } from '@/components/ui/textarea'
 import { NHAN_KENH } from '@/features/conversations/nhan'
 import { chuCaiDau } from '@/utils/ten'
-import type { HoiThoaiChiTiet, TinNhan } from '@/types/schema'
+import type { HoiThoaiChiTiet, LuotXuLyAi, TinNhan } from '@/types/schema'
 import { cn } from '@/utils/cn'
 
 export function MessageThread({
@@ -48,6 +51,19 @@ export function MessageThread({
   const khungCuon = useRef<HTMLDivElement>(null)
   const [nhap, datNhap] = useState('')
   const soTin = chiTiet?.messages.length ?? 0
+
+  // UC027 — đánh giá của nhân viên ngay dưới tin của tác tử. Lấy mọi lượt AI của hội thoại MỘT lần
+  // (lọc theo conversationId) rồi gắn vào tin theo `aiInteractionId`, không gọi mỗi tin một lần.
+  const toi = useAppSelector((s) => s.auth.nguoiDung?.id)
+  const coLuotAi = chiTiet?.messages.some((m) => m.aiInteractionId) ?? false
+  const luotAi = useDanhSachLuotXuLyQuery(
+    { hoiThoaiId: chiTiet?.id, co: 100 },
+    { skip: !chiTiet || !coLuotAi },
+  )
+  const theoLuot = useMemo(
+    () => new Map((luotAi.data?.items ?? []).map((l) => [l.id, l])),
+    [luotAi.data],
+  )
 
   useEffect(() => {
     const el = khungCuon.current
@@ -144,7 +160,12 @@ export function MessageThread({
 
       <div ref={khungCuon} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
         {chiTiet.messages.map((tn) => (
-          <BongTinNhan key={tn.id} tinNhan={tn} />
+          <BongTinNhan
+            key={tn.id}
+            tinNhan={tn}
+            luot={tn.aiInteractionId ? theoLuot.get(tn.aiInteractionId) : undefined}
+            toi={toi}
+          />
         ))}
         {dangGo && <DangGo ten={tenKhachHang} />}
       </div>
@@ -214,7 +235,16 @@ function DangGo({ ten }: { ten: string }) {
   )
 }
 
-function BongTinNhan({ tinNhan }: { tinNhan: TinNhan }) {
+function BongTinNhan({
+  tinNhan,
+  luot,
+  toi,
+}: {
+  tinNhan: TinNhan
+  /** Lượt AI sinh ra tin này (khi là tin của tác tử) — mang các đánh giá đã có. */
+  luot?: LuotXuLyAi
+  toi?: string
+}) {
   // Ghi chú hệ thống canh giữa, không phải bong bóng của bất kỳ ai
   if (tinNhan.senderType === 'SYSTEM') {
     return (
@@ -252,9 +282,25 @@ function BongTinNhan({ tinNhan }: { tinNhan: TinNhan }) {
             Nguồn: {[...new Set(tinNhan.citations?.map((c) => c.documentTitle))].join(', ')}
           </span>
         )}
-        <span className="text-muted-foreground text-xs tabular-nums">
+        <span className="text-muted-foreground flex items-center gap-2 text-xs tabular-nums">
           {format(new Date(tinNhan.createdAt), 'HH:mm')}
+          {cuaBot && tinNhan.aiInteractionId && (
+            <NutDanhGia
+              gon
+              luotId={tinNhan.aiInteractionId}
+              cauTraLoi={tinNhan.content}
+              cuaToi={
+                luot?.feedbacks?.find((d) => d.ratedByType === 'AGENT' && d.ratedByUserId === toi) ??
+                null
+              }
+            />
+          )}
         </span>
+        {cuaBot && luot?.feedbacks && luot.feedbacks.length > 0 && (
+          <div className="bg-muted/50 max-w-full rounded-md px-2 py-1.5">
+            <DanhSachDanhGia danhGia={luot.feedbacks} />
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1909,8 +1909,10 @@ paths:
       summary: SCR034 — khoảng trống tri thức
       description: |
         UC025, UC039. Câu hỏi tác tử AI đã từ chối vì không đủ căn cứ, gom theo câu hỏi tương đương
-        thay vì mỗi cách diễn đạt một dòng. Sắp theo `occurrenceCount` giảm dần — đây là danh sách
-        việc cần làm để cải thiện kho tri thức.
+        thay vì mỗi cách diễn đạt một dòng. Sắp theo `distinctContactCount` giảm dần rồi tới
+        `occurrenceCount` (đặc tả UC025 luồng phụ 8.1, đổi ở GD2) — đây là danh sách việc cần làm để
+        cải thiện kho tri thức. Cửa sổ 30 ngày: khoảng trống tự rơi khỏi danh sách khi tài liệu mới đã
+        nạp và lượt từ chối thôi phát sinh. Không có tham số tìm kiếm `q`.
 
         `distinctContactCount` quan trọng hơn `occurrenceCount`: cùng một câu hỏi bị từ chối bởi
         **nhiều khách khác nhau** là tín hiệu mạnh hơn một khách hỏi đi hỏi lại.
@@ -2246,6 +2248,12 @@ paths:
         - name: conversationId
           in: query
           schema: { type: string, format: uuid }
+        - name: rating
+          in: query
+          description: |
+            GD2 — lượt có ít nhất một đánh giá của NGƯỜI (khách hoặc nhân viên) mang giá trị này. UC027
+            bước 8 "danh sách lượt bị chê kèm lý do và câu trả lời đã sửa" là `rating=NEGATIVE`.
+          schema: { type: string, enum: [POSITIVE, NEGATIVE] }
         - $ref: '#/components/parameters/TuNgay'
         - $ref: '#/components/parameters/DenNgay'
       responses:
@@ -2270,10 +2278,12 @@ paths:
       tags: [Tác tử AI]
       summary: Nhân viên đánh giá một câu trả lời của tác tử AI
       description: |
-        UC027. Đánh giá lại thì **đóng dòng cũ** (`superseded_at = now()`) rồi chèn dòng mới, không
-        ghi đè tại chỗ — lịch sử đánh giá là dữ liệu phân tích, không phải trạng thái hiện tại.
+        UC027. Mỗi nhân viên một đánh giá cho mỗi lượt (`ai.ai_feedback`, chỉ mục duy nhất lượt × phía ×
+        người). Đánh giá lại thì **cập nhật dòng cũ** — đặc tả UC027 luồng phụ 2.1 (sửa ở GD2: bản cũ
+        của mô tả này ghi "đóng dòng cũ rồi chèn dòng mới", lệch đặc tả và lệch V204). Người đánh giá
+        lấy từ JWT, `rater_type = AGENT` do máy chủ đặt.
 
-        Mỗi người đánh giá đúng một lần cho mỗi lượt tương tác.
+        Chê (`NEGATIVE`) mà thiếu `reasonCode` → 422 `REASON_REQUIRED`. Khen thì lý do bị bỏ qua (3.1).
       parameters:
         - name: interactionId
           in: path
@@ -2291,7 +2301,13 @@ paths:
                   type: string
                   enum: [POSITIVE, NEGATIVE]
                 reasonCode: { $ref: '#/components/schemas/LyDoDanhGia' }
-                comment: { type: [string, 'null'] }
+                comment: { type: [string, 'null'], maxLength: 2000 }
+                correctedAnswer:
+                  type: [string, 'null']
+                  maxLength: 4000
+                  description: |
+                    Câu trả lời đúng do nhân viên sửa (UC027 bước 4) — nguồn phát hiện khoảng trống tri
+                    thức. Chỉ nhân viên nhập được; widget của khách không có ô này.
       responses:
         '201':
           description: Đã ghi đánh giá
@@ -4628,6 +4644,12 @@ components:
         route: { $ref: '#/components/schemas/NhanhXuLyAi' }
         intentLabel: { type: [string, 'null'] }
         intentConfidence: { type: [number, 'null'] }
+        userQuery:
+          type: [string, 'null']
+          description: Câu hỏi của khách ĐÃ che dữ liệu cá nhân lúc ghi (UC040) — không phải nguyên văn.
+        answerText:
+          type: [string, 'null']
+          description: Câu khách đã nhận khi lượt TRẢ LỜI được; `null` khi từ chối (câu từ chối là mẫu theo lý do).
         modelName: { type: [string, 'null'] }
         modelVersion: { type: [string, 'null'] }
         promptTokens: { type: integer }
@@ -4637,7 +4659,16 @@ components:
         latencyBreakdown:
           type: object
           additionalProperties: { type: integer }
-          description: 'Độ trễ từng chặng: `retrieve`, `rerank`, `generate`, `tool` — chỉ ra chặng gây chậm'
+          description: |
+            Độ trễ từng chặng: `retrieve` (nhúng + truy hồi), `rerank`, `generate`, `tool`, `guard` (kiểm
+            duyệt + hậu kiểm), `classify` — chỉ ra chặng gây chậm. Chặng không chạy thì không có khoá.
+            Nguồn: `ai.ai_interactions.latency_breakdown` (V216, GD2); lượt cũ hơn là `{}`.
+        retrievalTopScore:
+          type: [number, 'null']
+          description: |
+            Điểm truy hồi cao nhất — độ liên quan đoạn ↔ câu hỏi, đo TRƯỚC khi sinh. Khác
+            `groundednessScore` (câu trả lời có bám đoạn không, đo SAU khi sinh): truy hồi tốt mà mô hình
+            vẫn bịa là trường hợp có thật. Giúp đọc lượt từ chối (UC025 bước 4).
         groundednessScore:
           type: [number, 'null']
           description: Độ bám nguồn. Dưới ngưỡng thì câu trả lời bị hủy, không gửi cho khách.
@@ -4654,16 +4685,24 @@ components:
           description: |
             Lượt dùng đệm ngữ nghĩa — không tính chi phí gọi mô hình (UC023 1.2).
             Nguồn: `ai.ai_interactions.is_cached` (V209).
+        degraded:
+          type: boolean
+          description: |
+            "Trả lời tạm" — LLM không phục vụ được, câu trả lời là trích nguyên văn đoạn liên quan nhất
+            (UC023 8.2). Vẫn là lượt trả lời được, nên phải tách riêng.
+        handoff:
+          type: boolean
+          description: Lượt này đề nghị chuyển cho nhân viên (UC014, UC025 3.1/3.3).
         discardedAnswer:
           type: [string, 'null']
           description: |
             Câu trả lời **không đạt ngưỡng bám nguồn nên bị hủy, chưa từng gửi cho khách**. Giao
             diện phải nói rõ điều đó, nếu không người xem tưởng khách đã nhận được nó.
 
-            UC023 8.2 đòi "lưu lại trường hợp này để phân tích". **Không có cột riêng** — đây là
-            trường suy ra: `is_answered = false ? response_text : null`. `is_answered` vốn đã mang
-            đúng nghĩa "câu trả lời có tới khách hay không", nên một cột thứ hai chỉ để lặp lại
-            điều đó là chỗ hai nguồn sự thật bắt đầu lệch nhau.
+            UC023 8.2 đòi "lưu lại trường hợp này để phân tích". **Không có cột riêng** — trường suy ra:
+            lượt `LOW_CONFIDENCE` đã gọi LLM và có điểm bám nguồn thì `response_text` là câu ĐÃ SINH bị
+            huỷ. Sửa ở GD2: công thức cũ `is_answered = false ? response_text : null` hiện nhầm câu MẪU
+            từ chối (mà khách ĐÃ nhận) ở mọi lượt `NOT_COVERED`/`OUT_OF_SCOPE_DATA` thành "câu bị huỷ".
         errorCode: { type: [string, 'null'] }
         toolCalls:
           type: array
@@ -4674,9 +4713,16 @@ components:
             hiểu vì sao tác tử AI trả lời như vậy.
           items: { $ref: '#/components/schemas/NhatKyGoiCongCu' }
         feedback:
+          description: Đánh giá mới nhất của người (khách hoặc nhân viên); đủ cả danh sách ở `feedbacks`.
           oneOf:
             - { $ref: '#/components/schemas/DanhGiaAi' }
             - { type: 'null' }
+        feedbacks:
+          type: array
+          description: |
+            GD2 — mọi đánh giá của NGƯỜI cho lượt này, mới nhất trước: tối đa một của khách và một của
+            mỗi nhân viên (luồng phụ 2.1). Nhãn của bộ chấm tự động không có ở đây.
+          items: { $ref: '#/components/schemas/DanhGiaAi' }
         createdAt: { type: string, format: date-time }
 
     DanhGiaAi:
@@ -4692,12 +4738,24 @@ components:
             - { $ref: '#/components/schemas/LyDoDanhGia' }
             - { type: 'null' }
         comment: { type: [string, 'null'] }
+        correctedAnswer:
+          type: [string, 'null']
+          description: Câu trả lời đúng do nhân viên sửa (UC027 bước 4, 8). Khách không nhập được.
         ratedByType:
           type: string
           enum: [AGENT, CUSTOMER]
           description: Tách riêng khi tổng hợp — nhân viên và khách hàng đánh giá theo tiêu chí khác nhau
-        ratedByName: { type: [string, 'null'] }
-        createdAt: { type: string, format: date-time }
+        ratedByUserId:
+          type: [string, 'null']
+          format: uuid
+          description: Mã nhân viên đã đánh giá — để giao diện nhận ra đánh giá của chính mình (sửa lại, 2.1).
+        ratedByName:
+          type: [string, 'null']
+          description: Tên nhân viên; `null` với đánh giá của khách.
+        createdAt:
+          type: string
+          format: date-time
+          description: Lần ghi gần nhất — đánh giá lại cập nhật dòng cũ và đẩy mốc này lên.
 
     SuKienAnToan:
       type: object
@@ -5222,7 +5280,14 @@ components:
           description: |
             Con số cho phép viết "trên N hội thoại thực tế, tỉ lệ phản hồi tích cực là X%" — câu mà
             phần lớn đồ án không viết được vì không lưu dữ liệu đánh giá.
-        feedbackCount: { type: integer }
+
+            **Nguồn: ai-service `GET /v1/ai/quality`, không phải `metrics_daily`** (chốt Q2, GD2): số khen ÷
+            số đánh giá của khách + nhân viên (cộng tử với tử, mẫu với mẫu; nhãn máy `AUTO_EVAL` không
+            tính), gom theo ngày CỦA LƯỢT. Mẫu số là số lượt ĐÃ có đánh giá, không phải tổng số lượt (đặc
+            tả UC027); một lượt được hai phía đánh giá góp hai. Bộ lọc `modelVersion` không áp cho ô này.
+        feedbackCount:
+          type: integer
+          description: Mẫu số của `positiveFeedbackRate`. 0 khi chưa ai đánh giá hoặc ai-service lỗi (xem `errorMessage`).
         cachedRate: { type: number }
         avgGroundedness: { type: [number, 'null'] }
         avgLatencyMs: { type: [integer, 'null'] }
@@ -5253,7 +5318,11 @@ components:
           type: array
           items: { type: string }
 
-        errorMessage: { type: [string, 'null'] }
+        errorMessage:
+          type: [string, 'null']
+          description: |
+            Có khi ai-service không trả được số đánh giá — riêng ô "Phản hồi tích cực" trống, các ô khác
+            (đọc từ `metrics_daily`) vẫn đúng. Màn không báo lỗi cả trang.
 
     # ── K. Kiểm toán và tuân thủ ───────────────────────────────────────────────
 

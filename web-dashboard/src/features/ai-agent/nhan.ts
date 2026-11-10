@@ -5,7 +5,6 @@ import type {
   LoaiSuKienAnToan,
   LyDoChan,
   LyDoChuyenGiao,
-  LyDoDanhGia,
   LyDoTuChoi,
   MucNghiemTrong,
   MucRuiRo,
@@ -92,12 +91,8 @@ export const NHAN_LY_DO_TU_CHOI: Record<LyDoTuChoi, string> = {
   SAFETY_PROBE: 'Phát hiện dò tìm nhằm vượt rào an toàn',
 }
 
-export const NHAN_LY_DO_DANH_GIA: Record<LyDoDanhGia, string> = {
-  WRONG_INFO: 'Thông tin sai',
-  IRRELEVANT: 'Trả lời lạc đề',
-  INCOMPLETE: 'Trả lời thiếu',
-  BAD_TONE: 'Giọng điệu không phù hợp',
-}
+// Bốn lý do chê của UC027 — dùng chung với Hộp thư nên nằm ở components/ai (GD2), xuất lại ở đây.
+export { NHAN_LY_DO_DANH_GIA } from '@/components/ai/DanhGiaDialog'
 
 export const NHAN_MUC_NGHIEM_TRONG: Record<
   MucNghiemTrong,

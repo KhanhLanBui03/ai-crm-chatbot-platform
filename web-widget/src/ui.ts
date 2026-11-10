@@ -3,10 +3,18 @@
 // nhân viên có thể chứa chuỗi do khách khác cố tình nhét vào (bề mặt T2) — innerHTML là XSS ngay
 // trên website của doanh nghiệp.
 
-import type { GiaoDien, ThongTinLienHe, TinNhan } from './api'
+import type { GiaoDien, LyDoChe, ThongTinLienHe, TinNhan, YeuCauDanhGia } from './api'
 import { CSS } from './styles'
 
 const MAU_MAC_DINH = '#4F46E5'
+
+/** Bốn lý do chê của đặc tả UC027 — cùng bộ mã với hộp thư của nhân viên. */
+const LY_DO_CHE: [LyDoChe, string][] = [
+  ['WRONG_INFO', 'Thông tin sai'],
+  ['IRRELEVANT', 'Lạc đề'],
+  ['INCOMPLETE', 'Trả lời thiếu'],
+  ['BAD_TONE', 'Giọng điệu chưa phù hợp'],
+]
 const HEX = /^#[0-9a-fA-F]{6}$/
 
 const ICON_CHAT =
@@ -28,6 +36,8 @@ export interface SuKienUi {
   onGapNhanVien: () => void
   onMo: () => void
   onDeLaiThongTin: (tt: ThongTinLienHe) => void
+  /** UC027 — gửi đánh giá; promise lỗi mang câu thông báo để hiện ngay dưới tin. */
+  onDanhGia: (messageId: string, yc: YeuCauDanhGia) => Promise<void>
 }
 
 export class GiaoDienChat {
@@ -302,15 +312,116 @@ export class GiaoDienChat {
       t.senderType === 'CUSTOMER' ? 'khach' : t.senderType === 'SYSTEM' ? 'he-thong' : t.senderType === 'AGENT' ? 'nv' : 'bot'
     const el = tao('div', `tin ${lop}`)
     if (t.senderType === 'AGENT') el.appendChild(tao('div', 'nhan', 'Nhân viên'))
+    // UC023 8.2 — nói thẳng đây là câu trích tạm, không phải câu trả lời đầy đủ
+    if (t.senderType === 'BOT' && t.degraded) el.appendChild(tao('div', 'nhan tam', 'Trả lời tạm'))
     el.appendChild(document.createTextNode(t.content))
     const nguon = t.citations.filter((c) => c.title)
-    if (nguon.length > 0) {
-      const khoi = tao('div', 'nguon')
-      khoi.appendChild(tao('b', undefined, 'Nguồn: '))
-      khoi.appendChild(document.createTextNode([...new Set(nguon.map((c) => c.title))].join(', ')))
-      el.appendChild(khoi)
-    }
+    if (nguon.length > 0) el.appendChild(this.veNguon(nguon))
+    if (t.senderType === 'BOT' && t.rateable) el.appendChild(this.veDanhGia(t.id))
     return el
+  }
+
+  /**
+   * UC023 — "Nguồn: <tiêu đề>"; bấm vào một nguồn thì mở đoạn trích đã dùng. Dùng <details> sẵn có
+   * của trình duyệt: bàn phím và trình đọc màn hình dùng được, không cần thêm mã. Đoạn trích gán bằng
+   * textContent như mọi nội dung khác.
+   */
+  private veNguon(nguon: TinNhan['citations']): HTMLElement {
+    const khoi = tao('div', 'nguon')
+    khoi.appendChild(tao('b', undefined, 'Nguồn:'))
+    const daCo = new Set<string>()
+    for (const c of nguon) {
+      const khoa = `${c.title}|${c.snippet ?? ''}`
+      if (daCo.has(khoa)) continue
+      daCo.add(khoa)
+      if (!c.snippet) {
+        khoi.appendChild(tao('div', 'muc', c.title ?? ''))
+        continue
+      }
+      const chiTiet = tao('details', 'muc')
+      chiTiet.appendChild(tao('summary', undefined, c.title ?? ''))
+      chiTiet.appendChild(tao('div', 'trich', c.snippet))
+      khoi.appendChild(chiTiet)
+    }
+    return khoi
+  }
+
+  /**
+   * UC027 bước 1–5 — 👍/👎 dưới câu trả lời của tác tử. 👍 gửi ngay, không hỏi lý do (3.1); 👎 mở
+   * bốn lý do + ô nhận xét, chưa chọn lý do thì chưa gửi được (bước 3). Gửi xong thay bằng lời cảm ơn.
+   */
+  private veDanhGia(messageId: string): HTMLElement {
+    const khoi = tao('div', 'danh-gia')
+    const hang = tao('div', 'hang-dg')
+    hang.appendChild(tao('span', 'hoi', 'Câu trả lời có hữu ích không?'))
+    const khen = this.nutDg('👍', 'Hữu ích')
+    const che = this.nutDg('👎', 'Chưa ổn')
+    hang.append(khen, che)
+    const loi = tao('div', 'loi-dg')
+    loi.hidden = true
+    khoi.append(hang, loi)
+
+    const gui = async (yc: YeuCauDanhGia, nutKhoa: HTMLButtonElement[]): Promise<void> => {
+      nutKhoa.forEach((n) => (n.disabled = true))
+      loi.hidden = true
+      try {
+        await this.suKien.onDanhGia(messageId, yc)
+        khoi.replaceChildren(tao('div', 'cam-on', 'Cảm ơn bạn đã đánh giá!'))
+      } catch (e) {
+        loi.textContent = e instanceof Error ? e.message : 'Chưa gửi được, bạn thử lại nhé.'
+        loi.hidden = false
+        nutKhoa.forEach((n) => (n.disabled = false))
+      }
+    }
+
+    khen.addEventListener('click', () => void gui({ rating: 'POSITIVE' }, [khen, che]))
+    che.addEventListener('click', () => {
+      if (khoi.querySelector('.form-dg')) return
+      che.setAttribute('aria-pressed', 'true')
+      const f = tao('form', 'form-dg')
+      f.noValidate = true
+      const nhom = tao('div', 'ly-do')
+      nhom.setAttribute('role', 'radiogroup')
+      nhom.setAttribute('aria-label', 'Lý do chưa ổn')
+      let chon: LyDoChe | null = null
+      const nutGui = tao('button', 'gui', 'Gửi')
+      nutGui.type = 'submit'
+      nutGui.disabled = true
+      for (const [ma, nhan] of LY_DO_CHE) {
+        const n = tao('button', 'chon', nhan)
+        n.type = 'button'
+        n.setAttribute('role', 'radio')
+        n.setAttribute('aria-checked', 'false')
+        n.addEventListener('click', () => {
+          chon = ma
+          nhom.querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b === n)))
+          nutGui.disabled = false
+        })
+        nhom.appendChild(n)
+      }
+      const nhanXet = tao('textarea')
+      nhanXet.rows = 2
+      nhanXet.maxLength = 1000
+      nhanXet.placeholder = 'Nhận xét thêm (không bắt buộc)'
+      nhanXet.setAttribute('aria-label', 'Nhận xét thêm')
+      f.append(tao('div', 'hoi', 'Câu trả lời chưa ổn ở đâu?'), nhom, nhanXet, nutGui)
+      f.addEventListener('submit', (e) => {
+        e.preventDefault()
+        if (!chon) return
+        void gui({ rating: 'NEGATIVE', reasonCode: chon, comment: nhanXet.value.trim() || undefined }, [nutGui, khen])
+      })
+      khoi.insertBefore(f, loi)
+      this.cuonXuong()
+    })
+    return khoi
+  }
+
+  private nutDg(bieuTuong: string, nhan: string): HTMLButtonElement {
+    const n = tao('button', 'nut-dg', bieuTuong)
+    n.type = 'button'
+    n.setAttribute('aria-label', nhan)
+    n.title = nhan
+    return n
   }
 
   private cuonXuong(): void {

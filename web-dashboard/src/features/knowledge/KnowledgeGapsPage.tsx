@@ -1,4 +1,3 @@
-import type { SortingState } from '@tanstack/react-table'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { vi } from 'date-fns/locale'
 import { MessageCircleQuestion, Users } from 'lucide-react'
@@ -27,15 +26,17 @@ import type { KhoangTrongTriThuc, LoaiKhoangTrong } from '@/types/schema'
  * chứ không phải một bảng có trạng thái riêng, và không use case nào cho phép đóng một mục bằng
  * tay: một khoảng trống tự biến mất khi tài liệu mới được nạp và lượt từ chối ngừng phát sinh.
  * Nút "đã xử lý" ở đây sẽ là lời nói dối — nó ẩn dòng đi mà không sửa gì trong kho tri thức.
+ *
+ * GD2: **không có ô tìm kiếm và không sắp lại theo cột** — máy chủ không nhận `q` và luôn sắp theo số
+ * khách rồi số lần (đặc tả UC025 8.1). Để ô tìm hay mũi tên sắp xếp ở đây là giao diện hứa một việc máy
+ * chủ không làm. "Số khách" xấp xỉ bằng số hội thoại khác nhau: lượt xử lý AI không lưu mã khách.
  */
 export function KnowledgeGapsPage() {
   const dieuHuong = useNavigate()
   const [boLoc, datBoLoc] = useState<{
-    tuKhoa?: string
     loai?: LoaiKhoangTrong
     trang?: number
   }>({ trang: 0 })
-  const [sapXep, datSapXep] = useState<SortingState>([{ id: 'distinctContactCount', desc: true }])
 
   const truyVan = useDanhSachKhoangTrongQuery(boLoc)
 
@@ -70,10 +71,12 @@ export function KnowledgeGapsPage() {
       {
         id: 'distinctContactCount',
         accessorKey: 'distinctContactCount',
-        header: 'Số khách hỏi',
-        enableSorting: true,
+        header: 'Số khách hỏi (≈)',
         cell: ({ row }) => (
-          <span className="flex items-center gap-1.5 font-medium tabular-nums">
+          <span
+            className="flex items-center gap-1.5 font-medium tabular-nums"
+            title="Xấp xỉ theo số hội thoại khác nhau"
+          >
             <Users className="text-muted-foreground size-3.5" />
             {row.original.distinctContactCount.toLocaleString('vi-VN')}
           </span>
@@ -83,7 +86,6 @@ export function KnowledgeGapsPage() {
         id: 'occurrenceCount',
         accessorKey: 'occurrenceCount',
         header: 'Số lần hỏi',
-        enableSorting: true,
         cell: ({ row }) => (
           <span className="text-muted-foreground tabular-nums">
             {row.original.occurrenceCount.toLocaleString('vi-VN')}
@@ -94,7 +96,6 @@ export function KnowledgeGapsPage() {
         id: 'lastSeenAt',
         accessorKey: 'lastSeenAt',
         header: 'Gặp gần nhất',
-        enableSorting: true,
         cell: ({ row }) => {
           const l = row.original.lastSeenAt
           return (
@@ -111,15 +112,12 @@ export function KnowledgeGapsPage() {
   return (
     <ListPage
       tieuDe="Khoảng trống tri thức"
-      moTa="Những câu khách hỏi mà kho tri thức không trả lời được. Sắp theo số khách khác nhau — tín hiệu mạnh hơn số lần hỏi."
+      moTa="Những câu khách hỏi mà kho tri thức không trả lời được trong 30 ngày qua. Sắp theo số khách khác nhau — tín hiệu mạnh hơn số lần hỏi. Số khách xấp xỉ theo số hội thoại."
       cot={cot}
       trang={truyVan.data}
       dangTai={truyVan.isLoading}
-      timKiem={{
-        goiY: 'Tìm trong nội dung câu hỏi…',
-        giaTri: boLoc.tuKhoa ?? '',
-        onDoi: (v) => datBoLoc((cu) => ({ ...cu, tuKhoa: v, trang: 0 })),
-      }}
+      loi={truyVan.error}
+      onThuLai={() => void truyVan.refetch()}
       boLoc={[
         {
           khoa: 'loai',
@@ -135,7 +133,6 @@ export function KnowledgeGapsPage() {
         datBoLoc((cu) => ({ ...cu, trang: 0, loai: giaTri as LoaiKhoangTrong }))
       }
       onGoHetBoLoc={() => datBoLoc({ trang: 0 })}
-      sapXep={{ trangThai: sapXep, onDoiSapXep: datSapXep }}
       onDoiTrang={(t) => datBoLoc((cu) => ({ ...cu, trang: t }))}
       thaoTacChinh={{
         nhan: 'Tải lên tài liệu bổ sung',

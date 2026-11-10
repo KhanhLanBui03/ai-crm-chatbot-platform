@@ -139,14 +139,14 @@ export const knowledgeApi = apiSlice.injectEndpoints({
     }),
 
     // ── SCR034 — khoảng trống tri thức ────────────────────────────────────────
+    // Không có `q`: máy chủ không tìm trong câu hỏi (GD2 — bỏ tham số gửi đi mà không có tác dụng)
     danhSachKhoangTrong: build.query<
       Page<KhoangTrongTriThuc>,
-      { tuKhoa?: string; loai?: LoaiKhoangTrong; trang?: number }
+      { loai?: LoaiKhoangTrong; trang?: number }
     >({
       query: (bo) => ({
         url: '/api/v1/knowledge-gaps',
         params: {
-          q: bo.tuKhoa || undefined,
           gapType: bo.loai,
           page: bo.trang ?? 0,
           size: 10,

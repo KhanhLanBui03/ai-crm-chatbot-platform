@@ -3217,8 +3217,10 @@ export interface paths {
         /**
          * SCR034 — khoảng trống tri thức
          * @description UC025, UC039. Câu hỏi tác tử AI đã từ chối vì không đủ căn cứ, gom theo câu hỏi tương đương
-         *     thay vì mỗi cách diễn đạt một dòng. Sắp theo `occurrenceCount` giảm dần — đây là danh sách
-         *     việc cần làm để cải thiện kho tri thức.
+         *     thay vì mỗi cách diễn đạt một dòng. Sắp theo `distinctContactCount` giảm dần rồi tới
+         *     `occurrenceCount` (đặc tả UC025 luồng phụ 8.1, đổi ở GD2) — đây là danh sách việc cần làm để
+         *     cải thiện kho tri thức. Cửa sổ 30 ngày: khoảng trống tự rơi khỏi danh sách khi tài liệu mới đã
+         *     nạp và lượt từ chối thôi phát sinh. Không có tham số tìm kiếm `q`.
          *
          *     `distinctContactCount` quan trọng hơn `occurrenceCount`: cùng một câu hỏi bị từ chối bởi
          *     **nhiều khách khác nhau** là tín hiệu mạnh hơn một khách hỏi đi hỏi lại.
@@ -3729,6 +3731,11 @@ export interface paths {
                     route?: components["schemas"]["NhanhXuLyAi"];
                     refused?: boolean;
                     conversationId?: string;
+                    /**
+                     * @description GD2 — lượt có ít nhất một đánh giá của NGƯỜI (khách hoặc nhân viên) mang giá trị này. UC027
+                     *     bước 8 "danh sách lượt bị chê kèm lý do và câu trả lời đã sửa" là `rating=NEGATIVE`.
+                     */
+                    rating?: "POSITIVE" | "NEGATIVE";
                     /** @description Ngày bắt đầu khoảng thống kê, tính theo múi giờ của doanh nghiệp */
                     from?: components["parameters"]["TuNgay"];
                     /** @description Ngày kết thúc khoảng thống kê */
@@ -3774,10 +3781,12 @@ export interface paths {
         put?: never;
         /**
          * Nhân viên đánh giá một câu trả lời của tác tử AI
-         * @description UC027. Đánh giá lại thì **đóng dòng cũ** (`superseded_at = now()`) rồi chèn dòng mới, không
-         *     ghi đè tại chỗ — lịch sử đánh giá là dữ liệu phân tích, không phải trạng thái hiện tại.
+         * @description UC027. Mỗi nhân viên một đánh giá cho mỗi lượt (`ai.ai_feedback`, chỉ mục duy nhất lượt × phía ×
+         *     người). Đánh giá lại thì **cập nhật dòng cũ** — đặc tả UC027 luồng phụ 2.1 (sửa ở GD2: bản cũ
+         *     của mô tả này ghi "đóng dòng cũ rồi chèn dòng mới", lệch đặc tả và lệch V204). Người đánh giá
+         *     lấy từ JWT, `rater_type = AGENT` do máy chủ đặt.
          *
-         *     Mỗi người đánh giá đúng một lần cho mỗi lượt tương tác.
+         *     Chê (`NEGATIVE`) mà thiếu `reasonCode` → 422 `REASON_REQUIRED`. Khen thì lý do bị bỏ qua (3.1).
          */
         post: {
             parameters: {
@@ -3795,6 +3804,11 @@ export interface paths {
                         rating: "POSITIVE" | "NEGATIVE";
                         reasonCode?: components["schemas"]["LyDoDanhGia"];
                         comment?: string | null;
+                        /**
+                         * @description Câu trả lời đúng do nhân viên sửa (UC027 bước 4) — nguồn phát hiện khoảng trống tri
+                         *     thức. Chỉ nhân viên nhập được; widget của khách không có ô này.
+                         */
+                        correctedAnswer?: string | null;
                     };
                 };
             };
@@ -6410,16 +6424,30 @@ export interface components {
             route: components["schemas"]["NhanhXuLyAi"];
             intentLabel?: string | null;
             intentConfidence?: number | null;
+            /** @description Câu hỏi của khách ĐÃ che dữ liệu cá nhân lúc ghi (UC040) — không phải nguyên văn. */
+            userQuery?: string | null;
+            /** @description Câu khách đã nhận khi lượt TRẢ LỜI được; `null` khi từ chối (câu từ chối là mẫu theo lý do). */
+            answerText?: string | null;
             modelName?: string | null;
             modelVersion?: string | null;
             promptTokens: number;
             completionTokens: number;
             costVnd: number;
             latencyMs?: number | null;
-            /** @description Độ trễ từng chặng: `retrieve`, `rerank`, `generate`, `tool` — chỉ ra chặng gây chậm */
+            /**
+             * @description Độ trễ từng chặng: `retrieve` (nhúng + truy hồi), `rerank`, `generate`, `tool`, `guard` (kiểm
+             *     duyệt + hậu kiểm), `classify` — chỉ ra chặng gây chậm. Chặng không chạy thì không có khoá.
+             *     Nguồn: `ai.ai_interactions.latency_breakdown` (V216, GD2); lượt cũ hơn là `{}`.
+             */
             latencyBreakdown?: {
                 [key: string]: number;
             };
+            /**
+             * @description Điểm truy hồi cao nhất — độ liên quan đoạn ↔ câu hỏi, đo TRƯỚC khi sinh. Khác
+             *     `groundednessScore` (câu trả lời có bám đoạn không, đo SAU khi sinh): truy hồi tốt mà mô hình
+             *     vẫn bịa là trường hợp có thật. Giúp đọc lượt từ chối (UC025 bước 4).
+             */
+            retrievalTopScore?: number | null;
             /** @description Độ bám nguồn. Dưới ngưỡng thì câu trả lời bị hủy, không gửi cho khách. */
             groundednessScore?: number | null;
             citations?: components["schemas"]["TrichDan"][];
@@ -6431,13 +6459,20 @@ export interface components {
              */
             cached: boolean;
             /**
+             * @description "Trả lời tạm" — LLM không phục vụ được, câu trả lời là trích nguyên văn đoạn liên quan nhất
+             *     (UC023 8.2). Vẫn là lượt trả lời được, nên phải tách riêng.
+             */
+            degraded?: boolean;
+            /** @description Lượt này đề nghị chuyển cho nhân viên (UC014, UC025 3.1/3.3). */
+            handoff?: boolean;
+            /**
              * @description Câu trả lời **không đạt ngưỡng bám nguồn nên bị hủy, chưa từng gửi cho khách**. Giao
              *     diện phải nói rõ điều đó, nếu không người xem tưởng khách đã nhận được nó.
              *
-             *     UC023 8.2 đòi "lưu lại trường hợp này để phân tích". **Không có cột riêng** — đây là
-             *     trường suy ra: `is_answered = false ? response_text : null`. `is_answered` vốn đã mang
-             *     đúng nghĩa "câu trả lời có tới khách hay không", nên một cột thứ hai chỉ để lặp lại
-             *     điều đó là chỗ hai nguồn sự thật bắt đầu lệch nhau.
+             *     UC023 8.2 đòi "lưu lại trường hợp này để phân tích". **Không có cột riêng** — trường suy ra:
+             *     lượt `LOW_CONFIDENCE` đã gọi LLM và có điểm bám nguồn thì `response_text` là câu ĐÃ SINH bị
+             *     huỷ. Sửa ở GD2: công thức cũ `is_answered = false ? response_text : null` hiện nhầm câu MẪU
+             *     từ chối (mà khách ĐÃ nhận) ở mọi lượt `NOT_COVERED`/`OUT_OF_SCOPE_DATA` thành "câu bị huỷ".
              */
             discardedAnswer?: string | null;
             errorCode?: string | null;
@@ -6448,7 +6483,13 @@ export interface components {
              *     hiểu vì sao tác tử AI trả lời như vậy.
              */
             toolCalls?: components["schemas"]["NhatKyGoiCongCu"][];
+            /** @description Đánh giá mới nhất của người (khách hoặc nhân viên); đủ cả danh sách ở `feedbacks`. */
             feedback?: components["schemas"]["DanhGiaAi"] | null;
+            /**
+             * @description GD2 — mọi đánh giá của NGƯỜI cho lượt này, mới nhất trước: tối đa một của khách và một của
+             *     mỗi nhân viên (luồng phụ 2.1). Nhãn của bộ chấm tự động không có ở đây.
+             */
+            feedbacks?: components["schemas"]["DanhGiaAi"][];
             /** Format: date-time */
             createdAt: string;
         };
@@ -6459,13 +6500,24 @@ export interface components {
             rating: "POSITIVE" | "NEGATIVE";
             reasonCode?: components["schemas"]["LyDoDanhGia"] | null;
             comment?: string | null;
+            /** @description Câu trả lời đúng do nhân viên sửa (UC027 bước 4, 8). Khách không nhập được. */
+            correctedAnswer?: string | null;
             /**
              * @description Tách riêng khi tổng hợp — nhân viên và khách hàng đánh giá theo tiêu chí khác nhau
              * @enum {string}
              */
             ratedByType: "AGENT" | "CUSTOMER";
+            /**
+             * Format: uuid
+             * @description Mã nhân viên đã đánh giá — để giao diện nhận ra đánh giá của chính mình (sửa lại, 2.1).
+             */
+            ratedByUserId?: string | null;
+            /** @description Tên nhân viên; `null` với đánh giá của khách. */
             ratedByName?: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Lần ghi gần nhất — đánh giá lại cập nhật dòng cũ và đẩy mốc này lên.
+             */
             createdAt: string;
         };
         SuKienAnToan: {
@@ -6934,8 +6986,14 @@ export interface components {
             /**
              * @description Con số cho phép viết "trên N hội thoại thực tế, tỉ lệ phản hồi tích cực là X%" — câu mà
              *     phần lớn đồ án không viết được vì không lưu dữ liệu đánh giá.
+             *
+             *     **Nguồn: ai-service `GET /v1/ai/quality`, không phải `metrics_daily`** (chốt Q2, GD2): số khen ÷
+             *     số đánh giá của khách + nhân viên (cộng tử với tử, mẫu với mẫu; nhãn máy `AUTO_EVAL` không
+             *     tính), gom theo ngày CỦA LƯỢT. Mẫu số là số lượt ĐÃ có đánh giá, không phải tổng số lượt (đặc
+             *     tả UC027); một lượt được hai phía đánh giá góp hai. Bộ lọc `modelVersion` không áp cho ô này.
              */
             positiveFeedbackRate?: number;
+            /** @description Mẫu số của `positiveFeedbackRate`. 0 khi chưa ai đánh giá hoặc ai-service lỗi (xem `errorMessage`). */
             feedbackCount?: number;
             cachedRate?: number;
             avgGroundedness?: number | null;
@@ -6956,6 +7014,10 @@ export interface components {
                 [key: string]: number;
             };
             modelVersions?: string[];
+            /**
+             * @description Có khi ai-service không trả được số đánh giá — riêng ô "Phản hồi tích cực" trống, các ô khác
+             *     (đọc từ `metrics_daily`) vẫn đúng. Màn không báo lỗi cả trang.
+             */
             errorMessage?: string | null;
         };
         BanGhiKiemToan: {

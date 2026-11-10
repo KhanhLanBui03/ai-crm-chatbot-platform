@@ -43,10 +43,14 @@ export interface BoLocGoiCongCu {
 export interface BoLocLuotXuLy {
   nhanh?: NhanhXuLyAi
   daTuChoi?: boolean
+  /** UC027 bước 8 — lượt có đánh giá của người mang giá trị này ("lượt bị chê" = NEGATIVE). */
+  danhGia?: 'POSITIVE' | 'NEGATIVE'
   hoiThoaiId?: string
   tuNgay?: string
   denNgay?: string
   trang?: number
+  /** Cỡ trang — mặc định 10; hộp thư lấy cả hội thoại một lần để gắn đánh giá vào từng tin. */
+  co?: number
 }
 
 const CA_TOOL_CALL = { type: 'ToolCall' as const, id: 'DANH-SACH' }
@@ -160,11 +164,12 @@ export const aiAgentApi = apiSlice.injectEndpoints({
         params: {
           route: bo.nhanh,
           refused: bo.daTuChoi,
+          rating: bo.danhGia,
           conversationId: bo.hoiThoaiId,
           from: bo.tuNgay,
           to: bo.denNgay,
           page: bo.trang ?? 0,
-          size: 10,
+          size: bo.co ?? 10,
         },
       }),
       providesTags: ['TuongTacAI'],
@@ -177,6 +182,8 @@ export const aiAgentApi = apiSlice.injectEndpoints({
         rating: 'POSITIVE' | 'NEGATIVE'
         reasonCode?: LyDoDanhGia | null
         comment?: string | null
+        /** UC027 bước 4 — câu trả lời đúng, chỉ nhân viên nhập. */
+        correctedAnswer?: string | null
       }
     >({
       query: ({ id, ...than }) => ({

@@ -31,8 +31,28 @@ export const CSS = `
 .tin.bot, .tin.nv { align-self: flex-start; background: #fff; border: 1px solid #e5e7eb; border-bottom-left-radius: 4px; }
 .tin.he-thong { align-self: center; background: #eef2ff; color: #3730a3; font-size: 12.5px; text-align: center; max-width: 95%; }
 .nhan { font-size: 11px; color: #6b7280; margin-bottom: 2px; }
-.nguon { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e5e7eb; font-size: 12px; color: #4b5563; }
+.nguon { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e5e7eb; font-size: 12px; color: #4b5563;
+  white-space: normal; display: flex; flex-direction: column; gap: 3px; }
 .nguon b { font-weight: 600; }
+.nguon summary { cursor: pointer; color: #1f2937; text-decoration: underline; text-underline-offset: 2px; }
+.nguon .trich { margin-top: 4px; padding: 6px 8px; background: #f3f4f6; border-radius: 6px; color: #374151; line-height: 1.4; }
+.nhan.tam { display: inline-block; background: #fef3c7; color: #92400e; border-radius: 6px; padding: 1px 6px; font-size: 11px; margin-bottom: 4px; }
+.danh-gia { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e5e7eb; font-size: 12px; color: #4b5563; white-space: normal; }
+.danh-gia .hang-dg { display: flex; align-items: center; gap: 4px; }
+.danh-gia .hoi { flex: 1; }
+.danh-gia .nut-dg { background: none; border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer; padding: 2px 7px; font-size: 14px; line-height: 1.4; }
+.danh-gia .nut-dg:disabled { opacity: .5; cursor: default; }
+.danh-gia .nut-dg[aria-pressed=true] { border-color: var(--mau); }
+.danh-gia .form-dg { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.danh-gia .ly-do { display: flex; flex-wrap: wrap; gap: 4px; }
+.danh-gia .chon { background: #fff; border: 1px solid #d1d5db; border-radius: 999px; padding: 3px 9px; font-size: 12px; cursor: pointer; color: #374151; }
+.danh-gia .chon[aria-checked=true] { background: var(--mau); border-color: var(--mau); color: #fff; }
+.danh-gia textarea { border: 1px solid #d1d5db; border-radius: 8px; padding: 6px 8px; font-size: 12.5px; resize: none; }
+.danh-gia .gui { align-self: flex-end; background: var(--mau); color: #fff; border: none; border-radius: 8px; padding: 5px 12px; cursor: pointer; font-weight: 600; font-size: 12.5px; }
+.danh-gia .gui:disabled { opacity: .5; cursor: default; }
+.danh-gia .loi-dg { color: #991b1b; margin-top: 4px; }
+.danh-gia .loi-dg[hidden] { display: none; }
+.danh-gia .cam-on { color: #065f46; }
 .dang-go { align-self: flex-start; color: #6b7280; font-size: 12.5px; font-style: italic; }
 
 .loi { margin: 0 14px 8px; padding: 8px 10px; border-radius: 8px; background: #fef2f2; color: #991b1b; font-size: 12.5px; }

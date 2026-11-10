@@ -16,6 +16,19 @@ export interface TinNhan {
   content: string
   citations: TrichDan[]
   sentAt: string
+  /** Tin của tác tử gắn được với một lượt AI — hiện 👍/👎 (UC027 bước 1). Tin tự tạo ở trình duyệt: không có. */
+  rateable?: boolean
+  /** "Trả lời tạm": AI tạm không trả lời được, câu là trích nguyên văn tài liệu (UC023 8.2). */
+  degraded?: boolean
+}
+
+export type LyDoChe = 'WRONG_INFO' | 'IRRELEVANT' | 'INCOMPLETE' | 'BAD_TONE'
+
+/** Khách đánh giá một câu trả lời (UC027). Chê thì bắt buộc có lý do — máy chủ kiểm lại (422). */
+export interface YeuCauDanhGia {
+  rating: 'POSITIVE' | 'NEGATIVE'
+  reasonCode?: LyDoChe
+  comment?: string
 }
 
 export interface GiaoDien {
@@ -80,6 +93,11 @@ export class WidgetApi {
   /** Khách để lại tên / SĐT / email kèm đồng ý lưu dữ liệu (bổ sung UC010). */
   deLaiThongTin(token: string, tt: ThongTinLienHe): Promise<KetQuaLuot & { infoShared: boolean }> {
     return this.goi('POST', '/api/v1/widget/contact-info', token, tt)
+  }
+
+  /** UC027 — 👍/👎 một câu trả lời. Bấm lại thì máy chủ cập nhật đánh giá cũ, không tạo thêm. */
+  danhGia(token: string, messageId: string, yc: YeuCauDanhGia): Promise<{ message: string }> {
+    return this.goi('POST', `/api/v1/widget/messages/${encodeURIComponent(messageId)}/feedback`, token, yc)
   }
 
   tinMoi(token: string, sau: string | null): Promise<KetQuaLuot> {

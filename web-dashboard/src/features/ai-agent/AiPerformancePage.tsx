@@ -53,6 +53,8 @@ export function AiPerformancePage() {
   const kpi = useMemo<TheKpi[]>(() => {
     if (!d) return []
     const coDanhGia = (d.feedbackCount ?? 0) > 0
+    // GD2 (chốt Q2): ô này lấy từ ai-service; ai-service lỗi thì riêng ô này trống, các ô khác vẫn có số
+    const loiDanhGia = d.errorMessage ?? null
     return [
       {
         nhan: 'Lượt xử lý',
@@ -69,9 +71,11 @@ export function AiPerformancePage() {
         nhan: 'Phản hồi tích cực',
         // 0 lượt đánh giá thì "0%" là nói sai — chưa ai đánh giá chứ không phải mọi đánh giá đều xấu
         giaTri: coDanhGia ? phanTram(d.positiveFeedbackRate) : '—',
-        phuChu: coDanhGia
-          ? `trên ${so(d.feedbackCount ?? 0)} lượt đánh giá của nhân viên và khách`
-          : 'Chưa có lượt đánh giá nào',
+        phuChu: loiDanhGia
+          ? 'Tạm không lấy được số đánh giá — thử tải lại sau'
+          : coDanhGia
+            ? `trên ${so(d.feedbackCount ?? 0)} lượt đánh giá của nhân viên và khách`
+            : 'Chưa có lượt đánh giá nào',
       },
       {
         nhan: 'Tỉ lệ từ chối',
