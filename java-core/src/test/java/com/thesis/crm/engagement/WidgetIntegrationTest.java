@@ -154,6 +154,67 @@ class WidgetIntegrationTest extends EngagementIntegrationTestBase {
         }
     }
 
+    // ── Đánh giá câu trả lời (UC027, GD2) ──────────────────────────────────────
+
+    @Test
+    void guiTin_ghiMaLuotVaoCot_tinBotDanhGiaDuoc_tinKhachKhong() throws Exception {
+        String token = newToken(KEY_W, ORIGIN_W);
+        JsonNode turn = turnOf(send(token, ORIGIN_W, "gói pro bao nhiêu tiền?").andExpect(status().isOk()));
+        JsonNode khach = turn.get("messages").get(0);
+        JsonNode bot = turn.get("messages").get(1);
+        assertThat(khach.get("rateable").asBoolean()).isFalse();
+        assertThat(bot.get("rateable").asBoolean()).isTrue();
+        assertThat(bot.get("degraded").asBoolean()).isFalse();
+        assertThat(sqlRow("SELECT ai_interaction_id::text FROM engagement.messages WHERE id = ?",
+                UUID.fromString(bot.get("id").asText()))).isEqualTo(FakeAiServer.INTERACTION_ID);
+    }
+
+    @Test
+    void traLoiTam_coCoDegraded() throws Exception {
+        AI.respond(FakeAiServer.degraded("Dạ em gửi nội dung liên quan nhất trong tài liệu."));
+        String token = newToken(KEY_W, ORIGIN_W);
+        JsonNode bot = turnOf(send(token, ORIGIN_W, "bảo hành bao lâu").andExpect(status().isOk()))
+                .get("messages").get(1);
+        assertThat(bot.get("degraded").asBoolean()).isTrue();
+    }
+
+    @Test
+    void khachDanhGia_chuyenTiepCUSTOMER_khongNguoiDanhGia() throws Exception {
+        String token = newToken(KEY_W, ORIGIN_W);
+        String bot = turnOf(send(token, ORIGIN_W, "gói pro bao nhiêu tiền?")).get("messages").get(1)
+                .get("id").asText();
+        danhGia(token, ORIGIN_W, bot, "{\"rating\":\"NEGATIVE\",\"reasonCode\":\"IRRELEVANT\",\"comment\":\"lạc đề\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.message").value("Cảm ơn bạn đã đánh giá."));
+        assertThat(AI.lastFeedbackPath.get()).isEqualTo("/v1/ai-interactions/" + FakeAiServer.INTERACTION_ID + "/feedback");
+        assertThat(AI.lastFeedbackTenant.get()).isEqualTo(TENANT_W.toString());
+        JsonNode than = json.readTree(AI.lastFeedbackBody.get());
+        assertThat(than.get("rater_type").asText()).isEqualTo("CUSTOMER");
+        assertThat(than.get("rater_user_id").isNull()).isTrue();
+        assertThat(than.get("rating").asInt()).isEqualTo(-1);
+        assertThat(than.get("reason_code").asText()).isEqualTo("IRRELEVANT");
+        assertThat(than.get("corrected_answer").isNull()).isTrue();
+    }
+
+    @Test
+    void khachDanhGia_cheThieuLyDo422_tinKhachKhac404_tinCuaChinhKhach404() throws Exception {
+        String token = newToken(KEY_W, ORIGIN_W);
+        JsonNode turn = turnOf(send(token, ORIGIN_W, "gói pro bao nhiêu tiền?"));
+        String khach = turn.get("messages").get(0).get("id").asText();
+        String bot = turn.get("messages").get(1).get("id").asText();
+        int truoc = AI.feedbackCalls.get();
+
+        danhGia(token, ORIGIN_W, bot, "{\"rating\":\"NEGATIVE\"}")
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("REASON_REQUIRED"));
+        // Tin của chính khách (không phải câu trả lời) — không đánh giá được
+        danhGia(token, ORIGIN_W, khach, "{\"rating\":\"POSITIVE\"}").andExpect(status().isNotFound());
+        // Khách khác cùng kênh biết mã tin cũng không đánh giá được
+        String khac = newToken(KEY_W, ORIGIN_W);
+        danhGia(khac, ORIGIN_W, bot, "{\"rating\":\"POSITIVE\"}").andExpect(status().isNotFound());
+        assertThat(AI.feedbackCalls.get()).isEqualTo(truoc);
+    }
+
     @Test
     void taiLaiTrang_cungToken_khoiPhucLichSu() throws Exception {
         String token = newToken(KEY_W, ORIGIN_W);
@@ -523,6 +584,11 @@ class WidgetIntegrationTest extends EngagementIntegrationTestBase {
             req.header("X-Widget-Token", token);
         }
         return mvc.perform(req);
+    }
+
+    private ResultActions danhGia(String token, String origin, String messageId, String body) throws Exception {
+        return mvc.perform(post("/api/v1/widget/messages/" + messageId + "/feedback").header("Origin", origin)
+                .header("X-Widget-Token", token).contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
     private ResultActions thongTin(String token, String origin, String body) throws Exception {

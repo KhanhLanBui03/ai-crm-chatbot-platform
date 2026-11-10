@@ -32,8 +32,16 @@ public class AiChatClient {
 
     public record Citation(String chunkId, String documentId, String title, String snippet) {}
 
+    /**
+     * @param interactionId  khoá chính lượt ở {@code ai.ai_interactions} — ghi vào
+     *                       {@code messages.ai_interaction_id} để đánh giá UC027 gắn đúng lượt; {@code null}
+     *                       khi ai-service không trả (phiên bản cũ) thì tin không đánh giá được
+     * @param refusalReason  NOT_COVERED · OUT_OF_SCOPE_DATA · LOW_CONFIDENCE · SAFETY_PROBE khi từ chối (UC025)
+     * @param degraded       LLM không phục vụ được, câu là trích nguyên văn đoạn liên quan nhất (UC023 8.2)
+     */
     public record AiReply(String answer, String route, boolean refused, boolean handoff,
-                          List<Citation> citations) {}
+                          List<Citation> citations, UUID interactionId, String refusalReason,
+                          boolean degraded) {}
 
     /** Một tin trong lịch sử gửi kèm: {@code role} là user/assistant như ai-service mong đợi. */
     public record Turn(String role, String content) {}
@@ -82,10 +90,22 @@ public class AiChatClient {
                     body.path("route").asText("FALLBACK"),
                     body.path("refused").asBoolean(false),
                     body.path("handoff").asBoolean(false),
-                    citations));
+                    citations,
+                    uuid(body.path("interaction_id").asText(null)),
+                    body.path("refusal_reason").asText(null),
+                    body.path("degraded").asBoolean(false)));
         } catch (RuntimeException e) {
             log.warn("Gọi ai-service thất bại (trace {}): {}", traceId, e.toString());
             return Optional.empty();
+        }
+    }
+
+    /** Sai dạng thì {@code null}: câu trả lời vẫn tới khách, chỉ mất khả năng đánh giá lượt đó. */
+    private static UUID uuid(String s) {
+        try {
+            return s == null ? null : UUID.fromString(s);
+        } catch (IllegalArgumentException e) {
+            return null;
         }
     }
 }

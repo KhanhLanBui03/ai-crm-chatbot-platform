@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -71,6 +72,16 @@ public class WidgetController {
             @RequestHeader(value = "X-Widget-Token", required = false) String token,
             @RequestHeader(value = "Origin", required = false) String origin) {
         return ResponseEntity.ok(ApiResponse.ok(service.shareContactInfo(token, origin, body)));
+    }
+
+    /** UC027 — khách 👍/👎 một câu trả lời của tác tử. 404 nếu tin không phải câu trả lời của chính khách. */
+    @PostMapping("/messages/{messageId}/feedback")
+    public ResponseEntity<ApiResponse<WidgetDtos.FeedbackResponse>> feedback(
+            @PathVariable UUID messageId,
+            @RequestBody(required = false) WidgetDtos.FeedbackRequest body,
+            @RequestHeader(value = "X-Widget-Token", required = false) String token,
+            @RequestHeader(value = "Origin", required = false) String origin) {
+        return ResponseEntity.ok(ApiResponse.ok(service.rate(token, origin, messageId, body)));
     }
 
     @PostMapping("/handoff")

@@ -23,9 +23,24 @@ public final class WidgetDtos {
 
     public record CitationDto(String documentId, String title, String snippet) {}
 
-    /** {@code senderType}: CUSTOMER / BOT / AGENT / SYSTEM. */
+    /**
+     * {@code senderType}: CUSTOMER / BOT / AGENT / SYSTEM.
+     *
+     * @param rateable tin BOT gắn được với một lượt AI — widget hiện 👍/👎 (UC027 bước 1)
+     * @param degraded câu "trả lời tạm": LLM không phục vụ được, câu là trích nguyên văn tài liệu (UC023 8.2)
+     */
     public record MessageDto(UUID id, String senderType, String content, List<CitationDto> citations,
-                             Instant sentAt) {}
+                             Instant sentAt, boolean rateable, boolean degraded) {}
+
+    /**
+     * Khách đánh giá một câu trả lời (UC027 bước 2–4). Không có câu trả lời đúng — chỉ nhân viên sửa được.
+     *
+     * @param rating     {@code POSITIVE} | {@code NEGATIVE}
+     * @param reasonCode bắt buộc khi {@code NEGATIVE}: WRONG_INFO · IRRELEVANT · INCOMPLETE · BAD_TONE
+     */
+    public record FeedbackRequest(String rating, String reasonCode, String comment) {}
+
+    public record FeedbackResponse(String message) {}
 
     /**
      * {@code status}: ACTIVE — hiện khung chat; SUSPENDED — doanh nghiệp bị khoá / hết thuê bao /

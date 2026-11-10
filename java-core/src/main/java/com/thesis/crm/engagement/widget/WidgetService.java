@@ -3,8 +3,12 @@ package com.thesis.crm.engagement.widget;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.thesis.crm.client.AiInteractionClient;
+import com.thesis.crm.client.AiServiceErrors;
+import com.thesis.crm.client.AiServiceException;
 import com.thesis.crm.common.audit.AuditLogWriter;
 import com.thesis.crm.common.exception.AppException;
+import com.thesis.crm.common.exception.BusinessException;
 import com.thesis.crm.engagement.assignment.AssignmentService;
 import com.thesis.crm.engagement.widget.AiChatClient.AiReply;
 import com.thesis.crm.engagement.widget.AiChatClient.Turn;
@@ -13,6 +17,8 @@ import com.thesis.crm.engagement.widget.WidgetDtos.ContactInfoRequest;
 import com.thesis.crm.engagement.widget.WidgetDtos.ContactInfoResponse;
 import com.thesis.crm.engagement.widget.WidgetDtos.Appearance;
 import com.thesis.crm.engagement.widget.WidgetDtos.CitationDto;
+import com.thesis.crm.engagement.widget.WidgetDtos.FeedbackRequest;
+import com.thesis.crm.engagement.widget.WidgetDtos.FeedbackResponse;
 import com.thesis.crm.engagement.widget.WidgetDtos.MessageDto;
 import com.thesis.crm.engagement.widget.WidgetDtos.SessionResponse;
 import com.thesis.crm.engagement.widget.WidgetDtos.TurnResponse;
@@ -72,10 +78,12 @@ public class WidgetService {
     private final TransactionTemplate tx;
     private final ObjectMapper json;
     private final AssignmentService assignment;
+    private final AiInteractionClient danhGia;
 
     public WidgetService(WidgetRepository repo, WidgetTokenService tokens, WidgetRateLimiter limiter,
                          AiChatClient ai, TenantTransactionScope scope, AuditLogWriter audit,
-                         TransactionTemplate tx, ObjectMapper json, AssignmentService assignment) {
+                         TransactionTemplate tx, ObjectMapper json, AssignmentService assignment,
+                         AiInteractionClient danhGia) {
         this.repo = repo;
         this.tokens = tokens;
         this.limiter = limiter;
@@ -85,6 +93,7 @@ public class WidgetService {
         this.tx = tx;
         this.json = json;
         this.assignment = assignment;
+        this.danhGia = danhGia;
     }
 
     // ── Mở phiên (UC009 bước 10–11) ─────────────────────────────────────────────
@@ -218,8 +227,9 @@ public class WidgetService {
             }
             AiReply r = reply.get();
             if (!r.answer().isBlank()) {
+                // ai_interaction_id vào CỘT (không vào metadata): khoá để đánh giá UC027 gắn đúng lượt
                 out.add(toDto(repo.insertMessage(s.tenantId(), acc.conversationId(), "BOT", "OUTBOUND",
-                        r.answer(), botMetadata(r))));
+                        r.answer(), botMetadata(r), r.interactionId())));
             }
             if (r.handoff()) {
                 // ai-service chỉ báo chuyển giao ở nhánh HANDOFF (khách xin gặp người / khiếu nại) và
@@ -315,6 +325,60 @@ public class WidgetService {
             });
             return new ContactInfoResponse(true, conv.map(ConversationRow::status).orElse(null), out);
         });
+    }
+
+    // ── Khách đánh giá câu trả lời (UC027 bước 1–5) ─────────────────────────────
+
+    private static final Set<String> LY_DO_CHE = Set.of("WRONG_INFO", "IRRELEVANT", "INCOMPLETE", "BAD_TONE");
+    private static final int MAX_NHAN_XET = 1000;
+
+    /**
+     * Khách 👍/👎 một tin BOT. Ba điều kiện kiểm trong transaction dưới RLS: tin thuộc hội thoại của CHÍNH
+     * khách giữ token (không phải mọi khách của kênh), là tin BOT, có {@code ai_interaction_id}. Sai một
+     * trong ba thì 404 như tin không tồn tại. Gọi ai-service NGOÀI transaction, với
+     * {@code rater_type = CUSTOMER} — loại người đánh giá do máy chủ đặt, không nhận từ trình duyệt.
+     *
+     * <p>Bấm lại thì ai-service cập nhật dòng cũ (luồng phụ 2.1): đổi ý từ 👍 sang 👎 không sinh dòng thứ hai.
+     */
+    public FeedbackResponse rate(String token, String origin, UUID messageId, FeedbackRequest req) {
+        WidgetSession s = tokens.require(token);
+        limiter.checkMessage(s.visitorId().toString());
+        String rating = req == null ? null : req.rating();
+        if (!"POSITIVE".equals(rating) && !"NEGATIVE".equals(rating)) {
+            throw new AppException("Đánh giá chỉ nhận Hữu ích hoặc Chưa ổn.", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        boolean khen = "POSITIVE".equals(rating);
+        String lyDo = khen || req.reasonCode() == null || req.reasonCode().isBlank() ? null : req.reasonCode();
+        if (!khen && lyDo == null) {
+            throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY, "REASON_REQUIRED",
+                    "Bạn chọn giúp một lý do để cửa hàng cải thiện nhé.");
+        }
+        if (lyDo != null && !LY_DO_CHE.contains(lyDo)) {
+            throw new AppException("Lý do đánh giá không hợp lệ.", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        String nhanXet = req.comment() == null || req.comment().isBlank() ? null : req.comment().strip();
+        if (nhanXet != null && nhanXet.codePointCount(0, nhanXet.length()) > MAX_NHAN_XET) {
+            throw new AppException("Nhận xét tối đa 1.000 ký tự.", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+
+        UUID luot = tx.execute(st -> {
+            scope.apply(s.tenantId());
+            requireAccess(s, origin);
+            return repo.messageOfVisitor(s.tenantId(), s.channelId(), s.visitorId().toString(), messageId)
+                    .filter(m -> "BOT".equals(m.senderType()))
+                    .map(MessageRow::aiInteractionId)
+                    .orElse(null);
+        });
+        if (luot == null) {
+            throw new AppException("Không tìm thấy câu trả lời để đánh giá.", HttpStatus.NOT_FOUND);
+        }
+        try {
+            danhGia.feedback(s.tenantId(), luot, new AiInteractionClient.FeedbackRequest(
+                    khen ? 1 : -1, lyDo, "CUSTOMER", null, nhanXet, null));
+        } catch (AiServiceException ex) {
+            throw AiServiceErrors.dich(ex);
+        }
+        return new FeedbackResponse("Cảm ơn bạn đã đánh giá.");
     }
 
     // ── Hỏi tin mới (nhân viên trả lời, UC013) ──────────────────────────────────
@@ -437,6 +501,9 @@ public class WidgetService {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("route", r.route());
         m.put("refused", r.refused());
+        // UC025 — lý do từ chối; UC023 8.2 — "trả lời tạm". Hộp thư và widget đọc lại từ đây.
+        m.put("refusalReason", r.refusalReason());
+        m.put("degraded", r.degraded());
         m.put("citations", r.citations().stream().map(c -> {
             Map<String, Object> x = new LinkedHashMap<>();
             x.put("chunkId", c.chunkId());
@@ -453,12 +520,15 @@ public class WidgetService {
     }
 
     private MessageDto toDto(MessageRow m) {
+        JsonNode meta = readJson(m.metadataJson());
         List<CitationDto> citations = new ArrayList<>();
-        for (JsonNode c : readJson(m.metadataJson()).path("citations")) {
+        for (JsonNode c : meta.path("citations")) {
             citations.add(new CitationDto(c.path("documentId").asText(null), c.path("title").asText(null),
                     c.path("snippet").asText(null)));
         }
-        return new MessageDto(m.id(), m.senderType(), m.content(), citations, m.sentAt());
+        boolean rateable = "BOT".equals(m.senderType()) && m.aiInteractionId() != null;
+        return new MessageDto(m.id(), m.senderType(), m.content(), citations, m.sentAt(), rateable,
+                meta.path("degraded").asBoolean(false));
     }
 
     private static Appearance appearance(JsonNode c, String tenantName) {
