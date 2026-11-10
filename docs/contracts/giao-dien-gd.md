@@ -1,4 +1,4 @@
-# Hợp đồng đợt tích hợp giao diện GD1–GD4 (nháp 24/10/2026)
+# Hợp đồng đợt tích hợp giao diện GD1–GD4 (nháp 24/10/2026, cập nhật 10/11)
 
 ⚠️ Nháp phía module AI. Kế hoạch đợt: [`docs/plan/ke-hoach-tich-hop-giao-dien.md`](../plan/ke-hoach-tich-hop-giao-dien.md)
 (mục 1 liệt kê 11 thay đổi). **Người dùng chốt 24/10:** 8 UC AI là việc của Dev A từ dashboard tới
@@ -25,10 +25,21 @@ Thứ tự ưu tiên khi lệch: đặc tả UC > `dashboard-api.yaml` > nháp n
 >    đổi `lockForConsumption`/`consume`.
 > 4. **`ListPage`** (dashboard) — thêm prop tuỳ chọn `loi`/`onThuLai`: truy vấn hỏng thì hiện
 >    "Không tải được dữ liệu" thay cho "chưa có dữ liệu". Màn nào không truyền thì y như cũ.
-> 5. Thấy khi chạy thật, **không thuộc GD1, chưa sửa**: gateway không có route `/ws` và java-core chưa có
->    endpoint STOMP → WebSocket 404, thanh trên luôn "Mất kết nối"; `GET /api/v1/audit-logs` và
->    `GET /api/v1/tool-calls` trả **500** (không có controller — route lạ đang rơi vào handler chung
->    thành 500 thay vì 404); ai-service chưa tự đăng ký Eureka (java-core dùng danh sách dự phòng).
+> 5. **`features/audit/nhan.ts`** (màn nhật ký UC040 của bạn) — thêm 3 nhãn `DOCUMENT_UPDATED`,
+>    `DOCUMENT_REINDEXED`, `DOCUMENT_ARCHIVED` mà GD1 ghi. Trước đó màn hiện mã thô và bộ lọc "Hành động"
+>    không có ba mã này. Nhánh đã gộp `develop` (`4ae448d`), `mvn test` 283/283, đi lại đủ GD1 ngày 10/11.
+> 6. Thấy khi chạy thật, **không thuộc GD1, chưa sửa**:
+>    - **Thuê bao dùng thử hết hạn thì không gia hạn được** (UC006): `changePlan` chuyển `status` sang
+>      `ACTIVE` nhưng không dời `period_end`, và không job nào chuyển `TRIALING` → `EXPIRED`. Tenant hết hạn
+>      nhận 409 "Hãy gia hạn hoặc chọn gói" mà cả hai đường đều không cứu được. Tenant demo B hết hạn 01/11,
+>      mình đã dời `period_end` tới 31/12 bằng SQL trên CSDL dev để kiểm tiếp.
+>    - Gateway không có route `/ws` và java-core chưa có endpoint STOMP → WebSocket 404, thanh trên luôn
+>      "Mất kết nối".
+>    - `GET /api/v1/tool-calls` trả **500** (không có controller — route lạ rơi vào handler chung thành 500
+>      thay vì 404). `audit-logs` thì đã ổn sau PR UC040 của bạn.
+>    - `FormDialog`: `handleSubmit` `await onGui()` không bắt lỗi → mỗi lượt máy chủ từ chối (409/422) để
+>      lại một unhandled rejection trên console. Giao diện vẫn hiện lỗi đúng, chỉ là tiếng ồn.
+>    - ai-service chưa tự đăng ký Eureka (java-core dùng danh sách dự phòng).
 >
 > Còn mở cho GD2/GD3 (chưa đụng): mục 3–7, 10 của kế hoạch — `knowledge-gaps` sắp theo số khách,
 > `correctedAnswer`, đánh giá từ widget, tạo/xác minh yêu cầu xoá, `/internal/**` bằng

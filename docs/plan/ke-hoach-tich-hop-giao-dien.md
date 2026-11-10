@@ -120,6 +120,10 @@ Mấu chốt để vừa 4 ngày: mọi đường AI đi qua **một** lớp, kh
 > Làm thêm ngoài danh sách: trả hạn mức khi gỡ (ADR-0023 (f)), trạng thái lỗi tải cho `ListPage`, vá
 > `dashboard-api.yaml` + sinh lại kiểu. UC020 bước 8 chỉ kiểm được phần **ghi** kiểm toán (bằng CSDL) — màn
 > xem thuộc UC040 của Dev B, chưa có backend. Ảnh chụp: người dùng tự chụp.
+>
+> **✅ Chạy lại 10/11/2026 sau khi gộp `develop`** — đủ 16 cảnh trên giao diện, kể cả màn xem nhật ký (UC020
+> bước 8 nay kiểm trọn); `mvn test` 283/283. Người dùng chốt không chụp ảnh. Vá thêm 3 nhãn hành động trong
+> `features/audit/nhan.ts`; dời hạn thuê bao dùng thử của tenant B (hết 01/11) bằng SQL.
 
 ### Dựng stack (đầu phiên)
 

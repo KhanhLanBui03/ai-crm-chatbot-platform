@@ -8,21 +8,24 @@ trong DoD đã thử · (c) compile / typecheck / test sạch · (d) có dòng m
 
 ---
 
-## GD1 — Kho tri thức: UC018 · UC019 · UC020 (24/10/2026)
+## GD1 — Kho tri thức: UC018 · UC019 · UC020 (24/10/2026 · chạy lại 10/11/2026)
 
 **Nhánh** `feat/giao-dien-gd1-kho` (tách từ `e5cb8ff`). Kiểm bằng trình duyệt thật (Chrome không giao
 diện, Playwright điều khiển — script ở scratchpad, không vào repo), `VITE_USE_MOCK=false`, mọi lời gọi
-qua gateway `:8080`. Ảnh chụp: người dùng tự chụp lại — danh sách cảnh ở cuối mục.
+qua gateway `:8080`. Sau khi gộp `develop` đã đi lại đủ 16 cảnh — mục [Chạy lại sau khi gộp
+`develop`](#chạy-lại-sau-khi-gộp-develop-10112026). Không chụp ảnh: người dùng chốt 10/11 lượt chạy lại
+bằng trình duyệt tự động là đủ minh chứng.
 
 | | UC018 | UC019 | UC020 |
 |---|---|---|---|
 | (a) luồng chính trên giao diện | ✅ | ✅ | ✅ |
-| (b) luồng phụ, mã lỗi | ✅ 4.1 · 4.2 · 6.1 · 7.1 · 8.1 · 403 | ✅ 4.1 · hàng đợi chung · ngừng hỏi lại | ✅ 2.1 · 5.1 · 7 · 7.2 · 403 · 422 · 8 (*) |
+| (b) luồng phụ, mã lỗi | ✅ 4.1 · 4.2 · 6.1 · 7.1 · 8.1 · 403 | ✅ 4.1 · hàng đợi chung · ngừng hỏi lại | ✅ 2.1 · 5.1 · 7 · 7.2 · 403 · 422 · 8 |
 | (c) kiểm máy | ✅ | ✅ | ✅ |
 | (d) minh chứng | ✅ | ✅ | ✅ |
 
-(*) UC020 bước 8 **ghi** kiểm toán — đạt, kiểm bằng CSDL. Màn **xem** Nhật ký kiểm toán là của UC040
-(Dev B) và `GET /api/v1/audit-logs` chưa có controller (trả 500) — không mở được trên giao diện.
+UC020 bước 8: ngày 24/10 chỉ kiểm được phần **ghi** kiểm toán (bằng CSDL), vì màn xem thuộc UC040 (Dev B)
+khi đó chưa có backend. Ngày 10/11, sau khi gộp `develop` có `AuditLogController`, đã kiểm cả màn **xem**
+`/kiem-toan/nhat-ky` trên giao diện (cảnh 16).
 
 ### Môi trường
 
@@ -108,26 +111,68 @@ qua gateway `:8080`. Ảnh chụp: người dùng tự chụp lại — danh sá
 
 ### Thấy khi chạy, ngoài GD1 — đã báo Dev B, chưa sửa
 
-- WebSocket `/ws` 404: gateway không có route, java-core chưa có endpoint STOMP → thanh trên luôn "Mất kết nối".
-- `GET /api/v1/tool-calls` (MCP, đã hoãn) và `GET /api/v1/audit-logs` (UC040) trả **500**: không có controller,
-  route lạ rơi vào handler chung thành 500 thay vì 404.
+- WebSocket `/ws` 404: gateway không có route, java-core chưa có endpoint STOMP → thanh trên luôn "Mất kết nối"
+  (10/11 vẫn vậy).
+- `GET /api/v1/tool-calls` (MCP, đã hoãn) trả **500**: không có controller, route lạ rơi vào handler chung thành
+  500 thay vì 404 (10/11 vẫn vậy). `GET /api/v1/audit-logs` (UC040) **đã có** controller sau khi gộp `develop` —
+  10/11 trả 200.
 - ai-service chưa tự đăng ký Eureka (`src/api/eureka.py` còn là khung).
+- *(10/11)* **Thuê bao dùng thử hết hạn thì không có đường nào gia hạn.** `changePlan` đổi `status` sang `ACTIVE`
+  nhưng không dời `period_end`; không job nào chuyển `TRIALING` sang `EXPIRED`. Tenant hết hạn nhận câu "Hãy gia
+  hạn hoặc chọn gói" mà cả hai đường đều không cứu được — UC006 của Dev B.
+- *(10/11)* `FormDialog` (mẫu M3) `await onGui()` trong `handleSubmit` mà không bắt lỗi → mỗi lượt máy chủ từ chối
+  (409, 422…) để lại một promise bị từ chối không ai xử lý (`pageerror` trên trình duyệt). Giao diện vẫn hiện lỗi
+  đúng qua `loi` — chỉ là tiếng ồn trên console, gặp ở mọi biểu mẫu.
 
 ### Dữ liệu sau khi kiểm
 
 Kho tenant B về đúng 2 tài liệu nha khoa (mọi tài liệu thử đã gỡ bằng chính thao tác gỡ trên giao diện);
-hạn mức `DOCUMENT` = 2, `STORAGE_MB` = 3 861 byte (= 1 886 + 1 975). Tài liệu thử còn ở `ARCHIVED`,
-0 đoạn — không ảnh hưởng truy hồi. Thêm mới, để dùng tiếp ở GD2/GD3: tài khoản nhân viên B và tenant
-"Phòng khám trống GD1".
+hạn mức `DOCUMENT` = 2, `STORAGE_MB` = 3 861 byte (= 1 886 + 1 975), `warned_at`/`blocked_at` trống — đúng
+cả sau lượt 24/10 lẫn lượt 10/11. Tài liệu thử còn ở `ARCHIVED`, 0 đoạn — không ảnh hưởng truy hồi. Thêm mới,
+để dùng tiếp ở GD2/GD3: tài khoản nhân viên B và tenant "Phòng khám trống GD1".
 
-### Cảnh cần chụp (người dùng tự chụp, đặt `docs/report/scr-gd1-*.png`)
+**Đổi tay 10/11:** `platform.tenant_subscriptions.period_end` của tenant B dời từ `2026-11-01 00:38:17+00` tới
+**31/12/2026** (vẫn `TRIALING`, gói `TRIAL`) để tải lên được — xem mục dưới. Tenant "Phòng khám trống GD1" hết
+hạn 07/11, giữ nguyên (chỉ dùng để đọc kho rỗng).
 
-1. Hộp thoại tải lên báo sai đuôi (4.1) · 2. 409 hạn mức trong hộp thoại (6.1) · 3. Màn tiến độ `FAILED`
-ảnh quét (8.1) · 4. Màn tiến độ `DONE` đủ 6 bước · 5. `/tri-thuc/tien-do` khi đang nạp lại ·
-6. Tìm "bao hanh" · 7. Chi tiết + bảng đoạn có mô hình nhúng · 8. 422 trùng tiêu đề · 9. Danh sách
-trong lúc nạp lại (v3 "Chờ nạp" + v2 "Sẵn sàng") · 10. Toast 409 · 11. Hộp xác nhận gỡ · 12. Lọc
-"Đã lưu trữ" · 13. Toast 502 khi ai-service tắt + danh sách "Không tải được dữ liệu" · 14. Toast 403 của
-nhân viên · 15. Kho rỗng (tenant mới).
+### Chạy lại sau khi gộp `develop` (10/11/2026)
+
+Nhánh đã gộp `develop` (`4ae448d`, gồm PR #43–#45 của Dev B: nhật ký kiểm toán UC040, chủ đề UC038, hạn mức
+theo ngày UC006). Đi lại đủ 16 cảnh trên giao diện thật, cùng cách kiểm như 24/10. CSDL: Track A V135 →
+**V139** (java-core tự chạy lúc khởi động), Track B V214 → **V215** (`scripts/migrate-ai.sh`).
+
+| Kiểm máy | Kết quả |
+|---|---|
+| `mvn -f java-core/pom.xml test` (cả bộ, cần Docker) | **283/283**, 24 lớp, 0 lỗi (24/10: 239 — thêm 44 ca của Dev B) |
+| `npm run typecheck` · `npm run build` (web-dashboard, sau khi vá nhãn) | sạch |
+
+| # | Thao tác | Kết quả |
+|---|---|---|
+| 1 | Chọn `bang-gia.xlsx` | "Định dạng .xlsx không được hỗ trợ. Nhận .pdf, .docx, .txt, .md, .html." — hộp thoại giữ nguyên, không có request tải lên |
+| 2 | Đặt `DOCUMENT` = 20/20 bằng SQL, tải PDF | 409 trong hộp thoại "Đã có 20/20 tài liệu theo gói. Hãy gỡ bớt…"; không tạo tài liệu. Lượt bị chặn đóng **cả hai** mốc `warned_at`, `blocked_at` (ADR-0023 (e)) — trả lại `used_value` = 2 và cả hai mốc về `NULL` |
+| 3 | Tải `ban-scan-thu.pdf` | `FAILED` · "PDF không có lớp chữ — có thể là bản scan, cần OCR trước khi tải lên" · mã `PARSE_NO_TEXT_EXTRACTED` |
+| 4 | Tải PDF có chữ, tiêu đề "Quy trình bảo hành thử 10-11" | `DONE` sau ~9 s, 11 đoạn; đủ 6 bước có dấu xong, không còn vòng xoay; 0 request trong 6 s sau `DONE` |
+| 5 | Nạp lại → mở ngay `/tri-thuc/tien-do` | việc "Nạp lại thủ công" của bản bóng — id mới `7e6d2d07…` ≠ `9336bc0c…` |
+| 6 | Gõ `bao hanh` | request `q=bao+hanh`; 2 dòng, cả hai "bảo hành" (tài liệu thử + "Chính sách bảo hành, trả góp và lịch hẹn") |
+| 7 | Bấm tài liệu | cột `# · Mục · Nội dung đoạn · Token · Mô hình nhúng`; `BAAI/bge-m3 int8-71e2aa91` từng đoạn; 10 đoạn/trang |
+| 8 | Đổi tiêu đề thành "Bảng giá dịch vụ nha khoa 2026" | `422 PATCH`, trong hộp thoại "Đã có tài liệu khác tên '…' ở version 1"; sửa lại mô tả thì "Đã cập nhật thông tin tài liệu." |
+| 9 | Về danh sách ngay lúc đó | v2 "Chờ nạp" 0 đoạn **và** v1 "Sẵn sàng" 11 đoạn cùng lúc |
+| 10 | Nạp lại rồi gỡ v1 khi v2 chưa xong | `409 POST …/reindex` + `409 DELETE`, toast "Tài liệu đang được xử lý (nạp hoặc nạp lại)…" |
+| 11 | v2 xong (~12 s) → chọn dòng → Gỡ khỏi kho | v1 đã biến khỏi danh sách; hộp xác nhận nói rõ AI thôi trích dẫn, câu trả lời cũ giữ trích dẫn, chuyển "Đã lưu trữ" |
+| 12 | Xác nhận, lọc "Đã lưu trữ" | "Đã gỡ 1 tài liệu khỏi kho tri thức."; thấy lại v2 (và v1, lưu trữ lúc đổi bản) |
+| 13 | Trang tài liệu quét → Ctrl+C ai-service → Gỡ; mở danh sách | `502 DELETE` + "Dịch vụ AI tạm thời không phản hồi. Thao tác chưa được thực hiện…"; danh sách "Không tải được dữ liệu" + "Thử lại". CSDL: vẫn `FAILED`, hạn mức không đổi |
+| 14 | Nhân viên `AGENT` bấm Gỡ | `403 DELETE` + "Vai trò hiện tại không được thực hiện thao tác này"; vẫn đọc được danh sách |
+| 15 | Tenant kho rỗng | "Kho tri thức đang trống" + nút "Tải lên tài liệu" |
+| 16 | Menu Nhật ký kiểm toán | 3 dòng mới "Sửa thông tin tài liệu tri thức" · "Nạp lại tài liệu tri thức" · "Gỡ tài liệu khỏi kho tri thức", đủ email người làm, giờ, IP; lọc theo hành động gửi `action=DOCUMENT_ARCHIVED` lên máy chủ. CSDL: đúng 3 dòng, không dòng nào cho các lượt 403/409/422/502; `DOCUMENT_UPDATED` chỉ ghi tên trường |
+
+**Hạn mức qua lượt chạy** (`DOCUMENT` · `STORAGE_MB` byte): 2 · 3 861 → tải 2 tệp: 4 · 823 205 → gỡ v2 sau nạp
+lại: 3 · 510 928 (−312 277, đúng cỡ tệp; bản bóng không bị đếm thêm) → gỡ bản quét: **2 · 3 861**. Phần trả hạn
+mức của GD1 vẫn đúng sau khi gộp thay đổi `UsageQuotaServiceImpl` của Dev B.
+
+| Hiện tượng | Nguyên nhân | Xử lý |
+|---|---|---|
+| Mọi lượt tải lên của tenant B: 409 "Doanh nghiệp chưa có gói dịch vụ đang hiệu lực…" | thuê bao `TRIAL` 14 ngày (18/10 → 01/11) đã hết hạn — đúng UC006, không do gộp code | dời `period_end` bằng SQL trên CSDL dev; ứng dụng không có đường gia hạn — đã báo Dev B (mục trên) |
+| Nhật ký kiểm toán hiện mã thô `DOCUMENT_*`; bộ lọc "Hành động" (29 lựa chọn) thiếu 3 mã của GD1 | `features/audit/nhan.ts` của Dev B rà mã lúc GD1 chưa vào `develop` | thêm 3 nhãn — chú thích trong tệp dặn "thêm hành động mới ở java-core thì thêm nhãn ở đây" |
 
 ### Phải giải thích được
 
