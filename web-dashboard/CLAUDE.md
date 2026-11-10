@@ -120,7 +120,7 @@ cứng giữ nguyên giá trị sáng — chữ tối trên nền `#171717`, và
 ## 9. Sáu mẫu màn hình + DataTable (ADR-0011)
 Màn mới **chọn mẫu trước**; bố cục riêng là màn "chữ ký" (như `InboxPage`, `DealsBoardPage`), phải có lý do.
 - **M1 `ListPage`** — danh sách. Props: `cot`, `trang: Page<T>`, `dangTai`, `timKiem`, `boLoc`/`giaTriBoLoc`/`onDoiBoLoc`/`onGoHetBoLoc`,
-  `sapXep`, `onDoiTrang`, `thaoTacChinh`/`thaoTacPhu`/`thaoTacHangLoat`, `khiChuaCoDuLieu`. **Đã lo sẵn — màn không tự làm lại:**
+  `sapXep`, `onDoiTrang`, `thaoTacChinh`/`thaoTacPhu`/`thaoTacHangLoat`, `khiChuaCoDuLieu`, `loi`/`onThuLai` (tuỳ chọn). **Đã lo sẵn — màn không tự làm lại:**
   trì hoãn ô tìm 300ms (`useTriHoan`), nút "Gỡ bộ lọc", cột hộp kiểm + thanh "Đã chọn N mục" **tự sinh khi khai `thaoTacHangLoat`**,
   chọn đúng loại `EmptyState`, `Pagination` (máy chủ đếm từ 0, hiển thị từ 1). Mẫu copy: `features/contacts/ContactsPage.tsx`.
   Màn chỉ lo reset `trang: 0` khi đổi từ khoá/bộ lọc (`ContactsPage.tsx:151`).
@@ -147,7 +147,8 @@ Màn mới **chọn mẫu trước**; bố cục riêng là màn "chữ ký" (nh
 - **Thao tác lẻ trên trang**: `await mutation(...).unwrap()` → `toast.success(...)`; lỗi bắt lại rồi
   `toast.error(laLoiTruyVan(loi) ? loi.message : 'Không chuyển được giai đoạn.')` (`DealDetailPage.tsx:53`). `toast.warning` khi đã làm xong nhưng
   có điều cần biết (`CreateContactDialog.tsx:95`). `import { toast } from 'sonner'`; `<Toaster>` gắn một lần ở `app/providers.tsx`.
-- **Lỗi tải trang**: các mẫu chưa có prop lỗi tải — xem mục 16 trước khi dựa vào chúng.
+- **Lỗi tải trang**: `ListPage` có `loi` + `onThuLai` (GD1) — có lỗi thì hiện "Không tải được dữ liệu" kèm câu của máy chủ
+  thay cho `EmptyState` "chưa có dữ liệu". Các mẫu khác chưa có — xem mục 16.
 
 ## 11. Dữ liệu
 - **RTK Query là cơ chế duy nhất cho state máy chủ** (ADR-0012): một `createApi` ở `api/apiSlice.ts`, mỗi nhóm một file `injectEndpoints`,
@@ -222,8 +223,8 @@ Màn mới **chọn mẫu trước**; bố cục riêng là màn "chữ ký" (nh
   không đổi được đích proxy (cần `loadEnv` hoặc biến môi trường của shell).
 
 **Hành vi dễ gây hiểu nhầm**
-- Lỗi tải bị nuốt: `ListPage`/`DataTable` không có prop lỗi → truy vấn hỏng hiện `EmptyState` "chưa có dữ liệu" kèm nút tạo mới. Chỉ `LoginPage`,
-  `VerifyEmailPage` đọc `isError`. `TenantProfilePage.tsx:69` `dangTai={truyVan.isLoading || !nhap}` → lỗi tải thành xương vô hạn.
+- Lỗi tải bị nuốt: `ListPage` đã có prop `loi` (GD1, mới dùng ở các màn kho tri thức); các màn M1 khác chưa truyền → truy vấn hỏng vẫn hiện
+  `EmptyState` "chưa có dữ liệu" kèm nút tạo mới. `LoginPage`, `VerifyEmailPage`, màn kho tri thức đọc `isError`. `TenantProfilePage.tsx:69` `dangTai={truyVan.isLoading || !nhap}` → lỗi tải thành xương vô hạn.
 - `ui/sonner.tsx` dùng `useTheme` của `next-themes` nhưng không có `ThemeProvider` → toast theo hệ điều hành, không theo nút chế độ của app.
   `useCheDo` chỉ chạy trong `AppShell` và `index.html` không đặt lớp sớm → màn đăng nhập không theo lựa chọn tối; khung đầu vẽ ở chế độ sáng.
 - Màu chuỗi dùng làm trạng thái: "Trực tuyến" = `bg-chart-2` (cam), "Đang nối" = `bg-chart-3` (`ChiBaoThoiGianThuc.tsx:11-13`);

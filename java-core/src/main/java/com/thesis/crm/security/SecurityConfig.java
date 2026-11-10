@@ -100,6 +100,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // UC018 tiền điều kiện: "có vai trò quản trị của doanh nghiệp".
                         .requestMatchers(HttpMethod.POST, "/api/v1/documents").hasRole("TENANT_ADMIN")
+                        // UC020: sửa · nạp lại · gỡ — 403 FORBIDDEN cho người không có vai trò quản trị.
+                        // Đọc danh sách, chi tiết, đoạn và tiến độ thì mọi nhân viên của doanh nghiệp.
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/documents/*").hasRole("TENANT_ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/documents/*").hasRole("TENANT_ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/documents/*/reindex").hasRole("TENANT_ADMIN")
                         // Bảng giá trên trang chủ công khai: chỉ tên gói, giá, hạn mức — thông tin vốn để quảng
                         // cáo. Để ở CHUỖI NÀY (không phải chuỗi công khai) để người đã đăng nhập vẫn được đọc
                         // token và đánh dấu "gói hiện tại" (SCR013).

@@ -105,6 +105,7 @@ export type The = Schemas['The']
 
 export type TaiLieu = Schemas['TaiLieu']
 export type TaiLieuChiTiet = Schemas['TaiLieuChiTiet']
+export type SuaTaiLieu = Schemas['SuaTaiLieu']
 export type CongViecNap = Schemas['CongViecNap']
 export type DoanTaiLieu = Schemas['DoanTaiLieu']
 export type KetQuaTruyHoi = Schemas['KetQuaTruyHoi']

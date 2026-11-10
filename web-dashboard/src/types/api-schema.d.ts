@@ -2724,6 +2724,11 @@ export interface paths {
          * SCR030 — danh sách tài liệu tri thức
          * @description UC020. Tài liệu thuộc schema `knowledge` của Track B, nhưng dashboard đọc **qua java-core**
          *     chứ không gọi thẳng ai-service — cùng lý do ADR-0002 cấm chiều ngược lại.
+         *
+         *     `size` mặc định **10** ở endpoint này (đặc tả UC020 "phân trang mặc định 10 bản ghi"), không
+         *     phải 25 của tham số chung. Mới nhất trước. Không gửi `status` thì **ẩn `ARCHIVED`** — tài liệu
+         *     đã gỡ không còn chi phối câu trả lời nào; lọc `status=ARCHIVED` để xem lại. Mọi nhân viên của
+         *     doanh nghiệp đọc được.
          */
         get: {
             parameters: {
@@ -2756,6 +2761,7 @@ export interface paths {
                         };
                     };
                 };
+                502: components["responses"]["AiKhongPhanHoi"];
             };
         };
         put?: never;
@@ -2770,7 +2776,9 @@ export interface paths {
          *     `description` lưu ở `knowledge.knowledge_documents.description` (V209) — UC018 bước 7
          *     gọi nó là "siêu dữ liệu do người dùng nhập".
          *
-         *     Vượt `plans.max_documents` hoặc vượt giới hạn dung lượng mỗi tệp thì 409.
+         *     Mã lỗi tách theo đặc tả UC018: 409 `DOCUMENT_QUOTA_EXCEEDED` / `STORAGE_MB_QUOTA_EXCEEDED`
+         *     (chạm hạn mức gói — mời gỡ bớt hoặc nâng gói), 413 `FILE_TOO_LARGE` (tệp > 20 MB — mời tách
+         *     tệp), 415 `UNSUPPORTED_FORMAT`, 422 `INVALID_METADATA`. Chỉ `TENANT_ADMIN` (403).
          */
         post: {
             parameters: {
@@ -2803,8 +2811,18 @@ export interface paths {
                         };
                     };
                 };
-                /** @description Chạm hạn mức tài liệu của gói, hoặc tệp vượt dung lượng cho phép */
+                403: components["responses"]["KhongDuQuyen"];
+                /** @description Chạm hạn mức tài liệu hoặc dung lượng của gói (ADR-0023) */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
+                    };
+                };
+                /** @description Tệp vượt 20 MB */
+                413: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2821,6 +2839,7 @@ export interface paths {
                         "application/json": components["schemas"]["ApiResponse"];
                     };
                 };
+                422: components["responses"]["DuLieuKhongHopLe"];
             };
         };
         delete?: never;
@@ -2838,7 +2857,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Chi tiết tài liệu kèm lần nạp gần nhất */
+        /**
+         * Chi tiết tài liệu kèm lần nạp gần nhất
+         * @description UC020 bước 4. `latestJob` là việc nạp của **bản bóng** nếu tài liệu đang được nạp lại
+         *     (ADR-0031), không thì của chính nó; đọc tiến độ hỏng thì `null` — chi tiết vẫn xem được.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -2862,14 +2885,21 @@ export interface paths {
                     };
                 };
                 404: components["responses"]["KhongThay"];
+                502: components["responses"]["AiKhongPhanHoi"];
             };
         };
         put?: never;
         post?: never;
         /**
-         * Xóa tài liệu
-         * @description UC020 luồng 11.2. Từ chối khi tài liệu đang `PROCESSING` — xóa giữa chừng sẽ để lại đoạn
-         *     tài liệu mồ côi trong chỉ mục vector. Xóa thành công thì các đoạn bị xóa theo (CASCADE).
+         * Gỡ tài liệu khỏi kho tri thức
+         * @description UC020 bước 7. ai-service xoá đoạn khỏi chỉ mục **trước** rồi mới chuyển `ARCHIVED`, cùng
+         *     transaction — hỏng giữa chừng thì giữ nguyên trạng thái (luồng phụ 7.2). Không xoá vật lý:
+         *     lọc `status=ARCHIVED` thấy lại. Gỡ lại tài liệu đã gỡ: luỹ đẳng.
+         *
+         *     java-core **trả lại hạn mức tồn kho** (ADR-0023 (f)): −1 tài liệu, −`file_size_bytes` dung
+         *     lượng, cùng transaction với dòng kiểm toán `DOCUMENT_ARCHIVED` — chỉ khi ai-service báo lượt
+         *     gỡ này vừa chuyển một tài liệu được đếm sang `ARCHIVED` (không trả hai lần, không trả cho bản
+         *     bóng nạp lại đã hỏng). Mốc `warnedAt`/`blockedAt` của chu kỳ giữ nguyên. Chỉ `TENANT_ADMIN`.
          */
         delete: {
             parameters: {
@@ -2883,7 +2913,9 @@ export interface paths {
             requestBody?: never;
             responses: {
                 200: components["responses"]["OkRong"];
-                /** @description Tài liệu đang được xử lý, không xóa được lúc này */
+                403: components["responses"]["KhongDuQuyen"];
+                404: components["responses"]["KhongThay"];
+                /** @description `DOCUMENT_BUSY` — đang nạp hoặc đang nạp lại; gỡ giữa chừng để lại đoạn mồ côi */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -2892,11 +2924,68 @@ export interface paths {
                         "application/json": components["schemas"]["ApiResponse"];
                     };
                 };
+                502: components["responses"]["AiKhongPhanHoi"];
             };
         };
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Sửa siêu dữ liệu tài liệu
+         * @description UC020 bước 5 — **thêm ở GD1** (đặc tả có "sửa siêu dữ liệu", hợp đồng cũ thiếu). Thay cả
+         *     `title` lẫn `description` mỗi lần; `description: null` là xoá mô tả. `language` không sửa
+         *     được (nó quyết định cách tách từ — đổi là phải nạp lại). Chỉ mục vector **không đổi**.
+         *     Ghi `platform.audit_logs` `DOCUMENT_UPDATED` (tên trường, không ghi giá trị). Chỉ
+         *     `TENANT_ADMIN`.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    documentId: components["parameters"]["DocumentId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SuaTaiLieu"];
+                };
+            };
+            responses: {
+                /** @description Tài liệu sau khi sửa */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"] & {
+                            data?: components["schemas"]["TaiLieuChiTiet"];
+                        };
+                    };
+                };
+                403: components["responses"]["KhongDuQuyen"];
+                404: components["responses"]["KhongThay"];
+                /** @description `DOCUMENT_BUSY` — đang nạp lại · `DOCUMENT_ARCHIVED` — đã gỡ khỏi kho */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
+                    };
+                };
+                /** @description `INVALID_METADATA` — sai độ dài, hoặc trùng tiêu đề một tài liệu khác cùng version (`uq_doc_title_version`) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
+                    };
+                };
+                502: components["responses"]["AiKhongPhanHoi"];
+            };
+        };
         trace?: never;
     };
     "/api/v1/documents/{documentId}/reindex": {
@@ -2910,8 +2999,12 @@ export interface paths {
         put?: never;
         /**
          * Nạp lại tài liệu
-         * @description UC019 luồng 1a. Tạo `ingestion_jobs` mới với `trigger = REINDEX`. Bản cũ **giữ nguyên** cho
-         *     tới khi bản mới nạp xong mới chuyển đổi — không có khoảng thời gian kho tri thức bị trống.
+         * @description UC020 bước 6. ai-service tạo **bản bóng** (ADR-0031): một dòng tài liệu mới `PENDING`, cùng
+         *     tệp, version kế tiếp, `trigger = REINDEX`. Phản hồi là việc nạp **của bản bóng** — `id` và
+         *     `documentId` là id **MỚI**; giao diện theo dõi tiến độ theo id này, không theo id vừa gửi.
+         *     Bản cũ giữ `READY` và vẫn được truy hồi tới khi bản bóng nạp xong, rồi chuyển `ARCHIVED`
+         *     trong cùng transaction — kho không trống giây nào. Ghi kiểm toán `DOCUMENT_REINDEXED`. Chỉ
+         *     `TENANT_ADMIN`.
          */
         post: {
             parameters: {
@@ -2935,6 +3028,18 @@ export interface paths {
                         };
                     };
                 };
+                403: components["responses"]["KhongDuQuyen"];
+                404: components["responses"]["KhongThay"];
+                /** @description `DOCUMENT_BUSY` — đang nạp / đang nạp lại · `DOCUMENT_NOT_READY` — chỉ nạp lại tài liệu `READY` */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
+                    };
+                };
+                502: components["responses"]["AiKhongPhanHoi"];
             };
         };
         delete?: never;
@@ -2984,6 +3089,8 @@ export interface paths {
                         };
                     };
                 };
+                404: components["responses"]["KhongThay"];
+                502: components["responses"]["AiKhongPhanHoi"];
             };
         };
         put?: never;
@@ -3055,6 +3162,11 @@ export interface paths {
          * @description Bảy chặng: `QUEUED` → `EXTRACTING` → `CHUNKING` → `EMBEDDING` → `INDEXING` → `DONE`, cộng
          *     `FAILED` và `PAUSED`. `PAUSED` là khi vượt hạn mức token giữa chừng — công việc dừng lại
          *     chờ chu kỳ mới chứ không hỏng.
+         *
+         *     Hiện trạng (GD1): hình chiếu từ `knowledge_documents` phía ai-service, mỗi tài liệu chưa gỡ
+         *     là một việc, mới nhất trước; `size` mặc định 10. `PAUSED` hợp lệ nhưng luôn rỗng và
+         *     `tokensUsed`/`costVnd` luôn `null` — luồng nạp chưa có nguồn cho chúng (giảm độ sâu UC019).
+         *     `trigger` chỉ có `UPLOAD` | `REINDEX`; `REPLACE` chưa có nguồn.
          */
         get: {
             parameters: {
@@ -3084,6 +3196,7 @@ export interface paths {
                         };
                     };
                 };
+                502: components["responses"]["AiKhongPhanHoi"];
             };
         };
         put?: never;
@@ -6082,12 +6195,23 @@ export interface components {
             status: components["schemas"]["TrangThaiTaiLieu"];
             chunkCount: number;
             version?: number;
+            /** @description Câu cho người đọc khi `FAILED` — đã bỏ tiền tố mã (mã nằm ở `CongViecNap.errorCode`) */
             errorMessage?: string | null;
             uploadedByName?: string | null;
             /** Format: date-time */
             indexedAt?: string | null;
             /** Format: date-time */
             createdAt: string;
+        };
+        /**
+         * @description UC020 bước 5. Không có `language` (đổi là phải nạp lại), không có `contactId` (gắn tài liệu
+         *     với khách thuộc UC041, không mở ra dashboard ở đây), không có `tenantId` (lấy từ JWT).
+         */
+        SuaTaiLieu: {
+            /** @description Chuẩn hoá NFC + bỏ khoảng trắng đầu cuối trước khi đếm */
+            title: string;
+            /** @description Rỗng hoặc `null` là xoá mô tả */
+            description?: string | null;
         };
         TaiLieuChiTiet: components["schemas"]["TaiLieu"] & {
             /**
@@ -6939,6 +7063,19 @@ export interface components {
          *     nút tương ứng, nhưng **máy chủ mới là nơi quyết định** — ẩn nút chỉ là chuyện thẩm mỹ.
          */
         KhongDuQuyen: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiResponse"];
+            };
+        };
+        /**
+         * @description `AI_SERVICE_UNAVAILABLE` — java-core không gọi được ai-service (mất nối, hết giờ, 5xx). Thao
+         *     tác **chưa** được thực hiện, không có gì được ghi (đặc tả UC020). Lỗi do hai dịch vụ lệch
+         *     hợp đồng (ai-service trả 400/401/403) là 500, không phải 502.
+         */
+        AiKhongPhanHoi: {
             headers: {
                 [name: string]: unknown;
             };

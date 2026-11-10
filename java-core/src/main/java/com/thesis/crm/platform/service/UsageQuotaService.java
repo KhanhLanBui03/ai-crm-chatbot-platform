@@ -30,4 +30,17 @@ public interface UsageQuotaService {
 
     /** Cộng {@code amount} vào dòng đã khoá, ghi mốc 80%/100% nếu vừa vượt. */
     QuotaUsageResponse consume(UsageRecord locked, long amount);
+
+    /**
+     * Trả lại {@code amount} cho một chỉ số TỒN KHO — gỡ tài liệu, UC020 (ADR-0023 (f)). Khoá dòng
+     * của chu kỳ hiện tại như lúc tiêu thụ; mức dùng không xuống dưới 0.
+     *
+     * <p>KHÔNG xoá mốc {@code warned_at}/{@code blocked_at} — câu hỏi ADR-0023 để ngỏ cho UC020, chốt
+     * ở đây: mốc là thời điểm LẦN ĐẦU chạm ngưỡng trong chu kỳ (UC006 hiển thị nó như một sự kiện đã
+     * xảy ra), còn cổng chặn chỉ so {@code used_value} với trần — gỡ bớt là tải lên được ngay.
+     *
+     * @return mức sau khi trả; {@code null} khi doanh nghiệp không có thuê bao nào phủ thời điểm này
+     *         (không có dòng hạn mức nào để trả)
+     */
+    QuotaUsageResponse release(UsageMetric metric, long amount);
 }

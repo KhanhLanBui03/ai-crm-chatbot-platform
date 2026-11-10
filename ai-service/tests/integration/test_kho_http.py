@@ -203,3 +203,32 @@ async def test_nap_lai_toan_kho_va_go_luy_dang(client, ha_tang, kho_s3):
     assert r.status_code == 200 and r.json()["chunks_deleted"] == 0  # luỹ đẳng
     for x in (a, b):
         assert (await trang_thai(factory, t, x))[0] == "READY"  # bản cũ vẫn phục vụ
+
+
+async def test_go_bao_tra_han_muc_mot_lan_va_khong_tra_cho_ban_bong_hong(client, ha_tang, kho_s3):
+    """ADR-0023 (f): java-core trả hạn mức theo ``quota_released`` — đúng một lần mỗi tài liệu được
+    đếm. Bản bóng hỏng chưa từng được đếm nên gỡ nó không trả gì; bản cũ thì vẫn trả."""
+    from src.ai.exceptions import EmbeddingRejectedError
+    from src.ai.inference.clients import MockEmbedClient
+
+    factory, _ = ha_tang
+    t = uuid4()
+    doc = await _ready(factory, kho_s3, t)
+    co_tep = (await client.get(f"/v1/documents/{doc}", headers=_h(t))).json()["file_size_bytes"]
+
+    lan_dau = (await client.delete(f"/v1/ai/kb/documents/{doc}", headers=_h(t))).json()
+    assert (lan_dau["quota_released"], lan_dau["file_size_bytes"]) == (True, co_tep)
+    lan_hai = (await client.delete(f"/v1/ai/kb/documents/{doc}", headers=_h(t))).json()
+    assert (lan_hai["quota_released"], lan_hai["chunks_deleted"]) == (False, 0)
+
+    class _NhungTuChoi(MockEmbedClient):
+        async def embed_batch(self, texts):
+            raise EmbeddingRejectedError("ai-embed trả sai số chiều")
+
+    cu = await _ready(factory, kho_s3, t)
+    bong = (await client.post(f"/v1/documents/{cu}/reindex", headers=_h(t))).json()["job_id"]
+    assert (await nap(factory, t, UUID(bong), embed=_NhungTuChoi(1024))).trang_thai == "FAILED"
+    go_bong = (await client.delete(f"/v1/documents/{bong}", headers=_h(t))).json()
+    assert go_bong["quota_released"] is False
+    go_cu = (await client.delete(f"/v1/documents/{cu}", headers=_h(t))).json()
+    assert go_cu["quota_released"] is True

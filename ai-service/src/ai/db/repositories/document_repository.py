@@ -390,6 +390,32 @@ class TienDoTaiLieu:
     ingest_started_at: datetime | None
     indexed_at: datetime | None
     updated_at: datetime
+    # Có giá trị = job này là bản bóng của một lượt nạp lại (V213, ADR-0031) → trigger REINDEX.
+    replaces_document_id: UUID | None
+
+
+_COT_TIEN_DO = """
+    d.id, d.title, d.status, d.ingest_step, d.attempt_count, d.chunk_count,
+    (SELECT count(*) FROM knowledge.knowledge_chunks c WHERE c.document_id = d.id),
+    d.error_message, d.created_at, d.ingest_started_at, d.indexed_at, d.updated_at,
+    d.replaces_document_id
+"""
+
+# ``state`` của SCR033 → điều kiện trên ``status`` + ``ingest_step`` — chiều ngược của
+# ``rag/ingest/tien_do.buoc_hien_tai``. PROCESSING mà ``ingest_step`` NULL được đọc là EXTRACTING
+# ở hàm đó, nên lọc EXTRACTING cũng phải nhặt nó. ``PAUSED`` không có nguồn (xem ``tien_do``).
+_LOC_THEO_BUOC: dict[str, str] = {
+    "QUEUED": "d.status = 'PENDING'",
+    "EXTRACTING": (
+        "d.status = 'PROCESSING' AND coalesce(d.ingest_step, 'EXTRACTING') = 'EXTRACTING'"
+    ),
+    "CHUNKING": "d.status = 'PROCESSING' AND d.ingest_step = 'CHUNKING'",
+    "EMBEDDING": "d.status = 'PROCESSING' AND d.ingest_step = 'EMBEDDING'",
+    "INDEXING": "d.status = 'PROCESSING' AND d.ingest_step = 'INDEXING'",
+    "DONE": "d.status = 'READY'",
+    "FAILED": "d.status = 'FAILED'",
+    "PAUSED": "false",
+}
 
 
 async def lay_tien_do(session: AsyncSession, document_id: UUID) -> TienDoTaiLieu | None:
@@ -399,19 +425,39 @@ async def lay_tien_do(session: AsyncSession, document_id: UUID) -> TienDoTaiLieu
     RLS của ``knowledge_chunks`` lọc thay, và chỉ mục ``ix_chunk_tenant_doc`` phủ được câu đếm.
     """
     ket_qua = await session.execute(
-        text(
-            """
-            SELECT d.id, d.title, d.status, d.ingest_step, d.attempt_count, d.chunk_count,
-                   (SELECT count(*) FROM knowledge.knowledge_chunks c WHERE c.document_id = d.id),
-                   d.error_message, d.created_at, d.ingest_started_at, d.indexed_at, d.updated_at
-              FROM knowledge.knowledge_documents d
-             WHERE d.id = :id
-            """
-        ),
+        text(f"SELECT {_COT_TIEN_DO} FROM knowledge.knowledge_documents d WHERE d.id = :id"),
         {"id": document_id},
     )
     dong = ket_qua.one_or_none()
     return TienDoTaiLieu(*dong) if dong else None
+
+
+async def danh_sach_tien_do(
+    session: AsyncSession, *, state: str | None, gioi_han: int, bo_qua: int
+) -> tuple[list[TienDoTaiLieu], int]:
+    """SCR033 — hàng đợi nạp của tenant, mới nhất trước. Mỗi tài liệu là đúng một job (V202).
+
+    BỎ ``ARCHIVED``: tài liệu đã gỡ — hoặc bản cũ đã được bản bóng thay — không còn việc nạp nào
+    để theo dõi; giữ lại thì mỗi lượt nạp lại hiện thành hai dòng "Hoàn tất" cùng tiêu đề.
+    Không ``WHERE tenant_id``: RLS lọc thay, như mọi câu đọc khác trong file này.
+    """
+    dieu_kien = ["d.status <> 'ARCHIVED'"]
+    if state is not None:
+        dieu_kien.append(_LOC_THEO_BUOC[state])
+    ket_qua = await session.execute(
+        text(
+            f"""
+            SELECT {_COT_TIEN_DO}, count(*) OVER ()
+              FROM knowledge.knowledge_documents d
+             WHERE {' AND '.join(dieu_kien)}
+             ORDER BY d.created_at DESC, d.id
+             LIMIT :gioi_han OFFSET :bo_qua
+            """
+        ),
+        {"gioi_han": gioi_han, "bo_qua": bo_qua},
+    )
+    dong = ket_qua.all()
+    return [TienDoTaiLieu(*d[:-1]) for d in dong], (dong[0][-1] if dong else 0)
 
 
 # ── UC020 — quản lý kho tri thức (ADR-0031) ─────────────────────────────────

@@ -381,3 +381,71 @@ async def test_tien_do_cua_tenant_khac_la_404(client, ha_tang, kho_s3, tenant_a,
     phan_hoi = await _tien_do(client, tenant_b, doc)
     assert (phan_hoi.status_code, phan_hoi.json()["code"]) == (404, "DOCUMENT_NOT_FOUND")
     assert (await _tien_do(client, tenant_a, doc)).status_code == 200
+
+
+# ── Hàng đợi nạp — GET /v1/ai/kb/ingestion-jobs (GD1, SCR033 /tri-thuc/tien-do) ──
+
+
+async def _hang_doi(client, tenant, **tham_so) -> httpx.Response:
+    return await client.get(
+        "/v1/ai/kb/ingestion-jobs", params=tham_so, headers={"X-Tenant-Id": str(tenant)}
+    )
+
+
+async def test_hang_doi_moi_nhat_truoc_loc_state_phan_trang_va_rls(client, ha_tang, kho_s3):
+    """Tenant mới tinh cho mỗi test — tenant_a dùng chung đã có tài liệu của test khác."""
+    factory, _ = ha_tang
+    t, khac = uuid4(), uuid4()
+    cho = await tai_lieu_pending(factory, kho_s3, t, "faq-thanh-toan.txt", "TXT")
+    xong = await tai_lieu_pending(factory, kho_s3, t, "faq-thanh-toan.txt", "TXT")
+    await nap(factory, t, xong)
+    hong = await tai_lieu_pending(factory, kho_s3, t, "ban-scan-bao-hanh.pdf", "PDF")
+    await nap(factory, t, hong)
+
+    tat_ca = (await _hang_doi(client, t)).json()
+    assert [j["job_id"] for j in tat_ca["items"]] == [str(hong), str(xong), str(cho)]
+    assert [j["state"] for j in tat_ca["items"]] == ["FAILED", "DONE", "QUEUED"]
+    assert (tat_ca["total"], tat_ca["page"], tat_ca["size"]) == (3, 0, 10)
+    assert {j["trigger"] for j in tat_ca["items"]} == {"UPLOAD"}
+    assert tat_ca["items"][0]["error_code"] == "PARSE_NO_TEXT_EXTRACTED"
+
+    for state, mong_doi in [("QUEUED", [cho]), ("DONE", [xong]), ("FAILED", [hong]),
+                            ("EMBEDDING", []), ("PAUSED", [])]:
+        trang = (await _hang_doi(client, t, state=state)).json()
+        assert [j["job_id"] for j in trang["items"]] == [str(d) for d in mong_doi], state
+        assert trang["total"] == len(mong_doi), state
+
+    trang_hai = (await _hang_doi(client, t, page=1, size=2)).json()
+    assert ([j["job_id"] for j in trang_hai["items"]], trang_hai["total"]) == ([str(cho)], 3)
+
+    r = await _hang_doi(client, t, state="DANG_CHAY")
+    assert r.status_code == 422
+
+    # RLS: tenant khác không thấy dòng nào, kể cả khi đoán đúng bộ lọc.
+    assert (await _hang_doi(client, khac)).json()["total"] == 0
+    assert (await _hang_doi(client, khac, state="DONE")).json()["items"] == []
+
+
+async def test_hang_doi_ban_bong_la_reindex_va_an_ban_cu_khi_doi_ban(client, ha_tang, kho_s3):
+    """Nạp lại: bản bóng hiện ``REINDEX`` cạnh bản cũ; đổi bản xong thì chỉ còn bản bóng."""
+    factory, _ = ha_tang
+    t = uuid4()
+    cu = await tai_lieu_pending(factory, kho_s3, t, "faq-thanh-toan.txt", "TXT")
+    await nap(factory, t, cu)
+    async with db_session.get_tenant_session(str(t), factory=factory) as phien:
+        moi = (await service.reindex_document(phien, cu)).job_id
+
+    td = (await _tien_do(client, t, moi)).json()
+    assert (td["trigger"], td["state"]) == ("REINDEX", "QUEUED")
+    assert (await _tien_do(client, t, cu)).json()["trigger"] == "UPLOAD"
+    truoc = (await _hang_doi(client, t)).json()["items"]
+    assert [(j["job_id"], j["trigger"]) for j in truoc] == [
+        (str(moi), "REINDEX"), (str(cu), "UPLOAD"),
+    ]
+
+    await nap(factory, t, moi)
+    sau = (await _hang_doi(client, t)).json()
+    assert [(j["job_id"], j["trigger"], j["state"]) for j in sau["items"]] == [
+        (str(moi), "REINDEX", "DONE"),
+    ]
+    assert (await trang_thai(factory, t, cu))[0] == "ARCHIVED"

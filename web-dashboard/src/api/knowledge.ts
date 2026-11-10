@@ -7,6 +7,7 @@ import type {
   KhoangTrongTriThuc,
   LoaiKhoangTrong,
   LoaiNguonTaiLieu,
+  SuaTaiLieu,
   TaiLieu,
   TaiLieuChiTiet,
   TrangThaiCongViecNap,
@@ -32,6 +33,8 @@ export const knowledgeApi = apiSlice.injectEndpoints({
         url: '/api/v1/documents',
         params: {
           q: bo.tuKhoa || undefined,
+          // Không lọc trạng thái thì máy chủ ẩn ARCHIVED; chọn "Đã lưu trữ" mới thấy tài liệu đã gỡ
+          status: bo.trangThai,
           sourceType: bo.loaiNguon,
           page: bo.trang ?? 0,
           size: 10,
@@ -72,11 +75,29 @@ export const knowledgeApi = apiSlice.injectEndpoints({
       invalidatesTags: [CA_TAI_LIEU, 'ChunkTriThuc'],
     }),
 
-    xoaTaiLieu: build.mutation<null, string>({
-      query: (id) => ({ url: `/api/v1/documents/${id}`, method: 'DELETE' }),
-      invalidatesTags: [CA_TAI_LIEU],
+    /**
+     * UC020 bước 5 — sửa tiêu đề và mô tả. Gửi **cả hai** trường mỗi lần: mô tả `null` là xoá mô
+     * tả. Chỉ mục vector không đổi, nên không cần làm mới danh sách đoạn.
+     */
+    suaTaiLieu: build.mutation<TaiLieuChiTiet, SuaTaiLieu & { id: string }>({
+      query: ({ id, title, description }) => ({
+        url: `/api/v1/documents/${id}`,
+        method: 'PATCH',
+        body: { title, description },
+      }),
+      invalidatesTags: (_kq, _loi, { id }) => [{ type: 'TaiLieu', id }, CA_TAI_LIEU],
     }),
 
+    /** UC020 bước 7 — gỡ khỏi chỉ mục; tài liệu chuyển `ARCHIVED`, không xoá vật lý. */
+    xoaTaiLieu: build.mutation<null, string>({
+      query: (id) => ({ url: `/api/v1/documents/${id}`, method: 'DELETE' }),
+      invalidatesTags: (_kq, _loi, id) => [{ type: 'TaiLieu', id }, CA_TAI_LIEU],
+    }),
+
+    /**
+     * UC020 bước 6 — trả việc nạp của **bản bóng** (ADR-0031): `documentId` của kết quả là id
+     * MỚI, không phải id vừa gửi. Bản cũ vẫn `READY` và vẫn được truy hồi tới khi bản bóng xong.
+     */
     napLaiTaiLieu: build.mutation<CongViecNap, string>({
       query: (id) => ({ url: `/api/v1/documents/${id}/reindex`, method: 'POST' }),
       invalidatesTags: (_kq, _loi, id) => [{ type: 'TaiLieu', id }, CA_TAI_LIEU],
@@ -141,6 +162,7 @@ export const {
   useDanhSachTaiLieuQuery,
   useChiTietTaiLieuQuery,
   useTaiLenTaiLieuMutation,
+  useSuaTaiLieuMutation,
   useXoaTaiLieuMutation,
   useNapLaiTaiLieuMutation,
   useDanhSachDoanQuery,

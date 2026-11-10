@@ -5,10 +5,12 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { laLoiTruyVan } from '@/api/baseQuery'
 import { useDanhSachTaiLieuQuery, useXoaTaiLieuMutation, type BoLocTaiLieu } from '@/api/knowledge'
 import { ListPage } from '@/components/layout/ListPage'
 import type { CotBang } from '@/components/ui/data-table'
 import { StatusChip } from '@/components/ui/status-chip'
+import { ArchiveDocumentDialog } from '@/features/knowledge/ArchiveDocumentDialog'
 import { UploadDocumentDialog } from '@/features/knowledge/UploadDocumentDialog'
 import {
   coTep,
@@ -30,6 +32,28 @@ export function DocumentsPage() {
   const [boLoc, datBoLoc] = useState<BoLocTaiLieu>({ trang: 0 })
   const [sapXep, datSapXep] = useState<SortingState>([{ id: 'createdAt', desc: true }])
   const [xoa] = useXoaTaiLieuMutation()
+  const [choGo, datChoGo] = useState<string[]>([])
+  const [dangGo, datDangGo] = useState(false)
+
+  /**
+   * Gỡ từng tài liệu và đếm riêng thành công/thất bại: một tài liệu đang nạp (409) không được làm
+   * cả lô trông như hỏng, và cũng không được nuốt mất câu lỗi của nó.
+   */
+  async function goHangLoat() {
+    datDangGo(true)
+    const ketQua = await Promise.allSettled(choGo.map((id) => xoa(id).unwrap()))
+    datDangGo(false)
+    datChoGo([])
+    const hong = ketQua.filter((k): k is PromiseRejectedResult => k.status === 'rejected')
+    const xong = ketQua.length - hong.length
+    if (xong > 0) toast.success(`Đã gỡ ${xong} tài liệu khỏi kho tri thức.`)
+    if (hong.length > 0) {
+      const loi = hong[0].reason
+      toast.error(
+        `${hong.length} tài liệu chưa gỡ được: ${laLoiTruyVan(loi) ? loi.message : 'lỗi không xác định'}`,
+      )
+    }
+  }
 
   const truyVan = useDanhSachTaiLieuQuery(boLoc)
 
@@ -146,6 +170,8 @@ export function DocumentsPage() {
         cot={cot}
         trang={truyVan.data}
         dangTai={truyVan.isLoading}
+        loi={truyVan.isError ? truyVan.error : undefined}
+        onThuLai={truyVan.refetch}
         onChonDong={(t) => dieuHuong(`/tri-thuc/tai-lieu/${t.id}`)}
         timKiem={{
           goiY: 'Tìm theo tiêu đề, mô tả hoặc tên tệp…',
@@ -191,14 +217,7 @@ export function DocumentsPage() {
           { nhan: 'Tìm thử', onClick: () => dieuHuong('/tri-thuc/tim-thu') },
         ]}
         thaoTacHangLoat={[
-          {
-            nhan: 'Xoá khỏi kho',
-            nguyHiem: true,
-            onClick: async (ids) => {
-              await Promise.all(ids.map((id) => xoa(id).unwrap()))
-              toast.success(`Đã xoá ${ids.length} tài liệu khỏi kho tri thức.`)
-            },
-          },
+          { nhan: 'Gỡ khỏi kho', nguyHiem: true, onClick: (ids) => datChoGo(ids) },
         ]}
         khiChuaCoDuLieu={{
           BieuTuong: BookOpen,
@@ -208,6 +227,13 @@ export function DocumentsPage() {
       />
 
       <UploadDocumentDialog mo={moTaiLen} onDoiMo={datMoTaiLen} />
+      <ArchiveDocumentDialog
+        mo={choGo.length > 0}
+        onDoiMo={(m) => !m && datChoGo([])}
+        doiTuong={`${choGo.length} tài liệu`}
+        dangXuLy={dangGo}
+        onXacNhan={goHangLoat}
+      />
     </>
   )
 }
