@@ -16,7 +16,7 @@ api_router = APIRouter()
 api_router.include_router(chat.router)  # /v1/ai/chat — UC022
 api_router.include_router(documents.router)  # /v1/ai/kb/documents — UC018 · /ingestion-jobs — UC019
 # /v1/ai/feedback · /v1/ai-interactions/{id}/feedback — UC027 · /v1/knowledge-gaps — UC025
-# /v1/ai/quality — UC027
+# /v1/ai/quality — UC027 · GET /v1/ai-interactions — SCR036 (đợt GD2)
 api_router.include_router(feedback.router)
 # /v1/documents · /chunks · PATCH · /reindex · DELETE · /v1/ai/kb/reindex — UC020 (Ngày 11)
 api_router.include_router(kho.router)

@@ -224,6 +224,12 @@ chứ không phải 403 · vì sao nạp lại đổi `id` mà kho không trốn
 **Điều kiện vào:** GD1 đóng. ai-service `LLM_MODE=remote` (Gemini, làm mới hạn mức 14:00). Cần nhanh thì
 `RERANK_ENABLED=false`.
 
+> **✅ Đóng 10/11/2026** — minh chứng: [`docs/report/tich-hop-giao-dien-2026-10.md`](../report/tich-hop-giao-dien-2026-10.md) mục GD2.
+> UC023 · UC025 · UC027 đủ 4 điều; 6 câu demo chốt trước khi chạy và đều có dòng minh chứng. Q2 chốt **hướng B**
+> (ô tỉ lệ tích cực lấy từ `/v1/ai/quality`). Làm thêm ngoài danh sách: **V216** `latency_breakdown` (độ trễ từng
+> chặng của từng lượt), sửa công thức `discardedAnswer`, link "Mở hội thoại" của màn giám sát, chip bám nguồn.
+> `LOW_CONFIDENCE` chưa tái hiện trên giao diện (cổng huỷ tắt, ADR-0029) — khoá bằng test.
+
 **Chốt bộ câu hỏi TRƯỚC khi chạy:** router hỏi lại phần lớn câu nha khoa, chỉ kiểu "… bao nhiêu tiền / chi
 phí / bảng giá" qua được. Ghi sẵn vào báo cáo 6 câu: 2 câu có đáp án trong kho · 1 câu có "chi phí" nhưng
 ngoài kho (`NOT_COVERED`) · 1 câu về đơn hàng/lịch hẹn cụ thể (`OUT_OF_SCOPE_DATA`) · 1 câu chào (đường nhanh)
@@ -231,16 +237,16 @@ ngoài kho (`NOT_COVERED`) · 1 câu về đơn hàng/lịch hẹn cụ thể (`
 
 ### Widget (đầu phiên)
 
-- [ ] Tạo kênh widget + khoá widget cho tenant B ở trang cài đặt (SCR018), thêm `localhost:5174` vào tên miền được phép
-- [ ] `cd web-widget && npm run dev` (:5174, trang `demo/`). Tránh cổng 3000 (Grafana)
+- [x] Tạo kênh widget + khoá widget cho tenant B ở trang cài đặt (SCR018), thêm `localhost:5174` vào tên miền được phép
+- [x] `cd web-widget && npm run dev` (:5174, trang `demo/`). Tránh cổng 3000 (Grafana)
 
 ### UC023 — Trả lời dựa trên tri thức doanh nghiệp
 
 | Việc | Tầng |
 |---|---|
-| [ ] `AiChatClient` đọc thêm `interaction_id`, `refusal_reason`, `degraded` | java-core |
-| [ ] `WidgetService` ghi `interaction_id` vào **cột** `messages.ai_interaction_id` (đã có), `refusalReason`/`degraded` vào `metadata` | java-core |
-| [ ] Widget: khối nguồn hiện tiêu đề **và** đoạn trích (`snippet`) khi bấm; tin `degraded` có nhãn "trả lời tạm" | widget |
+| [x] `AiChatClient` đọc thêm `interaction_id`, `refusal_reason`, `degraded` | java-core |
+| [x] `WidgetService` ghi `interaction_id` vào **cột** `messages.ai_interaction_id` (đã có), `refusalReason`/`degraded` vào `metadata` | java-core |
+| [x] Widget: khối nguồn hiện tiêu đề **và** đoạn trích (`snippet`) khi bấm; tin `degraded` có nhãn "trả lời tạm" | widget |
 
 | Bước đặc tả | Thao tác | Phải thấy |
 |---|---|---|
@@ -254,9 +260,9 @@ ngoài kho (`NOT_COVERED`) · 1 câu về đơn hàng/lịch hẹn cụ thể (`
 
 | Việc | Tầng |
 |---|---|
-| [ ] `GET /api/v1/knowledge-gaps` → `/v1/knowledge-gaps` (`gapType → gap_type`) | java-core |
-| [ ] `KhoangTrongTriThuc`: `questionText ← query_text` · `occurrenceCount ← unanswered_count` · `distinctContactCount ← distinct_conversation_count` · `priority` = bậc do java-core tính · `firstSeenAt` · `lastSeenAt` | java-core |
-| [ ] `KnowledgeGapsPage` ghi chú "số khách xấp xỉ theo số hội thoại"; bỏ tham số `q` (máy chủ không hỗ trợ) | dashboard |
+| [x] `GET /api/v1/knowledge-gaps` → `/v1/knowledge-gaps` (`gapType → gap_type`) | java-core |
+| [x] `KhoangTrongTriThuc`: `questionText ← query_text` · `occurrenceCount ← unanswered_count` · `distinctContactCount ← distinct_conversation_count` · `priority` = bậc do java-core tính · `firstSeenAt` · `lastSeenAt` | java-core |
+| [x] `KnowledgeGapsPage` ghi chú "số khách xấp xỉ theo số hội thoại"; bỏ tham số `q` (máy chủ không hỗ trợ) | dashboard |
 
 | Bước đặc tả | Thao tác | Phải thấy |
 |---|---|---|
@@ -273,16 +279,16 @@ ngoài kho (`NOT_COVERED`) · 1 câu về đơn hàng/lịch hẹn cụ thể (`
 
 | Việc | Tầng |
 |---|---|
-| [ ] `GET /v1/ai-interactions?route&refused&conversation_id&from&to&page&size` — **mới**, hình dạng như `LuotXuLyAi` ở snake_case; `citations` nối `retrieved_chunk_ids` với `knowledge_chunks`/`knowledge_documents`; `discarded_answer` theo định nghĩa trong `dashboard-api.yaml`; kèm đánh giá mới nhất | ai-service |
-| [ ] Kiểm `response_text` lưu gì khi từ chối, để `discardedAnswer` không hiện nhầm câu mẫu từ chối | ai-service |
-| [ ] pytest (lọc, phân trang, RLS) + ghi vào nháp hợp đồng | ai-service |
-| [ ] `GET /api/v1/ai-interactions` → `Page<LuotXuLyAi>` | java-core |
-| [ ] `POST /api/v1/ai-interactions/{id}/feedback` → ai-service: `rating` POSITIVE/NEGATIVE → 1/−1, `rater_type = AGENT`, `rater_user_id` từ JWT, `corrected_answer`; trả 201 `DanhGiaAi` | java-core |
-| [ ] `POST /api/v1/widget/messages/{messageId}/feedback` (token widget): kiểm tin thuộc hội thoại của khách đó, là tin BOT, có `ai_interaction_id` → ai-service với `rater_type = CUSTOMER`; `MessageDto.rateable` | java-core |
-| [ ] Widget: 👍/👎 dưới tin BOT có `rateable`; 👎 mở 4 lý do + ô nhận xét; gửi xong "Cảm ơn bạn" | widget |
-| [ ] Một `DanhGiaDialog` dùng chung: 👎 bắt chọn 1/4 lý do; nhận xét; **câu trả lời đúng** (chỉ nhân viên) | dashboard |
-| [ ] Gắn dialog vào `AiInteractionsPage` (bỏ `WRONG_INFO` gán cứng) và `MessageThread` (tin BOT có `aiInteractionId`) | dashboard |
-| [ ] Tỉ lệ tích cực hiện trên giao diện — xem **Điểm chốt Q2** | java-core + dashboard |
+| [x] `GET /v1/ai-interactions?route&refused&rating&conversation_id&tu&den&page&size` — **mới**, hình dạng như `LuotXuLyAi` ở snake_case; `citations` nối `retrieved_chunk_ids` với `knowledge_chunks`/`knowledge_documents`; `discarded_answer` theo định nghĩa trong `dashboard-api.yaml`; kèm đánh giá mới nhất | ai-service |
+| [x] Kiểm `response_text` lưu gì khi từ chối, để `discardedAnswer` không hiện nhầm câu mẫu từ chối | ai-service |
+| [x] pytest (lọc, phân trang, RLS) + ghi vào nháp hợp đồng | ai-service |
+| [x] `GET /api/v1/ai-interactions` → `Page<LuotXuLyAi>` | java-core |
+| [x] `POST /api/v1/ai-interactions/{id}/feedback` → ai-service: `rating` POSITIVE/NEGATIVE → 1/−1, `rater_type = AGENT`, `rater_user_id` từ JWT, `corrected_answer`; trả 201 `DanhGiaAi` | java-core |
+| [x] `POST /api/v1/widget/messages/{messageId}/feedback` (token widget): kiểm tin thuộc hội thoại của khách đó, là tin BOT, có `ai_interaction_id` → ai-service với `rater_type = CUSTOMER`; `MessageDto.rateable` | java-core |
+| [x] Widget: 👍/👎 dưới tin BOT có `rateable`; 👎 mở 4 lý do + ô nhận xét; gửi xong "Cảm ơn bạn" | widget |
+| [x] Một `DanhGiaDialog` dùng chung: 👎 bắt chọn 1/4 lý do; nhận xét; **câu trả lời đúng** (chỉ nhân viên) | dashboard |
+| [x] Gắn dialog vào `AiInteractionsPage` (bỏ `WRONG_INFO` gán cứng) và `MessageThread` (tin BOT có `aiInteractionId`) | dashboard |
+| [x] Tỉ lệ tích cực hiện trên giao diện — **Q2 chốt hướng B 10/11**: `AiPerformanceService` lấy từ `/v1/ai/quality` | java-core + dashboard |
 
 | Bước đặc tả | Thao tác | Phải thấy |
 |---|---|---|
@@ -296,9 +302,9 @@ ngoài kho (`NOT_COVERED`) · 1 câu về đơn hàng/lịch hẹn cụ thể (`
 
 ### Cổng ra GD2
 
-- [ ] UC023, UC025, UC027 đủ 4 điều ở mục 0; 6 câu chốt sẵn đều có dòng minh chứng
-- [ ] `mvn compile` · `npm run typecheck` (dashboard + widget) · ai-service `ruff` + `compileall` + `pytest`
-- [ ] Ghi số lượt Gemini đã dùng; tắt hết tiến trình
+- [x] UC023, UC025, UC027 đủ 4 điều ở mục 0; 6 câu chốt sẵn đều có dòng minh chứng
+- [x] `mvn compile` · `npm run typecheck` (dashboard + widget) · ai-service `ruff` + `compileall` + `pytest`
+- [x] Ghi số lượt Gemini đã dùng; tắt hết tiến trình
 
 **Phải giải thích được:** `groundedness` khác `retrieval_top_score` ở đâu · vì sao khoảng trống tri thức không có
 nút "đã xử lý" · vì sao tỉ lệ tích cực chia cho số lượt **có** đánh giá.
@@ -392,7 +398,7 @@ thay vì xoá vật lý · vì sao gọi ai-service **ngoài** transaction của
 | # | Câu hỏi | Đề xuất | GD |
 |---|---|---|---|
 | Q1 | UC026 làm những trigger nào? Đặc tả có 4: chuyển giao · kết thúc · ngưỡng số lượt · thủ công | `CLOSING` (bắt buộc) + `MANUAL` (ai-service đã có `POST /v1/ai/summarize`, java-core thêm 1 endpoint + 1 nút). `HANDOFF`, `TURN_THRESHOLD` ghi vào "giảm độ sâu" | GD3 |
-| Q2 | Tỉ lệ tích cực UC027 bước 7 hiện ở đâu? `AiPerformancePage` là màn của UC039 (Dev B) | java-core điền `GET /api/v1/analytics/ai-performance` phần lấy được từ `/v1/ai/quality` (tỉ lệ từ chối, tỉ lệ tích cực, số đánh giá, bám nguồn trung bình); trường riêng của UC039 để rỗng; báo Dev B | GD2 |
+| Q2 | Tỉ lệ tích cực UC027 bước 7 hiện ở đâu? `AiPerformancePage` là màn của UC039 (Dev B) | **✅ chốt 10/11 — hướng B:** ô "Phản hồi tích cực" của `GET /api/v1/analytics/ai-performance` lấy từ `/v1/ai/quality` (khách + nhân viên, cộng tử/mẫu, bỏ `AUTO_EVAL`, mẫu số đếm theo lượt bấm); ai-service lỗi thì riêng ô này trống kèm `errorMessage`, màn vẫn mở. Các ô khác giữ `metrics_daily`. Loại hướng A (java-core cộng vào `metrics_daily`: đánh giá lại phải trừ/cộng, thiếu khoá nhánh/mô hình) và C (chỉ hiện ở màn của mình: màn UC039 vẫn báo 0) | GD2 |
 | Q3 | Bảo vệ `/internal/**` bằng gì? | Dùng chung `INTERNAL_API_TOKEN` cả hai chiều, ai-service gửi thêm `X-Internal-Token` | GD3 |
 | Q4 | Biên bản xác nhận UC041 làm tới đâu? | Bản gọn: biên bản = `items` + thời điểm + người xác minh, lưu trong yêu cầu và dòng kiểm toán; `certificateUri = null`, ghi vào "giảm độ sâu" | GD3 |
 | Q5 | Màn "Tìm thử" (SCR031 `knowledge/search`) không thuộc luồng chính UC020 và ai-service chưa có endpoint | Để ngoài đợt, ghi rõ; không ẩn màn — **✅ chốt 24/10 theo đề xuất** | GD1 |

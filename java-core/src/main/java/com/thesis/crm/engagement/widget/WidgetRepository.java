@@ -53,8 +53,9 @@ public class WidgetRepository {
 
     public record QuotaRow(UUID id, long used, long quota) {}
 
+    /** {@code aiInteractionId}: lượt AI sinh ra tin BOT này (UC027) — {@code null} với tin khác. */
     public record MessageRow(UUID id, String senderType, String content, String metadataJson,
-                             Instant sentAt) {}
+                             Instant sentAt, UUID aiInteractionId) {}
 
     private static final TypeReference<Map<String, Object>> MAP = new TypeReference<>() {};
     private static final List<String> THUE_BAO_HIEU_LUC = List.of("TRIALING", "ACTIVE", "PAST_DUE");
@@ -244,6 +245,26 @@ public class WidgetRepository {
                 .getResultStream().findFirst().map(WidgetRepository::conversationRow);
     }
 
+    /**
+     * Tin {@code messageId} NẾU nó thuộc một hội thoại của chính khách này (cùng kênh, cùng mã khách trong
+     * token đã ký) — UC027 khách đánh giá. Tin của khách khác, hay của doanh nghiệp khác (RLS), đều rỗng như
+     * tin không tồn tại: biết một mã tin không cho quyền đánh giá nó.
+     */
+    public Optional<MessageRow> messageOfVisitor(UUID tenantId, UUID channelId, String externalUserId,
+                                                 UUID messageId) {
+        return em.createQuery("""
+                SELECT m FROM Message m
+                JOIN Conversation c ON c.id = m.conversationId AND c.tenantId = m.tenantId
+                JOIN ChannelIdentity i ON i.id = c.channelIdentityId AND i.tenantId = c.tenantId
+                WHERE m.tenantId = :t AND m.id = :m AND i.channelId = :c AND i.externalUserId = :e""",
+                        Message.class)
+                .setParameter("t", tenantId)
+                .setParameter("m", messageId)
+                .setParameter("c", channelId)
+                .setParameter("e", externalUserId)
+                .getResultStream().findFirst().map(this::messageRow);
+    }
+
     public UUID insertConversation(UUID tenantId, UUID channelId, UUID identityId, UUID contactId, String subject) {
         Conversation c = new Conversation(tenantId, channelId, identityId, contactId);
         c.setSubject(subject);
@@ -340,8 +361,15 @@ public class WidgetRepository {
      */
     public MessageRow insertMessage(UUID tenantId, UUID conversationId, String senderType, String direction,
                                     String content, String metadataJson) {
+        return insertMessage(tenantId, conversationId, senderType, direction, content, metadataJson, null);
+    }
+
+    /** Tin BOT kèm {@code ai_interaction_id} (cột có sẵn của {@code engagement.messages}) — UC023/UC027. */
+    public MessageRow insertMessage(UUID tenantId, UUID conversationId, String senderType, String direction,
+                                    String content, String metadataJson, UUID aiInteractionId) {
         Message m = new Message(tenantId, conversationId, SenderType.valueOf(senderType), null, direction, content);
         m.setMetadata(metadataJson == null ? new java.util.HashMap<>() : fromJson(metadataJson));
+        m.setAiInteractionId(aiInteractionId);
         m.setDeliveryStatus("DELIVERED");
         m.setSentAt(Instant.now());
         em.persist(m);
@@ -375,7 +403,7 @@ public class WidgetRepository {
 
     private MessageRow messageRow(Message m) {
         return new MessageRow(m.getId(), m.getSenderType().name(), m.getContent(), toJson(m.getMetadata()),
-                m.getSentAt());
+                m.getSentAt(), m.getAiInteractionId());
     }
 
     private String toJson(Object value) {

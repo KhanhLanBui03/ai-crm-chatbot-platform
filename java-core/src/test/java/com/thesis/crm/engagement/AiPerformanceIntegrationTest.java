@@ -160,6 +160,42 @@ class AiPerformanceIntegrationTest extends EngagementIntegrationTestBase {
         assertThat(lyDo.get("QUOTA_EXCEEDED").get("countsAgainstAiQuality").asBoolean()).isFalse();
     }
 
+    // ── Ô "Phản hồi tích cực" — chốt Q2 GD2: lấy từ ai-service, không từ metrics_daily ──
+
+    @Test
+    void phanHoiTichCuc_layTuAiService_congTuVoiTuMauVoiMau_boNhanMay() throws Exception {
+        AI.quality.set(new FakeAiServer.Script(200, """
+                {"danh_gia": [
+                  {"rater_type": "AGENT", "ty_le_tich_cuc": {"tu_so": 0, "mau_so": 1, "gia_tri": 0.0},
+                   "che_theo_ly_do": {"WRONG_INFO": 1}},
+                  {"rater_type": "AUTO_EVAL", "ty_le_tich_cuc": {"tu_so": 9, "mau_so": 9, "gia_tri": 1.0},
+                   "che_theo_ly_do": {}},
+                  {"rater_type": "CUSTOMER", "ty_le_tich_cuc": {"tu_so": 1, "mau_so": 2, "gia_tri": 0.5},
+                   "che_theo_ly_do": {"IRRELEVANT": 1}}]}""", 0));
+        nhan(luot("RAG").llm(true));
+        JsonNode d = baoCao("?from=2026-11-01&to=2026-11-10");
+        // (1 + 0) / (2 + 1) — KHÔNG phải trung bình hai tỉ lệ (0,25), KHÔNG tính 9 nhãn máy
+        assertThat(d.get("positiveFeedbackRate").asDouble()).isCloseTo(1.0 / 3, org.assertj.core.data.Offset.offset(1e-9));
+        assertThat(d.get("feedbackCount").asLong()).isEqualTo(3);
+        assertThat(d.get("errorMessage").isNull()).isTrue();
+        // Cùng cửa sổ ngày theo múi giờ doanh nghiệp như các ô khác
+        assertThat(java.net.URLDecoder.decode(AI.lastQualityQuery.get(), StandardCharsets.UTF_8)).contains("tu=2026-10-31T17:00:00Z", "den=2026-11-10T17:00:00Z");
+    }
+
+    @Test
+    void aiServiceLoi_oDanhGiaTrong_cacOKhacVanCoSo() throws Exception {
+        AI.quality.set(new FakeAiServer.Script(503, "{\"code\":\"X\",\"message\":\"x\"}", 0));
+        try {
+            nhan(luot("RAG").llm(true));
+            JsonNode d = baoCao("");
+            assertThat(d.get("totalInteractions").asLong()).isEqualTo(1);
+            assertThat(d.get("feedbackCount").asLong()).isZero();
+            assertThat(d.get("errorMessage").asText()).contains("Tạm không lấy được số đánh giá");
+        } finally {
+            AI.quality.set(new FakeAiServer.Script(200, "{\"danh_gia\": []}", 0));
+        }
+    }
+
     @Test
     void chuaCoLuotNao_tra0_vaMocCapNhatRong() throws Exception {
         JsonNode d = baoCao("");

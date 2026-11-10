@@ -184,3 +184,150 @@ mức của GD1 vẫn đúng sau khi gộp thay đổi `UsageQuotaServiceImpl` c
 - **Vì sao nạp lại đổi `id` mà kho không trống giây nào:** bản bóng là dòng mới (version kế tiếp, cùng tệp);
   bản cũ vẫn `READY` và vẫn được truy hồi; lúc bản bóng `READY`, ai-service xoá đoạn cũ và `ARCHIVED`
   bản cũ **trong cùng transaction** — người đọc thấy hoặc trạng thái trước, hoặc trạng thái sau (ADR-0031).
+
+---
+
+## GD2 — Chat trọn luồng + từ chối + đánh giá: UC023 · UC025 · UC027 (10/11/2026)
+
+**Nhánh** `feat/giao-dien-gd2-chat` (tách từ `develop` = `7c9f867`). Cách kiểm như GD1: trình duyệt thật (Chrome
+không giao diện, Playwright điều khiển — script ở scratchpad, không vào repo), `VITE_USE_MOCK=false`, mọi lời gọi
+qua gateway `:8080`; widget chạy trang dev `localhost:5174`. Không chụp ảnh — người dùng chốt áp lại cách của GD1.
+
+### Sáu câu demo — chốt TRƯỚC khi chạy
+
+Router chỉ cho qua câu kiểu "… bao nhiêu tiền / chi phí / bảng giá" (N17), nên cả sáu câu bám kiểu đó. Đã kiểm trước
+từng câu bằng cách gọi thẳng `POST /v1/ai/chat` của ai-service với ba hội thoại thử riêng (`d4351161…`,
+`0a6d6ee6…`, `8accdfb2…` — còn trong `ai.ai_interactions` của tenant B, có mặt ở màn Giám sát và Khoảng trống).
+
+| # | Vai | Câu hỏi | Kết quả mong đợi (đã kiểm trước) |
+|---|---|---|---|
+| C1 | có đáp án | Niềng răng mắc cài sứ bao nhiêu tiền? | `RAG`, 46.000.000 đồng `[1]`, nguồn "Bảng giá dịch vụ nha khoa 2026" |
+| C2 | có đáp án | Chi phí tẩy trắng răng bằng laser là bao nhiêu? | `RAG`, 2.450.000 đồng cho hai hàm `[1]` |
+| C3 | "chi phí" ngoài kho | Chi phí điều trị viêm nha chu bao nhiêu tiền? | từ chối `NOT_COVERED`, không nguồn, mời chuyển nhân viên |
+| C4 | đơn hàng cụ thể | Đơn hàng DH20261108 của em bao nhiêu tiền? | từ chối `OUT_OF_SCOPE_DATA`, `handoff = true` — luật mã đơn, không gọi LLM |
+| C5 | chào (đường nhanh) | Xin chào | `SMALL_TALK`, `FAST_PATH`, không gọi LLM, chi phí 0 |
+| C6 | ngoài kho hỏi lặp (3.3) | Chi phí làm răng giả tháo lắp bao nhiêu tiền? → Vậy chi phí làm răng giả tháo lắp hàm trên là bao nhiêu? | lần 1 `NOT_COVERED`; lần 2 cùng hội thoại `NOT_COVERED` + `handoff = true` ("Em chuyển anh/chị sang nhân viên…") |
+
+**Cấu hình lúc chạy (khác mặc định, chỉ trong buổi này):** `LLM_MODE=remote` (Gemini `gemini-3.5-flash-lite`),
+`RERANK_ENABLED=false`, `LLM_TIMEOUT_S=6`, `CHAM_TU_DONG_BAT=false`. Lý do: lượt kiểm trước đầu tiên đo được
+rerank khởi động nguội **20 335 ms**, rồi hai lượt liền Gemini quá hạn chót 2,5 s (`LLM_TIMEOUT`) nên rơi về câu
+"trả lời tạm" — mà java-core chỉ chờ ai-service 10 s cho một lượt widget. Độ trễ chưa là cổng (11/10) nên nới hạn
+chót cho buổi đi cảnh, ghi số thật; mặc định trong code giữ nguyên. Số đo trên đọc từ cột mới
+`ai_interactions.latency_breakdown` (V216).
+
+| | UC023 | UC025 | UC027 |
+|---|---|---|---|
+| (a) luồng chính trên giao diện | ✅ | ✅ | ✅ |
+| (b) luồng phụ, mã lỗi | ✅ CRM · 10 · KPI · 8.2 | ✅ 3.1 · 3.3 · 4 · 8 · 8.1 · bổ sung tài liệu | ✅ 2.1 · 3 · 3.1 · 4 · 7 · 8 · 422 · 404 |
+| (c) kiểm máy | ✅ | ✅ | ✅ |
+| (d) minh chứng | ✅ | ✅ | ✅ |
+
+`LOW_CONFIDENCE` (câu bị huỷ vì không bám nguồn) **chưa tái hiện trên giao diện**: cổng huỷ đang tắt
+(`RAG_NGUONG_BAM_NGUON = 0`, ADR-0029) nên đường này không xảy ra ở cấu hình ship — khoá bằng test (mục Kiểm máy).
+
+### Môi trường
+
+| Thành phần | Trạng thái |
+|---|---|
+| Hạ tầng · suy luận | như GD1; đủ 14 topic; ai-embed · ai-rerank · ai-classify healthy |
+| CSDL | Track A V139 · Track B **V216** (mới, `scripts/migrate-ai.sh`) |
+| ai-service API + worker | `LLM_MODE=remote`, `RERANK_ENABLED=false`, `LLM_TIMEOUT_S=6`, `CHAM_TU_DONG_BAT=false` |
+| web-dashboard :5173 · web-widget :5174 | `VITE_USE_MOCK=false`; widget mở bằng `localhost:5174/?key=…&api=http://localhost:8080` |
+| Kênh widget tenant B (mới) | tạo trên SCR018 bằng "Sinh mã nhúng" → `wk_4d68…`, tên miền `localhost`; `404 → 201 POST → 200 PUT /api/v1/widget-config` |
+
+### UC023 — Trả lời dựa trên tri thức doanh nghiệp
+
+| Bước đặc tả | Thao tác | Kết quả thấy được |
+|---|---|---|
+| 1–12 | C1 ở widget | "… niềng răng mắc cài sứ có giá 46.000.000 đồng cho toàn bộ liệu trình … [1]" · "Nguồn: Bảng giá dịch vụ nha khoa 2026". Đoạn trích **ẩn** tới khi bấm nguồn; bấm thì mở "- Niềng răng mắc cài kim loại: 34.000.000 … mắc cài sứ: 46.000.000 đồng …" |
+| 1–12 | C2 | "… 2.450.000 đồng cho hai hàm ạ [1]", cùng nguồn |
+| CRM | Hộp thư → hội thoại đó | hai tin BOT đều có "Nguồn: Bảng giá dịch vụ nha khoa 2026" như widget; mỗi tin BOT có 👍/👎 |
+| 10 | Giám sát lượt xử lý | thẻ C1: "Truy hồi tri thức · PRICING_POLICY (94%) · gemini-3.5-flash-lite · 1.261 token", câu hỏi + câu trả lời, "Độ trễ theo chặng 5.7 s — Truy hồi 961 ms · Sinh câu trả lời 4.7 s", "Điểm truy hồi cao nhất 0.78", "Căn cứ đã trích dẫn" kèm đoạn |
+| KPI | C5 "Xin chào" | widget trả mẫu câu chào ngay; thẻ giám sát "Chào hỏi · GREETING (96%) · template · 0 token · 0 ₫" — không gọi LLM |
+| 8.2 | Bật lại ai-service với `LLM_API_KEY` sai, hỏi "Chi phí bọc răng sứ zirconia bao nhiêu tiền?" | Gemini trả 400 `INVALID_ARGUMENT` → log "LLM không khả dụng (LLM_HTTP_400) — trả câu suy giảm"; widget vẫn có câu trả lời: nhãn **"Trả lời tạm"** + trích nguyên văn đoạn "Thẩm mỹ" + nguồn + 👍/👎 |
+| — | CSDL `engagement.messages` | cả 7 tin BOT của lượt chạy có `ai_interaction_id`; `metadata.refusalReason` có ở 3 tin từ chối; `metadata.degraded` có ở mọi tin |
+
+### UC025 — Từ chối khi không đủ căn cứ
+
+| Bước đặc tả | Thao tác | Kết quả thấy được |
+|---|---|---|
+| 1–6 | C3 ở widget | "Dạ hiện em chưa tìm thấy thông tin phù hợp trong tài liệu của cửa hàng … Anh/chị có muốn em chuyển cho nhân viên tư vấn không ạ?" — không bịa giá, không có nguồn |
+| 5 / 3.1 | C4 | "Dạ câu này cần tra cứu thông tin cụ thể (đơn hàng, tài khoản …) … Em chuyển anh/chị sang nhân viên hỗ trợ ngay ạ."; chân widget "Đang chờ nhân viên tiếp nhận…"; Hộp thư: hội thoại "Chờ nhân viên" (`PENDING_AGENT`) |
+| 3.3 | C6 hai lần, cùng hội thoại | lần 1 từ chối như C3; lần 2 "Dạ em xin lỗi vì chưa giúp được anh/chị. Em chuyển anh/chị sang nhân viên tư vấn ngay ạ." → `PENDING_AGENT` |
+| 4 | Giám sát, "Chỉ lượt từ chối" | request `refused=true`; thẻ C3: "Đã từ chối", "Từ chối trả lời: Kho tri thức không có nội dung phù hợp", "Điểm truy hồi cao nhất 0.61", độ trễ từng chặng |
+| 8 · 8.1 | Khoảng trống tri thức | 4 dòng mới, mỗi dòng **2 khách · 2 lần** (hội thoại kiểm trước + widget): hai câu của C6, C4 "Cần dữ liệu thời gian thực", C3. Không còn ô tìm kiếm; cột "Số khách hỏi (≈)" |
+| — | Tải "Bảng giá điều trị nha chu" (MD, 1 đoạn, qua gateway) → `READY` → hỏi lại C3 ở widget | "… viêm nha chu giai đoạn đầu là 1.800.000 đồng mỗi hàm [1] … nặng có phẫu thuật lật vạt là 4.500.000 đồng mỗi vùng [1]"; dòng C3 ở Khoảng trống đứng yên ở 2 — không tăng, rơi khỏi danh sách theo cửa sổ 30 ngày. Gỡ tài liệu thử: `200 DELETE`, kho về 2 tài liệu |
+
+### UC027 — Đánh giá chất lượng câu trả lời
+
+| Bước đặc tả | Thao tác | Kết quả thấy được |
+|---|---|---|
+| 1–5 (khách) | 👍 dưới câu C1 | không hỏi lý do (3.1), thay bằng "Cảm ơn bạn đã đánh giá!"; `200 POST /api/v1/widget/messages/{id}/feedback`; CSDL `CUSTOMER · POSITIVE` |
+| 3 | 👎 dưới câu C2 | hiện 4 lý do; nút "Gửi" **khoá** tới khi chọn lý do; chọn "Lạc đề" + nhận xét → cảm ơn |
+| 2.1 | Tải lại trang, 👍 lại câu C2 | CSDL vẫn **một** dòng `CUSTOMER` cho lượt đó, nay `POSITIVE`, `updated_at > created_at` |
+| 4 (nhân viên) | Tài khoản `AGENT` ở Hộp thư: 👎 tin C2 | hộp thoại nhắc lại câu trả lời; bấm "Gửi đánh giá" khi chưa chọn → "Chọn một lý do."; chọn "Trả lời thiếu" + nhận xét + câu trả lời đúng → `201 POST /api/v1/ai-interactions/{id}/feedback`, toast; dưới tin hiện "Nhân viên Nha khoa B17 · Trả lời thiếu · “Thiếu thời gian một buổi” · Câu trả lời đúng: …" |
+| 422 · 404 | Gọi thẳng API qua gateway | chê thiếu lý do → **422 `REASON_REQUIRED`** "Đánh giá chưa ổn cần chọn một lý do." (java-core chặn, không sang ai-service); lượt không tồn tại → 404 `INTERACTION_NOT_FOUND`; widget không token → 401 |
+| 7 | Hiệu quả AI (30 ngày) | "Phản hồi tích cực **66.7%** — trên 3 lượt đánh giá của nhân viên và khách" = (khách 👍 C1 + khách 👍 C2) ÷ (2 của khách + 1 của nhân viên). Số lấy từ `/v1/ai/quality` (chốt Q2, hướng B) |
+| 8 | Giám sát, "Bị chê" | request `rating=NEGATIVE`; đúng **1** thẻ (C2) kèm cả hai đánh giá: nhân viên (lý do, nhận xét, câu đúng) và khách; "Mở hội thoại" → Hộp thư đúng hội thoại |
+
+### Cổng ra — kiểm máy
+
+| Lệnh | Kết quả |
+|---|---|
+| `mvn -f java-core/pom.xml test` (cả bộ, cần Docker) | **296/296**, 25 lớp (283 + 13 ca GD2: `AiInteractionRelayIntegrationTest` 7 · `WidgetIntegrationTest` +4 · `AiPerformanceIntegrationTest` +2) |
+| `npm run typecheck` · `npm run build` (web-dashboard, web-widget) | sạch; `widget.js` 20,9 kB |
+| ai-service `compileall` | sạch |
+| ai-service `ruff` | các tệp đã sửa không thêm lỗi nào; cả repo 102 lỗi **có sẵn trên `develop`** (E501, I001 — phần lớn UC038/UC040) |
+| ai-service `pytest tests/unit tests/integration` | 753 passed · 1 skipped · **3 failed không liên quan**: `test_intent_train_dedup_integrity` (sổ hash, nợ cũ) và hai test đường dẫn UC040/UC038 vỡ vì venv đang có FastAPI 0.141.1 gói router thành `_IncludedRouter` (`fastapi>=0.121` không ghim trần) — đường thật vẫn trả 401, không 404 |
+| ai-service test mới | `test_danh_sach_luot_loc_phan_trang_trich_dan_va_rls` · `test_danh_gia_lai_hien_ket_qua_moi_va_moc_moi` · `test_http_danh_sach_luot` · `test_luot_bi_huy_luu_cau_da_sinh_con_khach_nhan_cau_mau`; kiểm ngược: đổi điều kiện `discarded_answer` về công thức cũ thì test đỏ đúng chỗ |
+
+### Sửa trong lúc chạy thật (không có trong kế hoạch)
+
+| Hiện tượng | Nguyên nhân | Sửa |
+|---|---|---|
+| `discardedAnswer` sẽ hiện câu mẫu từ chối (khách ĐÃ nhận) thành "câu bị huỷ" | `response_text` của lượt từ chối là câu mẫu; công thức cũ `is_answered = false ? response_text : null` | lượt `LOW_CONFIDENCE` lưu câu ĐÃ SINH vào `response_text`; `discarded_answer` chỉ có ở lượt đó |
+| Màn giám sát không có độ trễ từng chặng của từng lượt | số chặng chỉ đi theo sự kiện, cộng dồn theo ngày | **V216** `ai_interactions.latency_breakdown` |
+| Link "Mở hội thoại" ở Giám sát lượt xử lý không mở hội thoại | link gửi `?hoiThoai=`, `InboxPage` đọc `?c=` | đổi link |
+| Chip "Độ bám nguồn 0.50 · ngưỡng 0.7" tô đỏ như thể câu đã bị huỷ | hằng 0.7 viết cứng; cổng huỷ thật = 0 (ADR-0029) | chip theo dõi, ghi "cổng huỷ đang tắt" |
+| Mô tả `POST …/feedback` trong hợp đồng ghi "đóng dòng cũ rồi chèn dòng mới" | lệch đặc tả 2.1 và lệch V204 | sửa mô tả theo đặc tả (cập nhật dòng cũ) |
+
+### Thấy khi chạy, ngoài GD2 — báo Dev B, chưa sửa
+
+- **Khoá Resend nằm trong gói JS của dashboard.** `RegisterPage.tsx`, `ForgotPasswordPage.tsx` đọc
+  `import.meta.env.VITE_RESEND_API_KEY`; Vite nhúng giá trị vào `dist/assets/*.js` (đã thấy chuỗi khoá trong bản
+  build). Ai mở trang đăng ký cũng đọc được khoá và gửi thư nhân danh doanh nghiệp. Cần chuyển việc gửi thư về
+  java-core và thu hồi khoá đang dùng.
+- Hai test đường dẫn UC040/UC038 vỡ với FastAPI 0.141 (mục trên).
+- 102 lỗi `ruff` có sẵn ở ai-service.
+
+### Dữ liệu sau khi kiểm
+
+Kho tenant B về đúng **2 tài liệu** (tài liệu thử "Bảng giá điều trị nha chu" đã gỡ, `ARCHIVED`); `DOCUMENT` = 2,
+`STORAGE_MB` = 3 861 byte — như trước buổi chạy. `AI_TOKEN` 13 194 / 500 000 (bộ đếm UC006 của Dev B ăn sự kiện
+`ai.turn.completed` đúng), `CONVERSATION` 6. Thêm mới: kênh widget `wk_4d68…` (tên miền `localhost`), 18 lượt ở
+`ai.ai_interactions` (3 hội thoại kiểm trước + 6 khách widget), 3 dòng `ai.ai_feedback`. **Gemini: 14 lượt gọi**
+(3 hỏng: 2 quá hạn chót 2,5 s lúc kiểm trước, 1 cố ý dùng khoá sai), 13 194 token.
+
+### Giảm độ sâu — ghi nhận ở GD2
+
+- Ô "Phản hồi tích cực": bộ lọc phiên bản mô hình không áp; ai-service tắt thì riêng ô này trống, kèm
+  `errorMessage`.
+- "Số khách khác nhau" của khoảng trống xấp xỉ bằng số hội thoại khác nhau.
+- `LuotXuLyAi.messageId` luôn `null`: ai-service không biết mã tin; chiều nối ngược là `messages.ai_interaction_id`.
+- Hộp thư không có nhãn "trả lời tạm" (`TinNhan` không mang cờ) — chỉ widget và màn giám sát có.
+- Trích dẫn của lượt cũ vắng ở màn giám sát khi tài liệu đã gỡ hoặc đã nạp lại (đoạn bị xoá); tin nhắn phía
+  java-core vẫn giữ bản chép trích dẫn khách đã thấy.
+
+### Phải giải thích được
+
+- **`groundedness` khác `retrieval_top_score` ở đâu:** điểm truy hồi đo độ liên quan đoạn ↔ câu hỏi, **trước**
+  khi sinh; bám nguồn đo câu trả lời có nằm trong đoạn không, **sau** khi sinh. Truy hồi 0.76 mà bám nguồn 0.50
+  (lượt C2) là chuyện thường: đoạn đúng, câu diễn đạt lại. Vì groundedness là phép đo từ vựng nên cổng huỷ đang tắt
+  (ADR-0029) — điểm chỉ để theo dõi.
+- **Vì sao khoảng trống tri thức không có nút "đã xử lý":** nó là truy vấn gộp trên lượt từ chối, không phải bảng có
+  trạng thái. Bổ sung tài liệu thì lượt từ chối thôi phát sinh và dòng tự rơi khỏi cửa sổ 30 ngày (cảnh "tải tài
+  liệu bổ sung"); nút "đã xử lý" chỉ giấu dòng mà không sửa gì trong kho.
+- **Vì sao tỉ lệ tích cực chia cho số lượt CÓ đánh giá:** phần lớn lượt không ai bấm. Chia cho tổng lượt (18) thì 2
+  lượt khen thành 11% — đo mức sẵn lòng bấm nút chứ không đo chất lượng. Cộng tử với tử, mẫu với mẫu của hai phía
+  (không lấy trung bình hai tỉ lệ), và lấy từ `ai.ai_feedback` thay vì `metrics_daily` vì đánh giá đến SAU sự kiện
+  lượt — đánh giá lại (2.1) tự đúng vì mỗi phía chỉ có một dòng.

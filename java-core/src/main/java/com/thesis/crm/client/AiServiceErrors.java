@@ -33,7 +33,9 @@ public final class AiServiceErrors {
     private static final Map<String, String> CAU_THAY = Map.of(
             "DOCUMENT_NOT_FOUND", "Không tìm thấy tài liệu.",
             "DOCUMENT_BUSY", "Tài liệu đang được xử lý (nạp hoặc nạp lại). Thử lại khi việc nạp xong.",
-            "DOCUMENT_ARCHIVED", "Tài liệu đã được gỡ khỏi kho tri thức.");
+            "DOCUMENT_ARCHIVED", "Tài liệu đã được gỡ khỏi kho tri thức.",
+            "INTERACTION_NOT_FOUND", "Không tìm thấy lượt trả lời này.",
+            "REASON_REQUIRED", "Đánh giá chưa ổn cần chọn một lý do.");
 
     private AiServiceErrors() {
     }

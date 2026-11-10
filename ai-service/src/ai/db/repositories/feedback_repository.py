@@ -21,7 +21,9 @@ Hai CHECK của V204 (chê thì có lý do; nhân viên thì có mã người d�
 kiểm trước để trả mã lỗi có nghĩa thay vì 500.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import text
@@ -78,3 +80,42 @@ async def ghi_danh_gia(
     )
     dong = ket_qua.one_or_none()
     return None if dong is None else KetQuaGhiDanhGia(dong[0], bool(dong[1]))
+
+
+@dataclass(frozen=True, slots=True)
+class DongDanhGia:
+    interaction_id: UUID
+    id: UUID
+    rater_type: str
+    rater_user_id: UUID | None
+    rating: str
+    reason_code: str | None
+    comment: str | None
+    correction_text: str | None
+    # Lần ghi gần nhất — đánh giá lại thì trigger touch_updated_at (V207) đẩy mốc này lên
+    updated_at: datetime
+
+
+async def doc_theo_luot(
+    session: AsyncSession, interaction_ids: Sequence[UUID]
+) -> list[DongDanhGia]:
+    """Đánh giá của NGƯỜI (khách, nhân viên) cho các lượt đã cho — mới nhất trước.
+
+    Bỏ ``AUTO_EVAL``: nhãn máy dùng cho tổng hợp (``/v1/ai/quality``), không phải ý kiến hiển thị
+    cạnh lượt — ``DanhGiaAi.ratedByType`` của dashboard chỉ có ``AGENT`` và ``CUSTOMER``.
+    """
+    if not interaction_ids:
+        return []
+    ket_qua = await session.execute(
+        text(
+            """
+            SELECT ai_interaction_id, id, rater_type, rater_user_id, rating, reason_code,
+                   comment, correction_text, updated_at
+              FROM ai.ai_feedback
+             WHERE ai_interaction_id = ANY(:ids) AND rater_type <> 'AUTO_EVAL'
+             ORDER BY updated_at DESC, id
+            """
+        ),
+        {"ids": list(interaction_ids)},
+    )
+    return [DongDanhGia(*d) for d in ket_qua.all()]

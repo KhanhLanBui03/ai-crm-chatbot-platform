@@ -4,6 +4,10 @@ import com.thesis.crm.analytics.dto.response.AiPerformanceDtos.HieuQuaAi;
 import com.thesis.crm.analytics.dto.response.AiPerformanceDtos.LyDoChuyenGiao;
 import com.thesis.crm.analytics.dto.response.AiPerformanceDtos.TheoNhanh;
 import com.thesis.crm.analytics.entity.MetricsDaily;
+import com.thesis.crm.client.AiInteractionClient;
+import com.thesis.crm.client.AiInteractionClient.DanhGiaPhia;
+import com.thesis.crm.client.AiInteractionClient.QualitySummary;
+import com.thesis.crm.client.AiServiceException;
 import com.thesis.crm.common.exception.BusinessException;
 import com.thesis.crm.platform.entity.Tenant;
 import com.thesis.crm.security.TenantTransactionScope;
@@ -20,6 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,9 +33,22 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * UC039 — gộp số liệu cho màn "Hiệu quả và chi phí của tác tử AI" từ mô hình đọc {@link MetricsDaily} và lý
  * do chuyển giao ở {@code engagement.handoff_events}. Đọc qua Entity, lọc {@code tenantId} cùng RLS.
+ *
+ * <p><b>Ô "Phản hồi tích cực" (UC027 bước 7) lấy từ ai-service, không từ {@code metrics_daily}</b> — chốt
+ * Q2 đợt GD2 (10/11/2026). Sự kiện {@code ai.turn.completed} phát ngay khi lượt chat xong, TRƯỚC khi có
+ * ai bấm 👍/👎, nên hai cột {@code positive_feedback}/{@code negative_feedback} không có nguồn nào cộng.
+ * {@code GET /v1/ai/quality} đếm thẳng {@code ai.ai_feedback} (đặc tả UC027: "AI tổng hợp vào chỉ số hiệu
+ * quả"): đánh giá lại tự đúng vì chỉ có một dòng mỗi phía, và đánh giá được gom theo NGÀY CỦA LƯỢT — cùng
+ * cách {@code metrics_daily} gom các ô khác. ai-service lỗi thì riêng ô này trống và có
+ * {@code errorMessage}; các ô khác vẫn có số.
  */
 @Service
 public class AiPerformanceService {
+
+    private static final Logger log = LoggerFactory.getLogger(AiPerformanceService.class);
+    /** Phía tính vào ô — đúng nhãn "lượt đánh giá của nhân viên và khách"; nhãn máy AUTO_EVAL không tính. */
+    static final List<String> PHIA_NGUOI = List.of("CUSTOMER", "AGENT");
+    static final String LOI_DANH_GIA = "Tạm không lấy được số đánh giá từ dịch vụ AI — các chỉ số khác vẫn đúng.";
 
     /** Thứ tự hiển thị — đủ 7 nhánh, nhánh 0 lượt vẫn có dòng (UC039 5.1: ẩn đi thì không thấy điểm nghẽn). */
     static final List<String> CAC_NHANH = List.of("SMALL_TALK", "RAG", "CLARIFY", "HANDOFF", "TOOL_CALL", "SUMMARY",
@@ -38,10 +57,12 @@ public class AiPerformanceService {
 
     private final EntityManager em;
     private final TenantTransactionScope scope;
+    private final AiInteractionClient ai;
 
-    public AiPerformanceService(EntityManager em, TenantTransactionScope scope) {
+    public AiPerformanceService(EntityManager em, TenantTransactionScope scope, AiInteractionClient ai) {
         this.em = em;
         this.scope = scope;
+        this.ai = ai;
     }
 
     @Transactional(readOnly = true)
@@ -67,7 +88,7 @@ public class AiPerformanceService {
         }
         List<MetricsDaily> dong = tq.getResultList();
 
-        long luot = 0, tuChoi = 0, goiLlm = 0, dem = 0, tichCuc = 0, tieuCuc = 0, treTong = 0, demBam = 0;
+        long luot = 0, tuChoi = 0, goiLlm = 0, dem = 0, treTong = 0, demBam = 0;
         BigDecimal chiPhi = BigDecimal.ZERO, tongBam = BigDecimal.ZERO;
         Map<String, long[]> theoNhanh = new HashMap<>();          // nhánh → [số lượt]
         Map<String, BigDecimal> phiNhanh = new HashMap<>();
@@ -77,8 +98,6 @@ public class AiPerformanceService {
             tuChoi += m.getRefusalCount();
             goiLlm += m.getLlmCallCount();
             dem += m.getCachedCount();
-            tichCuc += m.getPositiveFeedback();
-            tieuCuc += m.getNegativeFeedback();
             treTong += m.getLatencySumMs();
             demBam += m.getGroundednessCount();
             chiPhi = chiPhi.add(m.getCostVnd());
@@ -97,12 +116,14 @@ public class AiPerformanceService {
             phanBo.add(new TheoNhanh(b, theoNhanh.getOrDefault(b, new long[1])[0],
                     phiNhanh.getOrDefault(b, BigDecimal.ZERO)));
         }
-        long danhGia = tichCuc + tieuCuc;
+        long[] tichCucVaDanhGia = danhGiaCuaNguoi(tenantId, tu.atStartOfDay(zone).toInstant(),
+                den.plusDays(1).atStartOfDay(zone).toInstant());
+        long danhGia = tichCucVaDanhGia == null ? 0 : tichCucVaDanhGia[1];
         return new HieuQuaAi(
                 capNhatGanNhat(tenantId),
                 luot,
                 tiLe(tuChoi, luot),
-                tiLe(tichCuc, danhGia),
+                tichCucVaDanhGia == null ? 0 : tiLe(tichCucVaDanhGia[0], danhGia),
                 danhGia,
                 tiLe(dem, luot),
                 demBam == 0 ? null : tongBam.doubleValue() / demBam,
@@ -113,7 +134,35 @@ public class AiPerformanceService {
                 lyDoChuyenGiao(tenantId, tu.atStartOfDay(zone).toInstant(), den.plusDays(1).atStartOfDay(zone).toInstant()),
                 chang(chang),
                 phienBanMoHinh(dong),
-                null);
+                tichCucVaDanhGia == null ? LOI_DANH_GIA : null);
+    }
+
+    /**
+     * {@code [số khen, số đánh giá]} của khách + nhân viên trong {@code [tu, den)} — cộng TỬ với tử, MẪU với
+     * mẫu (không cộng hai tỉ lệ). Mẫu số là số lượt ĐÃ có đánh giá, không phải tổng số lượt (đặc tả
+     * UC027); một lượt được cả khách lẫn nhân viên đánh giá thì góp hai — đúng nhãn "lượt đánh giá".
+     * {@code null} khi ai-service không trả lời được.
+     *
+     * <p>Bộ lọc {@code modelVersion} của màn KHÔNG áp cho ô này (ai-service không lọc đánh giá theo mô
+     * hình) — ghi ở "giảm độ sâu" của báo cáo đợt giao diện.
+     */
+    private long[] danhGiaCuaNguoi(UUID tenantId, Instant tu, Instant den) {
+        QualitySummary q;
+        try {
+            q = ai.quality(tenantId, tu, den);
+        } catch (AiServiceException ex) {
+            log.warn("Không lấy được số đánh giá từ ai-service: {} {}", ex.getStatus(), ex.getCode());
+            return null;
+        }
+        long khen = 0;
+        long tong = 0;
+        for (DanhGiaPhia p : q.danhGia() == null ? List.<DanhGiaPhia>of() : q.danhGia()) {
+            if (PHIA_NGUOI.contains(p.raterType()) && p.tyLeTichCuc() != null) {
+                khen += p.tyLeTichCuc().tuSo();
+                tong += p.tyLeTichCuc().mauSo();
+            }
+        }
+        return new long[] {khen, tong};
     }
 
     /**

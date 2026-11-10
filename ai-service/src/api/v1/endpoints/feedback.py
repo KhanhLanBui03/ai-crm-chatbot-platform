@@ -1,5 +1,8 @@
 """Đánh giá chất lượng câu trả lời — UC027 · khoảng trống tri thức — UC025. [PRODUCTION]
 
+``GET /v1/ai-interactions`` — danh sách lượt cho màn Giám sát lượt xử lý (SCR036): UC023 bước 10,
+UC025 bước 4, UC027 bước 8. Đợt GD2, nháp ở docs/contracts/giao-dien-gd.md mục 4.
+
 Hai đường gửi đánh giá, cùng một xử lý (đều có trong docs/openapi/ai-service-to-java-core.yaml):
 
 - ``POST /v1/ai/feedback`` (``recordFeedback``) — java-core gửi, ``interaction_id`` trong body.
@@ -17,7 +20,14 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 
 from src.ai import service
-from src.ai.schemas import FeedbackRecorded, FeedbackRequest, KnowledgeGapPage, QualitySummary
+from src.ai.schemas import (
+    FeedbackRecorded,
+    FeedbackRequest,
+    InteractionBranch,
+    InteractionPage,
+    KnowledgeGapPage,
+    QualitySummary,
+)
 from src.api.deps import SessionDep, TenantIdDep
 
 router = APIRouter(tags=["chat-luong"])
@@ -54,6 +64,45 @@ async def ghi_danh_gia_theo_luot(
     interaction_id: UUID, yeu_cau: FeedbackRequest, tenant_id: TenantIdDep, session: SessionDep
 ) -> FeedbackRecorded:
     return await service.record_feedback(session, yeu_cau, interaction_id)
+
+
+@router.get(
+    "/ai-interactions",
+    response_model=InteractionPage,
+    operation_id="listInteractions",
+    responses={
+        401: {"description": "TENANT_CONTEXT_MISSING — thiếu X-Tenant-Id"},
+        422: {"description": "INVALID_REQUEST — tham số lọc sai kiểu hoặc ngoài miền"},
+    },
+)
+async def danh_sach_luot(
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    route: InteractionBranch | None = None,
+    refused: bool | None = None,
+    rating: Literal["POSITIVE", "NEGATIVE"] | None = None,
+    conversation_id: UUID | None = None,
+    tu: datetime | None = None,
+    den: datetime | None = None,
+    page: int = Query(default=0, ge=0),
+    size: int = Query(default=20, ge=1, le=100),
+) -> InteractionPage:
+    """SCR036 — mới nhất trước. ``rating`` lọc lượt có đánh giá của người mang giá trị đó.
+
+    ``tu``/``den`` là nửa khoảng ``[tu, den)`` — java-core quy ngày của người dùng ra mốc theo múi
+    giờ doanh nghiệp, như ``/v1/ai/quality``.
+    """
+    return await service.list_interactions(
+        session,
+        route=route,
+        refused=refused,
+        rating=rating,
+        conversation_id=conversation_id,
+        tu=tu,
+        den=den,
+        page=page,
+        size=size,
+    )
 
 
 @router.get(

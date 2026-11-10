@@ -230,6 +230,23 @@ def _turn(message: str, clf, answerer=None, recorder=None):
     return resp, rec
 
 
+def test_luot_bi_huy_luu_cau_da_sinh_con_khach_nhan_cau_mau():
+    """GD2 — ``response_text`` của lượt LOW_CONFIDENCE là câu ĐÃ SINH bị huỷ (nguồn của
+    ``discardedAnswer``); khách vẫn chỉ nhận câu mẫu từ chối."""
+    huy = KnowledgeAnswer(
+        answer="Dạ em chưa chắc chắn…", refused=True, refusal_reason="LOW_CONFIDENCE",
+        llm_called=True, groundedness_score=0.2, discarded_answer="Đổi mới trọn đời ạ [1].",
+        latency_breakdown={"retrieve_ms": 40, "generate_ms": 900},
+    )
+    clf = _FixedClassifier("PRICING_POLICY", 0.9)
+    resp, rec = _turn("giá gói pro", clf, _Answerer(ket_qua=huy))
+    assert resp.answer == "Dạ em chưa chắc chắn…" and resp.refused
+    r = rec.records[0]
+    assert r.response_text == "Đổi mới trọn đời ạ [1]." and not r.is_answered
+    # độ trễ từng chặng đi vào dòng của lượt (V216), cùng số với response
+    assert r.latency_breakdown["generate_ms"] == 900 and "guard_ms" in r.latency_breakdown
+
+
 def test_duong_nhanh_khong_goi_nhanh_rag():
     answerer = _Answerer()
     resp, rec = _turn("chào shop", _FixedClassifier("GREETING", 0.97), answerer)

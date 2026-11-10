@@ -1,17 +1,11 @@
 import { format } from 'date-fns'
-import {
-  Bot,
-  FileText,
-  ThumbsDown,
-  ThumbsUp,
-  TriangleAlert,
-  Zap,
-} from 'lucide-react'
+import { Bot, FileText, LifeBuoy, TriangleAlert, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { toast } from 'sonner'
 
-import { useDanhGiaLuotXuLyMutation, useDanhSachLuotXuLyQuery, type BoLocLuotXuLy } from '@/api/ai-agent'
+import { useDanhSachLuotXuLyQuery, type BoLocLuotXuLy } from '@/api/ai-agent'
+import { useAppSelector } from '@/app/store/hooks'
+import { DanhSachDanhGia, NutDanhGia } from '@/components/ai/DanhGiaDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -26,7 +20,6 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusChip } from '@/components/ui/status-chip'
 import {
-  NHAN_LY_DO_DANH_GIA,
   NHAN_LY_DO_TU_CHOI,
   NHAN_NHANH_XU_LY,
   doTre,
@@ -44,8 +37,13 @@ const CHANG = [
   { khoa: 'tool', nhan: 'Gọi công cụ', mau: 'var(--chart-4)' },
 ] as const
 
-/** Ngưỡng bám nguồn — dưới mức này thì câu trả lời bị huỷ chứ không gửi cho khách. */
-const NGUONG_BAM_NGUON = 0.7
+/**
+ * Mốc tô màu độ bám nguồn — CHỈ để đọc nhanh, không phải cổng huỷ. Cổng huỷ thật ở ai-service
+ * (`RAG_NGUONG_BAM_NGUON`) đang TẮT (0) theo ADR-0029: điểm là phép đo từ vựng, chấm oan câu diễn đạt
+ * lại. Câu bị huỷ thật thì có `discardedAnswer`; câu điểm thấp mà không có trường đó là câu khách ĐÃ
+ * nhận. Bản trước ghi "ngưỡng 0.7" và tô đỏ — đọc như thể câu đã bị huỷ (sửa ở GD2).
+ */
+const MOC_BAM_NGUON_TOT = 0.7
 
 /**
  * SCR036 — giám sát lượt xử lý của tác tử AI. Màn chữ ký.
@@ -57,6 +55,10 @@ const NGUONG_BAM_NGUON = 0.7
  * 2. **`cached` nghĩa là không tốn lượt gọi mô hình.** Chi phí 0 đồng ở đây không phải lỗi số liệu.
  * 3. **Độ trễ tách theo chặng.** Một lượt 5,6 giây có thể do máy chủ MCP treo chứ không phải mô
  *    hình chậm — gộp thành một con số thì không sửa được gì.
+ *
+ * GD2: nút "Chưa ổn" mở `DanhGiaDialog` (bắt chọn 1/4 lý do, nhận xét, câu trả lời đúng) thay cho
+ * `WRONG_INFO` gắn cứng; lọc "Bị chê" là danh sách của UC027 bước 8; mỗi lượt hiện đủ đánh giá của
+ * khách và của từng nhân viên.
  */
 export function AiInteractionsPage() {
   const [boLoc, datBoLoc] = useState<BoLocLuotXuLy>({ trang: 0 })
@@ -117,7 +119,27 @@ export function AiInteractionsPage() {
           </SelectContent>
         </Select>
 
-        {(boLoc.nhanh || boLoc.daTuChoi !== undefined) && (
+        <Select
+          value={boLoc.danhGia ?? 'tat-ca'}
+          onValueChange={(v) =>
+            datBoLoc((cu) => ({
+              ...cu,
+              trang: 0,
+              danhGia: v === 'tat-ca' ? undefined : (v as BoLocLuotXuLy['danhGia']),
+            }))
+          }
+        >
+          <SelectTrigger size="sm" className="w-auto min-w-40" aria-label="Lọc theo đánh giá">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="tat-ca">Đánh giá: tất cả</SelectItem>
+            <SelectItem value="NEGATIVE">Bị chê</SelectItem>
+            <SelectItem value="POSITIVE">Được khen</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {(boLoc.nhanh || boLoc.daTuChoi !== undefined || boLoc.danhGia) && (
           <Button variant="ghost" size="sm" onClick={() => datBoLoc({ trang: 0 })}>
             Gỡ bộ lọc
           </Button>
@@ -159,8 +181,11 @@ export function AiInteractionsPage() {
 }
 
 function TheLuotXuLy({ luot }: { luot: LuotXuLyAi }) {
-  const [danhGia, ketQuaDanhGia] = useDanhGiaLuotXuLyMutation()
+  const toi = useAppSelector((s) => s.auth.nguoiDung?.id)
   const nhanh = NHAN_NHANH_XU_LY[luot.route]
+  const danhGia = luot.feedbacks ?? (luot.feedback ? [luot.feedback] : [])
+  const cuaToi =
+    danhGia.find((d) => d.ratedByType === 'AGENT' && d.ratedByUserId === toi) ?? null
   const tongChang = CHANG.reduce((t, c) => t + (luot.latencyBreakdown?.[c.khoa] ?? 0), 0)
 
   return (
@@ -187,6 +212,12 @@ function TheLuotXuLy({ luot }: { luot: LuotXuLyAi }) {
                 </StatusChip>
               )}
               {luot.refused && <StatusChip sacThai="warning">Đã từ chối</StatusChip>}
+              {luot.degraded && (
+                <StatusChip sacThai="warning" BieuTuong={LifeBuoy}>
+                  Trả lời tạm
+                </StatusChip>
+              )}
+              {luot.handoff && <StatusChip sacThai="info">Đề nghị chuyển nhân viên</StatusChip>}
               {luot.errorCode && (
                 <StatusChip sacThai="destructive">{luot.errorCode}</StatusChip>
               )}
@@ -201,24 +232,53 @@ function TheLuotXuLy({ luot }: { luot: LuotXuLyAi }) {
           </div>
 
           <Link
-            to={`/hop-thu?hoiThoai=${luot.conversationId}`}
+            to={`/hop-thu?c=${luot.conversationId}`}
             className="text-muted-foreground hover:text-foreground shrink-0 text-xs underline-offset-2 transition-colors hover:underline"
           >
             Mở hội thoại
           </Link>
         </div>
 
+        {(luot.userQuery || luot.answerText) && (
+          <div className="flex flex-col gap-1 text-[13px] leading-relaxed">
+            {luot.userQuery && (
+              <p>
+                <span className="text-muted-foreground">Khách hỏi: </span>
+                {luot.userQuery}
+              </p>
+            )}
+            {luot.answerText && (
+              <p className="line-clamp-4">
+                <span className="text-muted-foreground">Tác tử trả lời: </span>
+                {luot.answerText}
+              </p>
+            )}
+          </div>
+        )}
+
         {tongChang > 0 && <ThanhDoTre luot={luot} tong={tongChang} />}
+
+        {luot.retrievalTopScore != null && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted-foreground">Điểm truy hồi cao nhất</span>
+            <span className="font-medium tabular-nums">{luot.retrievalTopScore.toFixed(2)}</span>
+            <span className="text-muted-foreground">
+              — độ liên quan của đoạn với câu hỏi, đo trước khi sinh
+            </span>
+          </div>
+        )}
 
         {luot.groundednessScore != null && (
           <div className="flex items-center gap-2 text-xs">
             <span className="text-muted-foreground">Độ bám nguồn</span>
             <StatusChip
-              sacThai={luot.groundednessScore >= NGUONG_BAM_NGUON ? 'success' : 'destructive'}
+              sacThai={luot.groundednessScore >= MOC_BAM_NGUON_TOT ? 'success' : 'warning'}
             >
               {luot.groundednessScore.toFixed(2)}
             </StatusChip>
-            <span className="text-muted-foreground">ngưỡng {NGUONG_BAM_NGUON}</span>
+            <span className="text-muted-foreground">
+              theo dõi, không huỷ câu trả lời — cổng huỷ đang tắt (ADR-0029)
+            </span>
           </div>
         )}
 
@@ -285,51 +345,14 @@ function TheLuotXuLy({ luot }: { luot: LuotXuLyAi }) {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2 border-t pt-2.5">
-          {luot.feedback ? (
-            <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
-              {luot.feedback.rating === 'POSITIVE' ? (
-                <ThumbsUp className="text-success size-3.5" />
-              ) : (
-                <ThumbsDown className="text-destructive size-3.5" />
-              )}
-              {luot.feedback.ratedByName ?? 'Nhân viên'} đã đánh giá
-              {luot.feedback.reasonCode && ` — ${NHAN_LY_DO_DANH_GIA[luot.feedback.reasonCode]}`}
-              {luot.feedback.comment && `: ${luot.feedback.comment}`}
+        <div className="flex flex-col gap-2 border-t pt-2.5">
+          <DanhSachDanhGia danhGia={danhGia} />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-muted-foreground text-xs">
+              {cuaToi ? 'Bạn đã đánh giá — bấm lại để sửa:' : 'Câu trả lời này ổn không?'}
             </span>
-          ) : (
-            <>
-              <span className="text-muted-foreground text-xs">Câu trả lời này ổn không?</span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={ketQuaDanhGia.isLoading}
-                onClick={async () => {
-                  await danhGia({ id: luot.id, rating: 'POSITIVE' }).unwrap()
-                  toast.success('Đã ghi nhận đánh giá tích cực.')
-                }}
-              >
-                <ThumbsUp />
-                Ổn
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={ketQuaDanhGia.isLoading}
-                onClick={async () => {
-                  await danhGia({
-                    id: luot.id,
-                    rating: 'NEGATIVE',
-                    reasonCode: 'WRONG_INFO',
-                  }).unwrap()
-                  toast.success('Đã ghi nhận đánh giá tiêu cực.')
-                }}
-              >
-                <ThumbsDown />
-                Chưa ổn
-              </Button>
-            </>
-          )}
+            <NutDanhGia luotId={luot.id} cauTraLoi={luot.answerText} cuaToi={cuaToi} />
+          </div>
         </div>
       </CardContent>
     </Card>

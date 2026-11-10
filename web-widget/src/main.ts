@@ -4,7 +4,7 @@
 //   <script src="https://<gateway>/widget.js" data-widget-key="wk_..." async></script>
 // Tuỳ chọn data-api-url khi API nằm ở địa chỉ khác nơi phục vụ widget.js.
 
-import { LoiApi, WidgetApi, type ThongTinLienHe, type TinNhan } from './api'
+import { LoiApi, WidgetApi, type ThongTinLienHe, type TinNhan, type YeuCauDanhGia } from './api'
 import { docToken, luuToken, xoaToken } from './session'
 import { GiaoDienChat } from './ui'
 
@@ -48,6 +48,7 @@ class WidgetApp {
       onGapNhanVien: () => void this.gapNhanVien(),
       onMo: () => this.batDauHoi(),
       onDeLaiThongTin: (tt) => void this.deLaiThongTin(tt),
+      onDanhGia: (id, yc) => this.danhGia(id, yc),
     })
   }
 
@@ -131,6 +132,17 @@ class WidgetApp {
     } catch (e) {
       this.ui.datDangGo(false)
       this.xuLyLoi(e)
+    }
+  }
+
+  /** UC027 — lỗi ném lại để giao diện hiện ngay dưới tin; token hết hạn thì xử lý như mọi lượt khác. */
+  private async danhGia(messageId: string, yc: YeuCauDanhGia): Promise<void> {
+    if (!this.token) throw new Error('Phiên trò chuyện đã hết, bạn tải lại trang nhé.')
+    try {
+      await this.api.danhGia(this.token, messageId, yc)
+    } catch (e) {
+      if (e instanceof LoiApi && e.maHttp === 401) this.xuLyLoi(e)
+      throw e
     }
   }
 
