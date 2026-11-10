@@ -1,4 +1,4 @@
-# Hợp đồng đợt tích hợp giao diện GD1–GD4 (nháp 24/10/2026, cập nhật 10/11)
+# Hợp đồng đợt tích hợp giao diện GD1–GD4 (nháp 24/10/2026, cập nhật 10/11 — thêm GD2)
 
 ⚠️ Nháp phía module AI. Kế hoạch đợt: [`docs/plan/ke-hoach-tich-hop-giao-dien.md`](../plan/ke-hoach-tich-hop-giao-dien.md)
 (mục 1 liệt kê 11 thay đổi). **Người dùng chốt 24/10:** 8 UC AI là việc của Dev A từ dashboard tới
@@ -41,9 +41,43 @@ Thứ tự ưu tiên khi lệch: đặc tả UC > `dashboard-api.yaml` > nháp n
 >      lại một unhandled rejection trên console. Giao diện vẫn hiện lỗi đúng, chỉ là tiếng ồn.
 >    - ai-service chưa tự đăng ký Eureka (java-core dùng danh sách dự phòng).
 >
-> Còn mở cho GD2/GD3 (chưa đụng): mục 3–7, 10 của kế hoạch — `knowledge-gaps` sắp theo số khách,
-> `correctedAnswer`, đánh giá từ widget, tạo/xác minh yêu cầu xoá, `/internal/**` bằng
+> Còn mở cho GD3 (chưa đụng): mục 6, 7, 10 của kế hoạch — tạo/xác minh yêu cầu xoá, `/internal/**` bằng
 > `X-Internal-Token`, phát `crm.conversation.closed`.
+
+### 0.1 Tin gửi Dev B — GD2 (dán nguyên)
+
+> GD2 (UC023 · UC025 · UC027 — chat có trích dẫn, từ chối, đánh giá) đã nối trọn widget/dashboard → gateway →
+> java-core → ai-service, nhánh `feat/giao-dien-gd2-chat`. Đụng vài file của bạn, báo để bạn kéo về:
+>
+> 1. **`AiPerformanceService` (UC039)** — ô "Phản hồi tích cực" giờ lấy từ ai-service `GET /v1/ai/quality`
+>    (khách + nhân viên, cộng tử với tử, mẫu với mẫu, bỏ nhãn máy `AUTO_EVAL`), không cộng
+>    `metrics_daily.positive_feedback/negative_feedback` nữa. Lý do: `ai.turn.completed` phát ngay khi lượt chat
+>    xong, trước khi có ai bấm 👍/👎, nên hai cột đó không có nguồn nào cộng — màn luôn báo 0. ai-service lỗi thì
+>    riêng ô này trống, `errorMessage` có câu, các ô khác vẫn có số. Hai cột trong `metrics_daily` để trống, bạn
+>    muốn bỏ thì bỏ ở V1xx. `AiPerformancePage.tsx`: thêm câu phụ khi có `errorMessage`.
+> 2. **`dashboard-api.yaml`** — `LuotXuLyAi` thêm `userQuery`, `answerText`, `retrievalTopScore`, `degraded`,
+>    `handoff`, `feedbacks[]`; `DanhGiaAi` thêm `correctedAnswer`, `ratedByUserId`; `GET /ai-interactions` thêm
+>    `rating`; thân `POST …/feedback` thêm `correctedAnswer`; `knowledge-gaps` sắp theo `distinctContactCount`, bỏ
+>    `q`; mô tả `HieuQuaAi.positiveFeedbackRate`/`errorMessage`. **Đã chạy `npm run gen:api`.**
+> 3. **Widget (`WidgetDtos`, `WidgetService`, `WidgetController`, `WidgetRepository`, `AiChatClient`)** — tin BOT
+>    ghi `ai_interaction_id` vào cột có sẵn, `metadata` thêm `refusalReason`, `degraded`; `MessageDto` thêm
+>    `rateable`, `degraded`; endpoint mới `POST /api/v1/widget/messages/{messageId}/feedback` (token widget,
+>    chỉ tin BOT của chính khách đó, `rater_type = CUSTOMER` do máy chủ đặt).
+> 4. **`MessageThread.tsx` (Hộp thư)** — dưới tin BOT có 👍/👎 của nhân viên và danh sách đánh giá; một lời gọi
+>    `GET /api/v1/ai-interactions?conversationId=…&size=100` cho cả hội thoại.
+> 5. **`features/ai-agent/nhan.ts`** — `NHAN_LY_DO_DANH_GIA` chuyển sang `components/ai/DanhGiaDialog.tsx` (dùng chung
+>    hai feature), `nhan.ts` xuất lại. **Test:** `FakeAiServer` thêm 4 đường giả (`/v1/ai-interactions`,
+>    `/v1/knowledge-gaps`, `/v1/ai/quality`) và `interaction_id` trong câu trả lời mẫu.
+> 6. **Migration V216** (Track B) — `ai.ai_interactions.latency_breakdown`. Nếu bạn đang giữ số V216 ở nhánh nào
+>    thì báo mình đổi số.
+> 7. Thấy khi chạy, **không thuộc GD2, chưa sửa**:
+>    - **Khoá Resend lộ trong gói JS của dashboard** — `RegisterPage.tsx`, `ForgotPasswordPage.tsx` đọc
+>      `import.meta.env.VITE_RESEND_API_KEY`, Vite nhúng giá trị vào `dist/assets/*.js` (đã thấy trong bản build).
+>      Ai mở trang đăng ký cũng lấy được khoá. Nên chuyển gửi thư về java-core và **thu hồi khoá đang dùng**.
+>    - Hai test `tests/unit/test_duong_dan_canh_bao_an_toan.py` (UC040/UC038) đỏ với FastAPI 0.141 — router được
+>      gói thành `_IncludedRouter` nên `app.routes` không còn đường `/v1/...`; đường thật vẫn chạy. `fastapi>=0.121`
+>      không ghim trần.
+>    - `ruff` ai-service: 102 lỗi có sẵn (E501, I001), phần lớn ở `clustering/`, `safety_repository.py`.
 
 ---
 
@@ -140,3 +174,44 @@ tiêu đề có thể chứa tên khách ("Báo giá riêng anh A"), mà nhật 
 | "Mốc 80%/100% khi gỡ bớt: chốt ở UC020" | **Không xoá** `warned_at`/`blocked_at` | Mốc là thời điểm lần đầu chạm ngưỡng trong chu kỳ (UC006 hiển thị nó như một sự kiện); cổng chặn chỉ so `used_value` với trần nên gỡ bớt là tải lên được ngay |
 
 Còn nợ: UC041 xoá tài liệu theo khách (`xoa_tai_lieu_theo_khach`) chưa trả hạn mức — làm ở GD3.
+
+---
+
+## 4. GD2 — lượt xử lý, đánh giá, khoảng trống (10/11/2026)
+
+### 4.1 ai-service `GET /v1/ai-interactions` — mới (SCR036, UC023 b10 · UC025 b4 · UC027 b8)
+
+| Tham số | Kiểu | Ghi chú |
+|---|---|---|
+| `route` | 7 nhánh của V204 | giá trị lạ ⇒ 422 `INVALID_REQUEST` |
+| `refused` | bool | `true` = `NOT is_answered` |
+| `rating` | `POSITIVE` · `NEGATIVE` | lượt có ít nhất một đánh giá của NGƯỜI mang giá trị đó (`AUTO_EVAL` không tính) |
+| `conversation_id` | uuid | hộp thư lấy cả hội thoại một lần |
+| `tu`, `den` | datetime | nửa khoảng `[tu, den)` — java-core quy ngày theo múi giờ doanh nghiệp, như `/v1/ai/quality` |
+| `page`, `size` | ≥ 0 · 1–100, mặc định 20 | mới nhất trước |
+
+Phản hồi `InteractionPage {items, total, page, size}`; `InteractionItem` là `LuotXuLyAi` ở snake_case, thêm
+`user_query` (đã che PII), `answer_text`, `retrieval_top_score`, `status`, `llm_called`, `degraded`, `handoff`,
+`citations[]` (nối `retrieved_chunk_ids` với đoạn + tài liệu, giữ thứ tự `[1]`, `[2]`…; đoạn đã xoá thì vắng) và
+`feedback[]` (đánh giá của người, mới nhất trước, có `rater_user_id`, `corrected_answer`, `rated_at`). Ba truy vấn
+cho một trang, không N+1. Tenant do RLS. Test: `test_luot_va_danh_gia.py` (3 ca mới).
+
+**`discarded_answer`** chỉ có ở lượt bị HUỶ sau hậu kiểm (`LOW_CONFIDENCE` + `llm_called` + có điểm bám nguồn):
+đường RAG nay lưu câu ĐÃ SINH vào `response_text` của lượt đó (câu mẫu từ chối suy lại được từ lý do). Công thức
+cũ `is_answered = false ? response_text : null` hiện câu mẫu mà khách ĐÃ nhận thành "câu bị huỷ".
+
+**V216** `ai.ai_interactions.latency_breakdown jsonb NOT NULL DEFAULT '{}'` — khoá `<chặng>_ms` như
+`TurnRecord`, bỏ `total_ms`. Lượt trước V216 là `{}`.
+
+### 4.2 java-core — bề mặt cho dashboard và widget
+
+| Gọi | java-core chuyển sang | Quyền | Ghi chú |
+|---|---|---|---|
+| `GET /api/v1/ai-interactions?route&refused&rating&conversationId&from&to&page&size` | `GET /v1/ai-interactions` | mọi nhân viên | `from`/`to` là NGÀY → `[from 00:00, to+1 00:00)` giờ doanh nghiệp; gộp chặng `retrieve` (= embed + retrieve) · `rerank` · `generate` · `tool` · `guard` (= guard + postguard) · `classify`; `ratedByName` tra `platform.users`; `feedback` = phần tử đầu của `feedbacks` |
+| `POST /api/v1/ai-interactions/{id}/feedback` → **201** | `POST /v1/ai-interactions/{id}/feedback` | mọi nhân viên | `rater_type = AGENT`, `rater_user_id` từ JWT; chê thiếu lý do → 422 `REASON_REQUIRED` ngay ở java-core; khen thì bỏ lý do |
+| `GET /api/v1/knowledge-gaps?gapType&page&size` | `GET /v1/knowledge-gaps` | mọi nhân viên | `questionText ← query_text` · `occurrenceCount ← unanswered_count` · `distinctContactCount ← distinct_conversation_count` · `priority` 1 (≥ 5 khách) / 2 (≥ 2) / 3 · `firstSeenAt` · `lastSeenAt` |
+| `GET /api/v1/analytics/ai-performance` (UC039) | thêm `GET /v1/ai/quality?tu&den` | quản trị | chỉ ô "Phản hồi tích cực" — chốt Q2 hướng B |
+| `POST /api/v1/widget/messages/{messageId}/feedback` (token widget) | `POST /v1/ai-interactions/{id}/feedback` | khách giữ token | tin phải là BOT của hội thoại của CHÍNH khách đó và có `ai_interaction_id`, nếu không 404; `rater_type = CUSTOMER`, không có câu sửa |
+
+Bảng dịch lỗi (`AiServiceErrors`) thêm câu cho `INTERACTION_NOT_FOUND` và `REASON_REQUIRED`. Test:
+`AiInteractionRelayIntegrationTest` (7), `WidgetIntegrationTest` (+4), `AiPerformanceIntegrationTest` (+2).
