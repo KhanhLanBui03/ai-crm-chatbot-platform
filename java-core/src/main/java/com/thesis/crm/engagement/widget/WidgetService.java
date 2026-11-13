@@ -173,10 +173,13 @@ public class WidgetService {
             String status;
             if (isNew) {
                 Optional<QuotaRow> quota = repo.lockConversationQuota(s.tenantId());
-                if (quota.isPresent() && quota.get().used() >= quota.get().quota()) {
+                // Phòng vệ lớp hai: không đọc được dòng hạn mức thì coi như hết, đừng đếm thiếu. Doanh
+                // nghiệp KHÔNG còn thuê bao sống đã bị chặn từ usable() (403) nên thường không tới đây;
+                // nhánh này chỉ còn khả năng "thuê bao sống nhưng thiếu dòng usage_records".
+                if (quota.isEmpty() || quota.get().used() >= quota.get().quota()) {
                     quotaExceeded = true;           // 6.1 — vẫn lưu, nhưng không gọi AI
                 } else {
-                    quota.ifPresent(q -> repo.incrementUsage(s.tenantId(), q.id()));
+                    repo.incrementUsage(s.tenantId(), quota.get().id());
                 }
                 conversationId = repo.insertConversation(s.tenantId(), s.channelId(), identity.id(),
                         identity.contactId(), subjectOf(content));
