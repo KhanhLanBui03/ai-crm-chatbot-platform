@@ -21,6 +21,15 @@ public interface TenantSubscriptionRepository extends JpaRepository<TenantSubscr
             Collection<String> statuses);
 
     /**
+     * UC006 — doanh nghiệp có chu kỳ đã hết hạn mà chưa đóng, cho job nền mở chu kỳ mới.
+     *
+     * <p>Native có chủ đích: job chạy ngoài mọi ngữ cảnh tenant nên RLS chặn sạch bảng này. Hàm
+     * {@code SECURITY DEFINER} (V140) chỉ trả MÃ doanh nghiệp, không trả một cột dữ liệu nào.
+     */
+    @Query(value = "SELECT platform.tenants_with_expired_subscription(:now)", nativeQuery = true)
+    List<UUID> tenantsWithExpiredSubscription(@Param("now") Instant now);
+
+    /**
      * Các thuê bao của {@code tenantId} đang hiệu lực tại {@code now}, mới nhất trước — UC018 tiêu
      * thụ hạn mức. {@code UNIQUE (tenant_id, period_start)} không cấm hai chu kỳ chồng nhau, nên trả
      * danh sách và lấy phần tử đầu thay vì {@code Optional}.

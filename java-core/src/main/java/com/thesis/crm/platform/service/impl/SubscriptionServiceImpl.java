@@ -14,6 +14,7 @@ import com.thesis.crm.platform.repository.SubscriptionPlanRepository;
 import com.thesis.crm.platform.repository.TenantSubscriptionRepository;
 import com.thesis.crm.platform.repository.UsageRecordRepository;
 import com.thesis.crm.platform.repository.UserRepository;
+import com.thesis.crm.platform.service.SubscriptionCycleService;
 import com.thesis.crm.platform.service.SubscriptionService;
 import com.thesis.crm.security.SecurityUtils;
 import jakarta.persistence.EntityManager;
@@ -42,18 +43,21 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final UsageRecordRepository usageRecordRepository;
     private final UserRepository userRepository;
     private final EntityManager em;
+    private final SubscriptionCycleService cycleService;
 
     public SubscriptionServiceImpl(
             SubscriptionPlanRepository subscriptionPlanRepository,
             TenantSubscriptionRepository tenantSubscriptionRepository,
             UsageRecordRepository usageRecordRepository,
             UserRepository userRepository,
-            EntityManager em) {
+            EntityManager em,
+            SubscriptionCycleService cycleService) {
         this.subscriptionPlanRepository = subscriptionPlanRepository;
         this.tenantSubscriptionRepository = tenantSubscriptionRepository;
         this.usageRecordRepository = usageRecordRepository;
         this.userRepository = userRepository;
         this.em = em;
+        this.cycleService = cycleService;
     }
 
     @Override
@@ -111,6 +115,21 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .orElseThrow(() -> new AppException("Gói hiện tại không hợp lệ.", HttpStatus.INTERNAL_SERVER_ERROR));
 
         UUID userId = SecurityUtils.getCurrentUserId();
+
+        // UC006 — chu kỳ đã hết hạn thì KHÔNG sửa dòng cũ: mở chu kỳ mới bắt đầu từ bây giờ. Trước đây
+        // nhánh nâng gói chỉ đặt status = ACTIVE mà để nguyên period_end, nên doanh nghiệp hết hạn chọn
+        // gói xong vẫn nhận 409 "Hãy gia hạn hoặc chọn gói" — cả hai đường đều không cứu được (Dev A gặp
+        // 10/11/2026). Hạ gói cũng đi đường này: chu kỳ cũ đã đóng, không còn "chu kỳ sau" để chờ.
+        Instant bayGio = Instant.now();
+        if (!sub.getPeriodEnd().isAfter(bayGio)) {
+            sub.setScheduledPlanId(targetPlan.getId());
+            sub.setScheduledEffectiveAt(bayGio);
+            sub.setChangedBy(userId);
+            TenantSubscription moi = cycleService.moChuKyTiep(sub, bayGio, bayGio);
+            log.info("Doanh nghiệp tenantId={} chọn gói {} sau khi chu kỳ hết hạn — mở chu kỳ mới tới {}",
+                    tenantId, targetPlan.getCode(), moi.getPeriodEnd());
+            return toThueBaoResponse(moi, targetPlan, null);
+        }
 
         if (targetPlan.getSortOrder() > currentPlan.getSortOrder() || "TRIALING".equalsIgnoreCase(sub.getStatus())) {
             // Nâng gói (Upgrade) -> Có hiệu lực ngay lập tức
