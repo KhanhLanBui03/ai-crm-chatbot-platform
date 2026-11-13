@@ -1,7 +1,14 @@
 # SỔ ĐÓNG BĂNG MÃ HASH DỮ LIỆU ĐÁNH GIÁ (DATA HASHES)
 # Bất biến: Không bao giờ sửa các tệp đã đóng băng ở đây để 'tút' điểm.
-data/intent_test_human.jsonl:8cc500dc96ebd15f18af01ca386b53a3b85941dba9c06ce12f46ffa24d0a1ecf
-data/intent_train_dedup.jsonl:d8c2bfc45292629df653a5e1d719d27b0b35e78fb2fe1bccf3fe0c6a75b4562d
+#
+# 13/11/2026 — sửa hai dòng dưới, KHÔNG đụng nội dung tệp nào. Hai hash cũ
+# (8cc500dc…, d8c2bfc4…) đo bản CHECKOUT trên Windows: Git với core.autocrlf=true đổi LF thành
+# CRLF lúc lấy file ra, nên sổ ghi hash của một bản chưa từng được commit. Hash mới đo đúng bytes
+# trong kho (bản LF), cùng quy ước với các dòng bên dưới. Nội dung tệp giống hệt bản đã commit từ
+# 04/10 — đã đối chiếu từng byte; không số đo chất lượng nào đổi theo. .gitattributes ghim eol=lf
+# để lần checkout sau không lệch lại.
+data/intent_test_human.jsonl:80a5f713ce7d0c1a2eb3c418dbaca894ed515911ffcd6e180aab722bef01c867
+data/intent_train_dedup.jsonl:30c721bfbe81e7a93f341cbf34d4037a6054094393696b84fdd6d2fc0a2cae17
 bbad7ba113dd1acac8d4569670aee1020450026ec8488c28ed65ec57c72357df  artifacts/router_branch_c.joblib
 0cc5f770af0c6d2b49417021244d6d5d20d7453e87f614855e9aa7b1478ec95e  artifacts/router_model.onnx
 6e15b46930cdb4a60a1cd66de25c0b64b6430c2537566c5378ab37e41f6ef1dd  artifacts/router_embedder.json
