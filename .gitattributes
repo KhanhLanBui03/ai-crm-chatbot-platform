@@ -1,3 +1,10 @@
-# Tệp dữ liệu đã đóng băng: sha256 trong artifacts/DATA_HASHES.txt tính trên bản LF.
-# Không ghim eol thì Git trên Windows (core.autocrlf=true) checkout ra CRLF và hash lệch.
-ai-service/tests/eval/golden_set.jsonl text eol=lf
+# Tệp dữ liệu đã đóng băng: sha256 trong artifacts/DATA_HASHES.txt và trong
+# ai-service/tests/eval/configs/*.yaml tính trên bản LF.
+# Không ghim eol thì Git trên Windows (core.autocrlf=true) checkout ra CRLF và hash lệch — harness
+# nghiệm thu dừng ngay ("Tập đo lệch sha256 đã khoá") dù nội dung commit không hề đổi.
+#
+# Ghim cả thư mục thay vì từng tệp: mỗi bộ đóng băng thêm sau này tự được bảo vệ, không phải nhớ
+# thêm một dòng ở đây. Ghim KHÔNG sửa nội dung đã commit — chỉ buộc bản checkout giống hệt bản commit.
+ai-service/tests/eval/**/*.jsonl text eol=lf
+data/**/*.jsonl                  text eol=lf
+artifacts/router_embedder.json   text eol=lf
