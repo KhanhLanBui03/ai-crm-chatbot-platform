@@ -127,6 +127,63 @@ export const kiemToanHandlers = [
     )
   }),
 
+  // ── UC041 bước 1–2 — tạo yêu cầu (GD3) ─────────────────────────────────────
+  http.post('/api/v1/erasure-requests', async ({ request }) => {
+    await delay(400)
+    const than = (await request.json()) as {
+      contactId?: string
+      legalBasis?: string
+      requestedBy?: 'CONTACT' | 'STAFF'
+    }
+    if (!than.legalBasis?.trim()) {
+      return HttpResponse.json(loi('Căn cứ pháp lý là trường bắt buộc.'), { status: 422 })
+    }
+    const dangMo = yeuCauXoa.some(
+      (y) => y.contactId === than.contactId && y.status !== 'COMPLETED',
+    )
+    if (dangMo) {
+      return HttpResponse.json(
+        loi('Khách này đã có một yêu cầu xoá đang xử lý — không tạo yêu cầu thứ hai.'),
+        { status: 409 },
+      )
+    }
+    const moi: YeuCauXoaChiTiet = {
+      id: crypto.randomUUID(),
+      contactId: than.contactId ?? crypto.randomUUID(),
+      contactName: null,
+      requestedBy: than.requestedBy ?? 'STAFF',
+      legalBasis: than.legalBasis.trim(),
+      status: 'PENDING',
+      identityVerifiedByName: null,
+      identityVerifiedAt: null,
+      requestedAt: new Date().toISOString(),
+      completedAt: null,
+      items: xemTruocPhamVi(),
+      externalSystemsNote: null,
+      certificateUri: null,
+      startedAt: null,
+    }
+    yeuCauXoa = [moi, ...yeuCauXoa]
+    return HttpResponse.json(ok(moi), { status: 201 })
+  }),
+
+  // ── UC041 bước 3–4 — xác minh danh tính (GD3) ─────────────────────────────
+  http.post('/api/v1/erasure-requests/:id/verify-identity', async ({ params }) => {
+    await delay(300)
+    const y = yeuCauXoa.find((x) => x.id === params.id)
+    if (!y) return HttpResponse.json(loi('Không tìm thấy yêu cầu xoá.'), { status: 404 })
+    if (y.identityVerifiedAt) {
+      return HttpResponse.json(loi('Danh tính đã được xác minh trước đó.'), { status: 409 })
+    }
+    const capNhat: YeuCauXoaChiTiet = {
+      ...y,
+      identityVerifiedByName: NGUOI_DUNG_MAU.fullName,
+      identityVerifiedAt: new Date().toISOString(),
+    }
+    yeuCauXoa = yeuCauXoa.map((x) => (x.id === y.id ? capNhat : x))
+    return HttpResponse.json(ok(capNhat))
+  }),
+
   // ── SCR057 — tiến độ theo từng bảng ───────────────────────────────────────
   http.get('/api/v1/erasure-requests/:id', async ({ params }) => {
     await delay(300)

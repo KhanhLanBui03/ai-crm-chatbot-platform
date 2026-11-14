@@ -10,6 +10,7 @@ import type {
   SuKienChuyenGiao,
   TinNhan,
   TinhTrangHangCho,
+  TomTatHoiThoai,
   TrangThaiHoiThoai,
 } from '@/types/schema'
 
@@ -152,6 +153,15 @@ export const conversationsApi = apiSlice.injectEndpoints({
       providesTags: (_kq, _loi, id) => [{ type: 'HoiThoai', id: `ngu-canh-${id}` }],
     }),
 
+    /**
+     * UC026 trigger `MANUAL` — nút "Tóm tắt lại". Đồng bộ (vài giây — gọi mô hình), trả bản mới; làm
+     * mới cột ngữ cảnh để khối tóm tắt thay ngay. Hỏng thì bản cũ giữ nguyên ở máy chủ.
+     */
+    tomTatLai: build.mutation<TomTatHoiThoai, string>({
+      query: (id) => ({ url: `/api/v1/conversations/${id}/summary`, method: 'POST' }),
+      invalidatesTags: (_kq, _loi, id) => [{ type: 'HoiThoai', id: `ngu-canh-${id}` }],
+    }),
+
     // ── SCR021 — phân công và chuyển giao ─────────────────────────────────────
 
     /** Bỏ trống `assigneeUserId` là tự nhận về mình. */
@@ -249,6 +259,7 @@ export const {
   useDanhSachHoiThoaiQuery,
   useChiTietHoiThoaiQuery,
   useNguCanhHoiThoaiQuery,
+  useTomTatLaiMutation,
   usePhanCongHoiThoaiMutation,
   useChuyenGiaoHoiThoaiMutation,
   useDoiTrangThaiHoiThoaiMutation,

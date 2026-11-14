@@ -1076,6 +1076,36 @@ paths:
                   - $ref: '#/components/schemas/ApiResponse'
                   - properties: { data: { $ref: '#/components/schemas/NguCanhHoiThoai' } }
 
+  /api/v1/conversations/{conversationId}/summary:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    post:
+      tags: [Hộp thư]
+      summary: Tóm tắt lại hội thoại (UC026, trigger MANUAL)
+      description: |
+        Nút "Tóm tắt lại" ở cột phải (chốt Q1 của GD3). **Đồng bộ**: java-core gửi lịch sử (bỏ tin đã
+        che theo UC041) sang `POST /v1/ai/summarize`, nhận bốn phần, ghi vào hội thoại và trả bản mới.
+        Đường chính `CLOSING` thì bất đồng bộ (`crm.conversation.closed` → worker ai-service).
+        Mô hình hỏng thì bản cũ giữ nguyên (UC026 luồng phụ 3.1). Mọi nhân viên xem được hội thoại.
+      responses:
+        '200':
+          description: Bản tóm tắt mới
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/TomTatHoiThoai' } }
+        '404': { $ref: '#/components/responses/KhongThay' }
+        '422':
+          description: |
+            `CONVERSATION_TOO_SHORT` — chưa đủ tin của khách để tóm tắt (UC026 luồng phụ 1.1).
+            `SUMMARY_SCHEMA_INVALID` — mô hình không sinh đủ bốn phần sau một vòng sửa; bản cũ giữ nguyên.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+        '502': { $ref: '#/components/responses/AiKhongPhanHoi' }
+
   /api/v1/conversations/{conversationId}/messages:
     parameters:
       - $ref: '#/components/parameters/ConversationId'
@@ -3274,6 +3304,40 @@ paths:
                                 type: array
                                 items: { $ref: '#/components/schemas/YeuCauXoa' }
         '403': { $ref: '#/components/responses/KhongDuQuyen' }
+    post:
+      tags: [Kiểm toán]
+      summary: SCR056 — tạo yêu cầu xoá dữ liệu cá nhân
+      description: |
+        UC041 bước 1–2. Tạo yêu cầu ở trạng thái `PENDING` kèm căn cứ pháp lý (bắt buộc) và phạm vi dự
+        kiến (`items` — như `/preview`, mọi mục `PENDING`). Mọi nhân viên tạo được (thay mặt khách);
+        xác minh và thực thi chỉ quản trị viên.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaoYeuCauXoa' }
+      responses:
+        '201':
+          description: Đã tạo yêu cầu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/YeuCauXoaChiTiet' } }
+        '404': { $ref: '#/components/responses/KhongThay' }
+        '409':
+          description: |
+            `ERASURE_ALREADY_OPEN` — khách đã có một yêu cầu đang xử lý (UC041 luồng phụ 2.1).
+            `CONTACT_ALREADY_ANONYMIZED` — hồ sơ đã ẩn danh. `CONTACT_MERGED` — hồ sơ đã gộp vào hồ sơ khác.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+        '422':
+          description: '`LEGAL_BASIS_REQUIRED` · `LEGAL_BASIS_TOO_LONG` · `INVALID_REQUESTED_BY` · `CONTACT_REQUIRED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
 
   /api/v1/erasure-requests/preview:
     get:
@@ -3324,12 +3388,47 @@ paths:
                   - $ref: '#/components/schemas/ApiResponse'
                   - properties: { data: { $ref: '#/components/schemas/YeuCauXoaChiTiet' } }
 
+  /api/v1/erasure-requests/{requestId}/verify-identity:
+    post:
+      tags: [Kiểm toán]
+      summary: Xác minh danh tính chủ thể dữ liệu
+      description: |
+        UC041 bước 3–4. Ghi người xác minh (người đang đăng nhập) và thời điểm — hai giá trị đi cùng nhau
+        (`ck_erasure_verified`). Chỉ yêu cầu `PENDING`. Thiếu bước này thì `execute` bị chặn cả ở ứng dụng
+        lẫn ở CSDL (`ck_erasure_gate`).
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Đã xác minh
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties: { data: { $ref: '#/components/schemas/YeuCauXoaChiTiet' } }
+        '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '404': { $ref: '#/components/responses/KhongThay' }
+        '409':
+          description: '`ERASURE_NOT_PENDING` · `IDENTITY_ALREADY_VERIFIED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
   /api/v1/erasure-requests/{requestId}/execute:
     post:
       tags: [Kiểm toán]
       summary: SCR058 — thực thi yêu cầu xóa
       description: |
-        Chạy bất đồng bộ. Xong thì sinh biên bản xác nhận (`certificateUri`).
+        **Đồng bộ** (giảm độ sâu GD3): chạy hết rồi trả kết quả cuối — `COMPLETED`, hoặc
+        `PARTIALLY_FAILED` khi một phần hỏng (vd. ai-service không phản hồi — UC041 luồng phụ 9.1).
+        Nhận `PENDING` hoặc `PARTIALLY_FAILED`: chạy lại chỉ làm các mục chưa `DONE` (luồng phụ 8.1).
+
+        Biên bản xác nhận bản gọn (chốt Q4): `items` + người/lúc xác minh + lúc hoàn tất, lưu trên yêu
+        cầu và trong dòng kiểm toán `ERASURE_EXECUTED`; `certificateUri` luôn `null`.
 
         Phạm vi xóa **không vươn tới hệ thống bên ngoài** đã nhận dữ liệu qua MCP — giới hạn này
         ghi vào `externalSystemsNote` và phải hiển thị cho người duyệt, không được im lặng bỏ qua.
@@ -3339,8 +3438,8 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
-        '202':
-          description: Đã bắt đầu thực thi
+        '200':
+          description: Kết quả thực thi
           content:
             application/json:
               schema:
@@ -3348,8 +3447,11 @@ paths:
                   - $ref: '#/components/schemas/ApiResponse'
                   - properties: { data: { $ref: '#/components/schemas/YeuCauXoaChiTiet' } }
         '403': { $ref: '#/components/responses/KhongDuQuyen' }
+        '404': { $ref: '#/components/responses/KhongThay' }
         '409':
-          description: Yêu cầu không ở trạng thái PENDING
+          description: |
+            `IDENTITY_NOT_VERIFIED` — chưa xác minh danh tính (UC041 luồng phụ 3.1).
+            `ERASURE_NOT_EXECUTABLE` — yêu cầu đang chạy hoặc đã hoàn tất.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ApiResponse' }
@@ -5355,6 +5457,21 @@ components:
         traceId: { type: [string, 'null'] }
         occurredAt: { type: string, format: date-time }
 
+    TaoYeuCauXoa:
+      type: object
+      required: [contactId, legalBasis]
+      properties:
+        contactId: { type: string, format: uuid }
+        legalBasis:
+          type: string
+          maxLength: 2000
+          description: Bắt buộc (UC041) — vd. "Điều 16 Nghị định 13/2023/NĐ-CP, khách gửi thư ngày …"
+        requestedBy:
+          type: string
+          enum: [CONTACT, STAFF]
+          default: STAFF
+          description: '`CONTACT` — khách tự gửi; `STAFF` — nhân viên tạo thay mặt khách'
+
     YeuCauXoa:
       type: object
       required: [id, contactId, status, requestedAt]
@@ -5362,10 +5479,13 @@ components:
         id: { type: string, format: uuid }
         contactId: { type: string, format: uuid }
         contactName: { type: [string, 'null'] }
+        requestedBy:
+          type: string
+          enum: [CONTACT, STAFF]
         legalBasis: { type: string }
         status: { $ref: '#/components/schemas/TrangThaiYeuCauXoa' }
-        identityVerifiedByName: { type: string }
-        identityVerifiedAt: { type: string, format: date-time }
+        identityVerifiedByName: { type: [string, 'null'] }
+        identityVerifiedAt: { type: [string, 'null'], format: date-time }
         requestedAt: { type: string, format: date-time }
         completedAt: { type: [string, 'null'], format: date-time }
 

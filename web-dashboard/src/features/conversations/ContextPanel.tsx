@@ -1,4 +1,5 @@
-import { Ban, Check, Clock, FileText, Target, Wrench } from 'lucide-react'
+import { format } from 'date-fns'
+import { Ban, Check, Clock, FileText, Loader2, RefreshCw, Target, Wrench } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
@@ -7,7 +8,12 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusChip, type SacThai } from '@/components/ui/status-chip'
 import { chuCaiDau } from '@/utils/ten'
-import type { KetQuaKiemDuyet, NguCanhHoiThoai, NhanhXuLyAi } from '@/types/schema'
+import type {
+  KetQuaKiemDuyet,
+  NguCanhHoiThoai,
+  NhanhXuLyAi,
+  TomTatHoiThoai,
+} from '@/types/schema'
 import { cn } from '@/utils/cn'
 
 const NHAN_DINH_TUYEN: Record<NhanhXuLyAi, string> = {
@@ -20,6 +26,14 @@ const NHAN_DINH_TUYEN: Record<NhanhXuLyAi, string> = {
   EXTRACTION: 'Trích xuất',
 }
 
+/** UC026 bước 1 — bốn sự kiện kích hoạt. Nhân viên đọc bản `CLOSING` (tổng kết) khác bản giữa chừng. */
+const NHAN_KICH_HOAT: Record<TomTatHoiThoai['trigger'], string> = {
+  HANDOFF: 'Sinh khi chuyển giao',
+  CLOSING: 'Sinh khi kết thúc',
+  TURN_THRESHOLD: 'Sinh giữa chừng',
+  MANUAL: 'Nhân viên bấm tóm tắt lại',
+}
+
 const NHAN_CHAN: Record<KetQuaKiemDuyet, { nhan: string; sacThai: SacThai }> = {
   ALLOWED: { nhan: 'Cho phép', sacThai: 'success' },
   BLOCKED: { nhan: 'Bị chặn', sacThai: 'destructive' },
@@ -29,16 +43,27 @@ const NHAN_CHAN: Record<KetQuaKiemDuyet, { nhan: string; sacThai: SacThai }> = {
 /**
  * Cột ngữ cảnh — phần cho nhân viên KIỂM ĐƯỢC câu trả lời của tác tử AI.
  * Đọc từ `sales.lead_scores`, `ai.ai_interactions` và `integration.tool_call_logs`.
+ *
+ * Khối "Tóm tắt" (UC026 bước 7) đứng ngay dưới hồ sơ khách: đó là thứ nhân viên tiếp nhận cần đọc
+ * đầu tiên thay cho việc cuộn lại cả lịch sử.
  */
 export function ContextPanel({
   nguCanh,
   dangTai,
   onTaoLead,
+  onTomTatLai,
+  dangTomTat,
+  choTomTat,
 }: {
   nguCanh: NguCanhHoiThoai | undefined
   dangTai: boolean
   /** UC032 1a — tạo lead cho khách của hội thoại này. */
   onTaoLead?: () => void
+  /** UC026 trigger `MANUAL` — nút "Tóm tắt lại". */
+  onTomTatLai?: () => void
+  dangTomTat?: boolean
+  /** Hội thoại vừa đóng, worker đang sinh bản `CLOSING` — hiện trạng thái chờ thay vì "Chưa có". */
+  choTomTat?: boolean
 }) {
   const dieuHuong = useNavigate()
   if (dangTai || !nguCanh) {
@@ -109,6 +134,15 @@ export function ContextPanel({
           ))}
         </div>
       )}
+
+      <Separator />
+
+      <KhoiTomTat
+        tomTat={nguCanh.summary ?? null}
+        onTomTatLai={onTomTatLai}
+        dangTomTat={dangTomTat}
+        choTomTat={choTomTat}
+      />
 
       <Separator />
 
@@ -210,6 +244,81 @@ export function ContextPanel({
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * UC026 bước 7 — bốn phần có tên, kèm loại kích hoạt, thời điểm sinh và phiên bản mô hình (hậu điều
+ * kiện: "lưu cùng bản tóm tắt"). `isStale` hiện thành chỉ báo thay vì giấu: đọc tóm tắt cũ mà tưởng là
+ * mới thì tệ hơn không có tóm tắt.
+ */
+function KhoiTomTat({
+  tomTat,
+  onTomTatLai,
+  dangTomTat,
+  choTomTat,
+}: {
+  tomTat: TomTatHoiThoai | null
+  onTomTatLai?: () => void
+  dangTomTat?: boolean
+  choTomTat?: boolean
+}) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="flex items-center gap-2">
+        <span className="flex-1 text-[13px] font-medium">Tóm tắt hội thoại</span>
+        {onTomTatLai && (
+          <Button variant="ghost" size="sm" onClick={onTomTatLai} disabled={dangTomTat}>
+            {dangTomTat ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+            {dangTomTat ? 'Đang tóm tắt…' : 'Tóm tắt lại'}
+          </Button>
+        )}
+      </div>
+
+      {tomTat ? (
+        <>
+          {tomTat.isStale && (
+            <StatusChip sacThai="warning" BieuTuong={Clock}>
+              Có tin mới sau bản tóm tắt này
+            </StatusChip>
+          )}
+          <PhanTomTat nhan="Nhu cầu chính" noiDung={tomTat.mainNeed} />
+          <PhanTomTat nhan="Thông tin khách đã cung cấp" noiDung={tomTat.providedInfo} />
+          <PhanTomTat nhan="Vấn đề chưa giải quyết" noiDung={tomTat.unresolvedIssues} />
+          <PhanTomTat nhan="Bước tiếp theo đề xuất" noiDung={tomTat.nextSteps} />
+          <span className="text-muted-foreground text-xs">
+            {NHAN_KICH_HOAT[tomTat.trigger]} ·{' '}
+            <span className="tabular-nums">
+              {format(new Date(tomTat.generatedAt), 'HH:mm dd/MM/yyyy')}
+            </span>
+            {tomTat.modelVersion && (
+              <>
+                {' · '}
+                <span className="font-mono">{tomTat.modelVersion}</span>
+              </>
+            )}
+          </span>
+        </>
+      ) : choTomTat ? (
+        <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+          <Loader2 className="size-3.5 animate-spin" />
+          Đang tóm tắt hội thoại vừa kết thúc…
+        </span>
+      ) : (
+        <span className="text-muted-foreground text-xs">
+          Chưa có bản tóm tắt. Bản tóm tắt tự sinh khi hội thoại kết thúc.
+        </span>
+      )}
+    </div>
+  )
+}
+
+function PhanTomTat({ nhan, noiDung }: { nhan: string; noiDung?: string | null }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-muted-foreground text-xs">{nhan}</span>
+      <span className="text-[13px] whitespace-pre-line">{noiDung || '—'}</span>
     </div>
   )
 }

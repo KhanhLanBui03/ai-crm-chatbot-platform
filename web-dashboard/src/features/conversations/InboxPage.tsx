@@ -14,6 +14,7 @@ import {
   useGuiTinNhanMutation,
   useNguCanhHoiThoaiQuery,
   usePhanCongHoiThoaiMutation,
+  useTomTatLaiMutation,
   useTinhTrangHangChoQuery,
   type BoLocHoiThoai,
 } from '@/api/conversations'
@@ -45,7 +46,14 @@ export function InboxPage() {
 
   const danhSach = useDanhSachHoiThoaiQuery(boLoc, { pollingInterval: CHU_KY_HOI_MS })
   const chiTiet = useChiTietHoiThoaiQuery(idDangChon ?? skipToken, { pollingInterval: CHU_KY_HOI_MS })
-  const nguCanh = useNguCanhHoiThoaiQuery(idDangChon ?? skipToken)
+  // UC026 — hội thoại vừa đóng thì hỏi lại cột ngữ cảnh tới khi bản tóm tắt `CLOSING` về (worker chạy
+  // bất đồng bộ, vài giây). Chỉ trong 2 phút sau lúc đóng: hội thoại quá ngắn sẽ không bao giờ có tóm tắt
+  // (UC026 luồng phụ 1.1), hỏi mãi là phí.
+  const [choTomTat, datChoTomTat] = useState(false)
+  const nguCanh = useNguCanhHoiThoaiQuery(idDangChon ?? skipToken, {
+    pollingInterval: choTomTat ? 4000 : 0,
+  })
+  const [tomTatLai, ketQuaTomTat] = useTomTatLaiMutation()
   const dangGo = useDangGo(idDangChon)
   const [phanCong, ketQuaPhanCong] = usePhanCongHoiThoaiMutation()
   const [doiTrangThai, ketQuaTrangThai] = useDoiTrangThaiHoiThoaiMutation()
@@ -65,6 +73,21 @@ export function InboxPage() {
   const dangChon =
     muc?.find((c) => c.id === idDangChon) ??
     (idDangChon && chiTiet.currentData?.id === idDangChon ? chiTiet.currentData : null)
+
+  const trangThaiDangChon = chiTiet.currentData?.status
+  const lucTinCuoi = chiTiet.currentData?.lastMessageAt
+  const tomTatHienTai = nguCanh.currentData?.summary
+  useEffect(() => {
+    const daDong = trangThaiDangChon === 'CLOSED' || trangThaiDangChon === 'RESOLVED'
+    if (!daDong || !lucTinCuoi) {
+      datChoTomTat(false)
+      return
+    }
+    const dong = new Date(lucTinCuoi).getTime()
+    // Bản tóm tắt sinh SAU tin cuối (câu kết thúc của hệ thống) là bản của lần đóng này
+    const daCo = tomTatHienTai != null && new Date(tomTatHienTai.generatedAt).getTime() >= dong
+    datChoTomTat(!daCo && Date.now() - dong < 120_000)
+  }, [trangThaiDangChon, lucTinCuoi, tomTatHienTai])
 
   // UC012 bước 10 — đang mở hội thoại mà có tin chưa đọc thì đánh dấu đã đọc
   const chuaDoc = dangChon?.unreadCount ?? 0
@@ -183,8 +206,24 @@ export function InboxPage() {
           />
           <ContextPanel
             nguCanh={nguCanh.currentData}
-            dangTai={nguCanh.isFetching}
+            // Khung xương chỉ khi CHƯA có dữ liệu của hội thoại này — lần hỏi lại định kỳ (chờ tóm tắt)
+            // không được làm cột phải nháy về khung xương.
+            dangTai={!nguCanh.currentData && nguCanh.isFetching}
             onTaoLead={nguCanh.currentData?.contact ? () => datMoTaoLead(true) : undefined}
+            onTomTatLai={() => {
+              tomTatLai(idDangChon)
+                .unwrap()
+                .then(() => toast.success('Đã tóm tắt lại hội thoại.'))
+                .catch((loi: unknown) =>
+                  toast.error(
+                    laLoiTruyVan(loi) && loi.message
+                      ? loi.message
+                      : 'Chưa tóm tắt được — bản cũ được giữ nguyên.',
+                  ),
+                )
+            }}
+            dangTomTat={ketQuaTomTat.isLoading}
+            choTomTat={choTomTat}
           />
           {nguCanh.currentData?.contact && (
             <CreateLeadDialog
