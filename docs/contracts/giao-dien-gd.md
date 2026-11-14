@@ -1,4 +1,4 @@
-# Hợp đồng đợt tích hợp giao diện GD1–GD4 (nháp 24/10/2026, cập nhật 10/11 — thêm GD2)
+# Hợp đồng đợt tích hợp giao diện GD1–GD4 (nháp 24/10/2026, cập nhật 10/11 — thêm GD2; 13/11 — thêm GD3)
 
 ⚠️ Nháp phía module AI. Kế hoạch đợt: [`docs/plan/ke-hoach-tich-hop-giao-dien.md`](../plan/ke-hoach-tich-hop-giao-dien.md)
 (mục 1 liệt kê 11 thay đổi). **Người dùng chốt 24/10:** 8 UC AI là việc của Dev A từ dashboard tới
@@ -78,6 +78,33 @@ Thứ tự ưu tiên khi lệch: đặc tả UC > `dashboard-api.yaml` > nháp n
 >      gói thành `_IncludedRouter` nên `app.routes` không còn đường `/v1/...`; đường thật vẫn chạy. `fastapi>=0.121`
 >      không ghim trần.
 >    - `ruff` ai-service: 102 lỗi có sẵn (E501, I001), phần lớn ở `clustering/`, `safety_repository.py`.
+
+### 0.2 Tin gửi Dev B — GD3 (dán nguyên)
+
+> GD3 (UC026 tóm tắt hội thoại, UC041 xoá dữ liệu cá nhân) đã nối trọn, nhánh `feat/giao-dien-gd3-tom-tat-xoa`.
+> Chi tiết hợp đồng ở mục 5 của `docs/contracts/giao-dien-gd.md`. Có đụng file chung, báo để bạn kéo về:
+>
+> 1. **`SecurityConfig` (java-core)** — thêm chuỗi thứ ba `internalSecurityFilterChain` (`@Order(0)`, chỉ
+>    `/internal/**`): không JWT, bắt `X-Internal-Token` khớp `crm.internal.api-token`. Thêm quyền UC041:
+>    `POST /api/v1/erasure-requests` mọi nhân viên; mọi đường `erasure-requests` khác chỉ `TENANT_ADMIN`.
+> 2. **`application.yml` + `.env.example`** — biến mới **`INTERNAL_API_TOKEN`** (cùng giá trị ở `ai-service/.env`).
+>    Để trống thì `/internal/**` đóng hẳn (401) và lượt xoá phía AI bị từ chối — **máy bạn cần đặt nó** nếu chạy
+>    UC026/UC041. `.env` của bạn không phải sửa gì khác.
+> 3. **`InboxService.changeStatus`** — đóng hội thoại (`RESOLVED`/`CLOSED`) ghi outbox `crm.conversation.closed`
+>    cùng transaction; `context()` thôi trả `summary = null`, `lastAiInteraction = null` (đọc tóm tắt + hỏi
+>    ai-service lượt mới nhất). Constructor `InboxService` thêm 4 tham số.
+> 4. **`gateway` `SecurityConfig`** — `denyAll` cho `/ai/v1/ai/privacy/**` và `/ai/v1/ai/summarize` (chỉ java-core
+>    gọi, như `safety-events`/`topic-clusters` của bạn).
+> 5. **`dashboard-api.yaml`** — thêm `POST /api/v1/conversations/{id}/summary`, `POST /api/v1/erasure-requests`,
+>    `POST /api/v1/erasure-requests/{id}/verify-identity`, schema `TaoYeuCauXoa`; `YeuCauXoa` thêm `requestedBy`,
+>    hai trường xác minh thành nullable; `execute` thành **đồng bộ, 200**. Đã `npm run gen:api`.
+> 6. **Màn kiểm toán của bạn** (`features/audit/*`): nút "Tạo yêu cầu", "Xác minh danh tính", biên bản gọn ở tab
+>    Hồ sơ pháp lý (thay nút "Tải biên bản" không làm gì); `nhan.ts` thêm `ERASURE_REQUESTED`,
+>    `ERASURE_IDENTITY_VERIFIED`. Mock MSW thêm 3 handler.
+> 7. **Lớp nền test `EngagementIntegrationTestBase.asUser`** — gắn thêm `ROLE_<role>`: `jwt()` của spring-security-test
+>    không chạy `jwtAuthenticationConverter` của mình, nên trước đây mọi đường `hasRole(...)` trả 403 trong test kể cả
+>    với quản trị viên (chưa test nào đụng tới nên không ai thấy). Cả bộ 303/303 sau khi đổi.
+> 8. Thấy khi chạy, chưa sửa: `FormDialog` vẫn unhandled rejection sau mỗi 409 (đã báo GD1).
 
 ---
 
@@ -215,3 +242,65 @@ cũ `is_answered = false ? response_text : null` hiện câu mẫu mà khách Đ
 
 Bảng dịch lỗi (`AiServiceErrors`) thêm câu cho `INTERACTION_NOT_FOUND` và `REASON_REQUIRED`. Test:
 `AiInteractionRelayIntegrationTest` (7), `WidgetIntegrationTest` (+4), `AiPerformanceIntegrationTest` (+2).
+
+## 5. GD3 — tóm tắt hội thoại (UC026) và xoá dữ liệu cá nhân (UC041) (13/11/2026)
+
+Hình dạng ba endpoint `/internal/*` và `DELETE /v1/ai/privacy/…` giữ đúng nháp
+[`uc026-uc041-tom-tat-va-xoa-du-lieu.md`](uc026-uc041-tom-tat-va-xoa-du-lieu.md) mục 1–4. Mục này ghi phần GD3
+chốt thêm hoặc đổi.
+
+### 5.1 Bảo vệ bề mặt nội bộ — chốt Q3
+
+**Một bí mật `INTERNAL_API_TOKEN` cho cả hai chiều**, header `X-Internal-Token`:
+
+| Chiều | Bên nhận kiểm | Thiếu/sai |
+|---|---|---|
+| ai-service → java-core `/internal/**` | chuỗi bảo mật riêng `internalSecurityFilterChain` (`@Order(0)`), so thời gian hằng | **401** (Bearer của người dùng cũng 401 — chuỗi này không có resource server) |
+| java-core → ai-service `DELETE /v1/ai/privacy/**` | `_kiem_token_noi_bo` (đã có từ N12) | **403 `INTERNAL_ONLY`** → java-core coi là lệch cấu hình (500) |
+
+Chưa cấu hình token thì cả hai bề mặt **đóng hẳn**. Tenant của lời gọi nội bộ lấy từ `X-Tenant-Id` (thiếu →
+400 `TENANT_CONTEXT_MISSING`); mọi truy vấn vẫn `SET LOCAL app.tenant_id` trong transaction. Gateway: không định
+tuyến `/internal/**` (chỉ mở `/api/v1/**`), và chặn thêm `/ai/v1/ai/privacy/**`, `/ai/v1/ai/summarize` (`denyAll`).
+
+### 5.2 UC026 — chốt Q1: `CLOSING` + `MANUAL`
+
+| Thay đổi | Ở đâu |
+|---|---|
+| `InboxService.changeStatus` → `CLOSED`/`RESOLVED` ghi outbox `crm.conversation.closed` **cùng transaction**; payload đúng lược đồ v1: `conversation_id, closed_by, close_reason` (chỉ khi có), `closed_at, message_count` | java-core |
+| `PATCH /internal/conversations/{id}/summary` **không lùi**: chỉ ghi khi bản đang lưu không mới hơn `generatedAt` — sự kiện `CLOSING` giao lại muộn không đè bản `MANUAL` mới hơn | java-core |
+| `GET /api/v1/conversations/{id}/context` trả `summary` (`isStale` = có tin không phải `SYSTEM` sau lúc sinh) và `lastAiInteraction` (lượt mới nhất qua `GET /v1/ai-interactions?conversation_id&size=1`; ai-service lỗi → `null`) | java-core |
+| **Mới** `POST /api/v1/conversations/{id}/summary` → `TomTatHoiThoai` — đồng bộ, gửi lịch sử (bỏ tin đã che) sang `POST /v1/ai/summarize` trigger `MANUAL`, tự ghi. 422 `CONVERSATION_TOO_SHORT` / `SUMMARY_SCHEMA_INVALID` giữ mã; 503 `LLM_ERROR` → 502 | java-core + `dashboard-api.yaml` |
+| `HttpJavaCoreClient` gửi `X-Internal-Token` | ai-service |
+
+`HANDOFF`, `TURN_THRESHOLD` không có nguồn phát — giảm độ sâu.
+
+### 5.3 UC041 — luồng bốn bước, chốt Q4 (biên bản bản gọn)
+
+| Endpoint (`/api/v1/erasure-requests…`) | Quyền | Ghi chú |
+|---|---|---|
+| `POST` (**mới**) `{contactId, legalBasis, requestedBy}` | mọi nhân viên | `PENDING`, `items` = phạm vi xem trước; 422 `LEGAL_BASIS_REQUIRED`; 409 `ERASURE_ALREADY_OPEN` (2.1), `CONTACT_ALREADY_ANONYMIZED`, `CONTACT_MERGED` |
+| `POST /{id}/verify-identity` (**mới**) | `TENANT_ADMIN` | người = người đăng nhập, lúc = `now()`; 409 nếu không `PENDING` hoặc đã xác minh |
+| `GET` · `GET /preview` · `GET /{id}` | `TENANT_ADMIN` | phía AI `affectedRows = null` ở xem trước |
+| `POST /{id}/execute` | `TENANT_ADMIN` | **đồng bộ, trả 200** (hợp đồng cũ ghi 202 bất đồng bộ); nhận `PENDING` hoặc `PARTIALLY_FAILED`; 409 `IDENTITY_NOT_VERIFIED`, `ERASURE_NOT_EXECUTABLE` |
+
+Phạm vi (thứ tự thực thi): phía AI — `knowledge.knowledge_documents`, `knowledge.knowledge_chunks`,
+`ai.ai_interactions`, `ai.ai_feedback`, `ai.ai_tool_calls`, `s3.<bucket>`, `sales.lead_scores` (ai-service gọi ngược
+`DELETE /internal/contacts/{id}/lead-scores`); phía CRM, MỘT transaction — `engagement.contacts` ANONYMIZE,
+`engagement.channel_identities` ANONYMIZE (tên hiển thị, ảnh, hồ sơ thô), `engagement.messages` ANONYMIZE (che nội
+dung, xoá `metadata` + `attachments`; tin `SYSTEM` giữ), `engagement.conversations` ANONYMIZE (xoá năm cột tóm tắt,
+dòng xem trước, tiêu đề), `engagement.contact_notes` DELETE, `sales.leads` ANONYMIZE (gỡ `source_conversation_id`),
+`analytics.metrics_daily` KEEP_AGGREGATE.
+
+Chạy lại: mục `DONE` không bao giờ chạy lại và giữ nguyên số dòng + mốc. ai-service không phản hồi → mọi mục AI chưa
+xong `FAILED` (`AI_SERVICE_UNAVAILABLE — …`), phía CRM vẫn làm → `PARTIALLY_FAILED`.
+
+Biên bản (Q4): `items` + người/lúc xác minh + lúc hoàn tất, trên yêu cầu và trong `after_data` của dòng kiểm toán
+`ERASURE_EXECUTED` (mỗi lượt thực thi một dòng). `certificateUri` luôn `null`. Thêm hai hành động kiểm toán:
+`ERASURE_REQUESTED`, `ERASURE_IDENTITY_VERIFIED`.
+
+**`ErasureResult` (ai-service) thêm `releasedDocuments`, `releasedStorageBytes`** — hạn mức tồn kho mà lượt xoá vừa
+giải phóng, cùng luật `quotaReleased` của gỡ UC020 (bỏ `ARCHIVED` và bản bóng chưa `READY`). java-core trả
+`DOCUMENT`/`STORAGE_MB` theo đúng hai số này — trả nợ ghi ở mục 3 ("xoá theo khách chưa trả hạn mức").
+
+Test: `TomTatXoaDuLieuIntegrationTest` (7) · ai-service `test_java_core_client.py` (+1),
+`test_xoa_du_lieu_ca_nhan.py` (+kiểm hạn mức ở 2 ca).
