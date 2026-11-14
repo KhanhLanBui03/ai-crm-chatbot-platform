@@ -66,7 +66,7 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.ai.config import get_settings
+from src.ai.config import Settings, get_settings
 from src.ai.db.repositories import (
     chunk_repository,
     document_repository,
@@ -1462,8 +1462,26 @@ async def forget_contact(
     bảng nên giảm theo — không có bảng tổng hợp nào của Track B để "giữ ở dạng tổng hợp".
     """
     s = get_settings()
+    tu_tao = java_core is None
     java_core = java_core or tao_java_core_client(s)
+    try:
+        return await _xoa_du_lieu_ca_nhan(
+            tenant_id, contact_id, conversation_ids, java_core, factory, s
+        )
+    finally:
+        if tu_tao and s.java_core_mode == "remote":
+            # Client HTTP tạo riêng cho lượt này — đóng kết nối; bản giả (mock) dùng chung.
+            await java_core.aclose()
 
+
+async def _xoa_du_lieu_ca_nhan(
+    tenant_id: str,
+    contact_id: UUID,
+    conversation_ids: Sequence[UUID],
+    java_core: JavaCoreClient,
+    factory: SessionFactory,
+    s: Settings,
+) -> ErasureResult:
     async with get_tenant_session(tenant_id, factory) as phien:
         tai_lieu = await document_repository.xoa_tai_lieu_theo_khach(phien, contact_id)
         luot = await interaction_repository.xoa_theo_hoi_thoai(phien, conversation_ids)
@@ -1527,5 +1545,7 @@ async def forget_contact(
         " ".join(f"{m.target_schema}.{m.target_table}={m.affected_rows}" for m in cac_muc),
     )
     return ErasureResult(
-        contact_id=contact_id, status=trang_thai, items=cac_muc, note=GHI_CHU_GIOI_HAN_XOA
+        contact_id=contact_id, status=trang_thai, items=cac_muc, note=GHI_CHU_GIOI_HAN_XOA,
+        released_documents=tai_lieu.so_tai_lieu_duoc_dem,
+        released_storage_bytes=tai_lieu.so_byte_duoc_dem,
     )
