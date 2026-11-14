@@ -13,7 +13,7 @@
 | **GD1** | UC018 · UC019 · UC020 | tải lên → tiến độ tới `DONE` → danh sách → xem đoạn → sửa → nạp lại → gỡ |
 | **GD2** | UC023 · UC025 · UC027 | hỏi ở widget → có trích dẫn · hỏi ngoài kho → từ chối, chuyển nhân viên · 👍/👎 → hiện ở dashboard · khoảng trống tri thức |
 | **GD3** | UC026 · UC041 | đóng hội thoại → tóm tắt 4 phần ở cột phải · tạo → xác minh → xem trước → thực thi xoá → câu trả lời sau không còn dữ liệu khách |
-| **GD4** | cả 8 | diễn tập một lèo, sửa chỗ vỡ, minh chứng cuối, ôn tập, cập nhật artifact bản đồ luồng |
+| **GD4** | cả 8 | diễn tập một lèo, sửa chỗ vỡ, minh chứng cuối, ôn tập, cập nhật artifact bản đồ luồng — ✅ 14/11 |
 
 ---
 
@@ -385,14 +385,21 @@ thay vì xoá vật lý · vì sao gọi ai-service **ngoài** transaction của
 
 ## GD4 — Diễn tập trọn luồng + hoàn thiện
 
-- [ ] Bật stack từ đầu theo thứ tự GD1, đi lại **8 UC một lèo** theo đúng thứ tự: đăng nhập → tải → tiến độ →
+> **✅ Đóng 14/11/2026** — minh chứng: [`docs/report/tich-hop-giao-dien-2026-10.md`](../report/tich-hop-giao-dien-2026-10.md)
+> mục GD4; ôn tập: [`docs/on-tap/tich-hop-giao-dien.md`](../on-tap/tich-hop-giao-dien.md). Người dùng chốt đầu GD4:
+> **không chụp ảnh**, diễn tập trên **tenant mới** "Nha khoa Diễn tập GD4", có đo độ trễ, lỗi phần Dev B chỉ ghi + báo.
+> Ba chỗ vỡ: `ListPage` gửi lại id đã gỡ (sửa) · `ai-interactions` 500 khi chỉ khách đánh giá (sửa + test) · đua phiên
+> widget UC009 (Dev B, báo ở `docs/contracts/giao-dien-gd.md` mục 0.3). `mvn test` 304/304.
+
+- [x] Bật stack từ đầu theo thứ tự GD1, đi lại **8 UC một lèo** theo đúng thứ tự: đăng nhập → tải → tiến độ →
       quản lý kho → chat (trích dẫn / từ chối / chuyển giao) → 👍/👎 → khoảng trống → đóng → tóm tắt → xoá
-- [ ] Sửa chỗ vỡ. Mỗi chỗ vỡ một dòng: hiện tượng · nguyên nhân · cách sửa
-- [ ] Bảng minh chứng cuối: 8 UC × "bước đặc tả → thao tác → kết quả", kèm ảnh chụp `docs/report/scr-gd-*.png`
-- [ ] `docs/on-tap/tich-hop-giao-dien.md`: luồng từng UC qua bốn tầng, lớp chuyển tiếp, ánh xạ trường, gộp các câu "Phải giải thích được" của GD1–GD3
-- [ ] Cập nhật artifact "Bản đồ luồng AI CRM" (https://claude.ai/artifact/9ne7Td2SmgB5owL6FhrdpB): sửa ô chuyển giao, thêm đường giao diện. **Không hoãn**
-- [ ] Còn giờ: đo nhanh độ trễ thao tác trên giao diện, ghi số thật (không phải cổng)
-- [ ] Chạy `/handoff`; soạn lệnh commit/push; PR trên web sau `git pull origin develop`
+- [x] Sửa chỗ vỡ. Mỗi chỗ vỡ một dòng: hiện tượng · nguyên nhân · cách sửa
+- [x] Bảng minh chứng cuối: 8 UC × "bước đặc tả → thao tác → kết quả" — ~~kèm ảnh chụp `docs/report/scr-gd-*.png`~~
+      (người dùng chốt không chụp, như GD1–GD3)
+- [x] `docs/on-tap/tich-hop-giao-dien.md`: luồng từng UC qua bốn tầng, lớp chuyển tiếp, ánh xạ trường, gộp các câu "Phải giải thích được" của GD1–GD3
+- [x] Cập nhật artifact "Bản đồ luồng AI CRM" (https://claude.ai/artifact/9ne7Td2SmgB5owL6FhrdpB): sửa ô chuyển giao, thêm đường giao diện. **Không hoãn**
+- [x] Còn giờ: đo nhanh độ trễ thao tác trên giao diện, ghi số thật (không phải cổng) — cột "Độ trễ" của bảng minh chứng GD4
+- [x] Chạy `/handoff`; soạn lệnh commit/push; PR trên web sau `git pull origin develop`
 
 ---
 
