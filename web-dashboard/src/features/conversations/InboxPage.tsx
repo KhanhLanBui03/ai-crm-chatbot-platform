@@ -122,7 +122,9 @@ export function InboxPage() {
     : []
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    // Cao đúng bằng màn hình trừ thanh trên (h-14): khung ứng dụng chỉ đặt min-h-svh, nên không chặn
+    // chiều cao ở đây thì hội thoại dài kéo cả trang cuộn và ba cột không tự cuộn riêng được.
+    <div className="flex h-[calc(100svh-3.5rem)] flex-col overflow-hidden">
       {canhBao.length > 0 && (
         <Alert className="rounded-none border-x-0 border-t-0" role="status">
           <AlertTriangle />

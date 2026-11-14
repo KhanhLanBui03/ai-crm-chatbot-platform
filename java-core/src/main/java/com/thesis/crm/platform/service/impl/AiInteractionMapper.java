@@ -24,8 +24,10 @@ final class AiInteractionMapper {
     }
 
     static LuotXuLyAiResponse luot(InteractionItem i, Map<UUID, String> tenNhanVien) {
+        // Đánh giá của khách không có raterUserId; `tenNhanVien` có thể là Map.of() — get(null) ném NPE (GD4)
         List<DanhGiaAiResponse> danhGia = i.feedback() == null ? List.of()
-                : i.feedback().stream().map(f -> danhGia(f, tenNhanVien.get(f.raterUserId()))).toList();
+                : i.feedback().stream().map(f -> danhGia(f,
+                        f.raterUserId() == null ? null : tenNhanVien.get(f.raterUserId()))).toList();
         List<TrichDan> trichDan = i.citations() == null ? List.of()
                 : i.citations().stream().map(c -> new TrichDan(c.chunkId(), c.documentId(),
                         c.documentTitle() == null ? "Tài liệu không tên" : c.documentTitle(), c.sectionPath(),

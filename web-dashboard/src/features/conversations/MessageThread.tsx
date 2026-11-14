@@ -94,7 +94,8 @@ export function MessageThread({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col h-full">
-      <div className="flex shrink-0 items-center gap-2 sm:gap-2.5 border-b p-3">
+      {/* flex-wrap: cột giữa hẹp (cột ngữ cảnh đang mở) thì hàng nút xuống dòng thay vì tràn sang cột phải */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-2.5 border-b p-3">
         {onQuayLai && (
           <Button
             variant="ghost"
@@ -109,7 +110,7 @@ export function MessageThread({
         <div className="bg-secondary text-secondary-foreground flex size-8 shrink-0 items-center justify-center rounded-full text-[13px] font-medium">
           {chuCaiDau(tenKhachHang)}
         </div>
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 basis-40 flex-col">
           <span className="truncate text-sm font-medium">{tenKhachHang}</span>
           <span className="text-muted-foreground text-xs truncate">
             {NHAN_KENH[chiTiet.channelType]} · {chiTiet.messageCount} tin nhắn

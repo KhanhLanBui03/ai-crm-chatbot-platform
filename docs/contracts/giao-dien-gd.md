@@ -1,4 +1,4 @@
-# Hợp đồng đợt tích hợp giao diện GD1–GD4 (nháp 24/10/2026, cập nhật 10/11 — thêm GD2; 13/11 — thêm GD3)
+# Hợp đồng đợt tích hợp giao diện GD1–GD4 (nháp 24/10/2026, cập nhật 10/11 — thêm GD2; 13/11 — thêm GD3; 14/11 — tin gộp GD4)
 
 ⚠️ Nháp phía module AI. Kế hoạch đợt: [`docs/plan/ke-hoach-tich-hop-giao-dien.md`](../plan/ke-hoach-tich-hop-giao-dien.md)
 (mục 1 liệt kê 11 thay đổi). **Người dùng chốt 24/10:** 8 UC AI là việc của Dev A từ dashboard tới
@@ -105,6 +105,50 @@ Thứ tự ưu tiên khi lệch: đặc tả UC > `dashboard-api.yaml` > nháp n
 >    không chạy `jwtAuthenticationConverter` của mình, nên trước đây mọi đường `hasRole(...)` trả 403 trong test kể cả
 >    với quản trị viên (chưa test nào đụng tới nên không ai thấy). Cả bộ 303/303 sau khi đổi.
 > 8. Thấy khi chạy, chưa sửa: `FormDialog` vẫn unhandled rejection sau mỗi 409 (đã báo GD1).
+
+
+### 0.3 Tin gộp gửi Dev B — cả đợt GD1–GD4 (dán nguyên, 14/11/2026)
+
+Các mục 0, 0.1, 0.2 chưa gửi riêng lần nào; người dùng chốt đầu GD4 gửi **một tin gộp** này. Chi tiết từng GD vẫn
+ở 0 / 0.1 / 0.2 — tin dưới đây trỏ về đó.
+
+> Đợt tích hợp giao diện 8 UC AI (UC018/019/020/023/025/026/027/041) đã xong cả 4 ngày, đã merge GD1–GD3 (PR #46,
+> #47, #52); GD4 ở nhánh `feat/giao-dien-gd4-dien-tap`. Chi tiết từng chỗ đụng file chung ở mục 0, 0.1, 0.2 của
+> `docs/contracts/giao-dien-gd.md` — dưới đây là bản gọn để bạn kéo về và rà:
+>
+> **Cần bạn làm trên máy mình**
+> 1. **Đặt `INTERNAL_API_TOKEN`** (cùng một giá trị ở `.env` gốc cho java-core và `ai-service/.env`). Thiếu thì
+>    `/internal/**` đóng hẳn (401): UC026 không ghi được tóm tắt, UC041 không xoá được phía AI.
+> 2. **Thu hồi khoá Resend đang dùng.** `RegisterPage.tsx` và `ForgotPasswordPage.tsx` đọc `VITE_RESEND_API_KEY`,
+>    Vite nhúng giá trị vào `dist/assets/*.js` — ai mở trang đăng ký cũng lấy được. Nên chuyển việc gửi thư về
+>    java-core (`AuthService.guiOtp` đã có sẵn chỗ gửi).
+>
+> **File chung mình đã sửa (kéo về là có)**
+> - java-core `SecurityConfig`: quyền `TENANT_ADMIN` cho ghi tài liệu + xoá dữ liệu; chuỗi `/internal/**` bằng
+>   `X-Internal-Token` (GD1, GD3).
+> - `dashboard-api.yaml` + `api-schema.d.ts` đã `gen:api` (GD1–GD3).
+> - `UsageQuotaService.release` (GD1) · `AiPerformanceService` ô "Phản hồi tích cực" lấy từ ai-service (GD2) ·
+>   widget: `WidgetDtos`/`WidgetService`/`AiChatClient` thêm đánh giá của khách (GD2) · `InboxService` phát
+>   `crm.conversation.closed` + trả tóm tắt (GD3) · gateway `denyAll` hai đường nội bộ ai-service (GD3) · màn kiểm
+>   toán thêm tạo/xác minh yêu cầu xoá (GD3) · lớp nền test `asUser` gắn `ROLE_<role>` (GD3).
+> - **Mới ở GD4 — `components/layout/ListPage.tsx`:** thanh "Đã chọn N mục" chỉ tính dòng còn trên trang đang hiện.
+>   Trước đó, gỡ một tài liệu rồi chọn tài liệu khác thì lô thứ hai gửi lại cả id vừa gỡ (hai `DELETE`, hai dòng
+>   kiểm toán). `ContactsPage` của bạn dùng cùng mẫu nên cũng được sửa theo.
+> - Migration **V216** (Track B) — `ai.ai_interactions.latency_breakdown`.
+>
+> **Lỗi thấy khi chạy thật, thuộc phần bạn — mình chưa sửa**
+> 1. **Mới ở GD4 — widget tạo hai phiên khi khách gõ nhanh (UC009).** `main.ts`: `khoiTao()` chạy lúc nạp trang;
+>    nếu khách bấm gửi trước khi `POST /widget/session` trả về, `gui()` thấy chưa có token và gọi `khoiTao()` lần
+>    nữa → hai phiên song song, phiên về sau ghi đè token. Kết quả: câu đầu ở danh bạ này, các câu sau ở danh bạ
+>    khác — cùng một người thành **hai khách**, và yêu cầu xoá UC041 chỉ phủ một nửa. Tái hiện chắc chắn khi làm
+>    chậm `/widget/session` 1,5 s (mạng di động thường chậm hơn thế). Gợi ý: giữ một promise khởi tạo dùng chung
+>    (`this.dangKhoiTao ??= this.moPhien()`), `gui`/`gapNhanVien`/`deLaiThongTin` đều `await` promise đó.
+> 2. Thuê bao dùng thử hết hạn **không gia hạn được** (`changePlan` không dời `period_end`, không job nào chuyển
+>    `TRIALING` → `EXPIRED`).
+> 3. Gateway không route `/ws`, java-core chưa có STOMP → thanh trên luôn "Mất kết nối, đang thử lại…".
+> 4. `GET /api/v1/tool-calls` trả **500** (không có controller, rơi vào handler chung) thay vì 404.
+> 5. `FormDialog` để lại unhandled rejection sau mỗi lượt 409/422 (giao diện vẫn báo lỗi đúng).
+> 6. ai-service: hai test đường dẫn UC040/UC038 đã sửa ở PR #48; `ruff` còn ~102 lỗi có sẵn.
 
 ---
 
