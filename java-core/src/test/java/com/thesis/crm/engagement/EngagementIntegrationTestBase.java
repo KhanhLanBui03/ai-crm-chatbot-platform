@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -77,7 +78,11 @@ abstract class EngagementIntegrationTestBase {
         // UC040: khoá mã hoá bản gốc dữ liệu cá nhân của nhật ký — 32 byte cố định, CHỈ dùng cho test
         r.add("AUDIT_PII_KEY", () -> "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=");
         r.add("AUDIT_PII_KEY_ID", () -> "test-k1");
+        // GD3 (Q3): bí mật dùng chung với ai-service cho /internal/** và DELETE /v1/ai/privacy/**
+        r.add("crm.internal.api-token", () -> INTERNAL_TOKEN);
     }
+
+    static final String INTERNAL_TOKEN = "token-noi-bo-chi-dung-cho-test";
 
     static final UUID TENANT_A = UUID.randomUUID();
     static final UUID TENANT_B = UUID.randomUUID();
@@ -133,10 +138,16 @@ abstract class EngagementIntegrationTestBase {
         return asUser(tenantId, TENANT_A.equals(tenantId) ? USER_A : USER_B, "TENANT_ADMIN");
     }
 
+    /**
+     * {@code jwt()} của spring-security-test KHÔNG chạy {@code jwtAuthenticationConverter} của ứng dụng,
+     * nên tự gắn {@code ROLE_<role>} cho giống production (SecurityConfig) — thiếu thì mọi đường
+     * {@code hasRole(...)} trả 403 kể cả với quản trị viên.
+     */
     static JwtRequestPostProcessor asUser(UUID tenantId, UUID userId, String role) {
         return jwt().jwt(j -> j.subject(userId.toString())
-                .claim("tenant_id", tenantId.toString())
-                .claim("role", role));
+                        .claim("tenant_id", tenantId.toString())
+                        .claim("role", role))
+                .authorities(new SimpleGrantedAuthority("ROLE_" + role));
     }
 
     ResultActions createContact(UUID tenantId, String body) throws Exception {

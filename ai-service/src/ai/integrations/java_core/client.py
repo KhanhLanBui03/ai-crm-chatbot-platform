@@ -3,6 +3,7 @@
 Một giao thức, hai hiện thực — cùng khuôn với ``integrations/llm/client.py``:
 
     HttpJavaCoreClient   httpx tới JAVA_CORE_URL, mỗi request mang X-Tenant-Id + X-Trace-Id
+                         + X-Internal-Token (chốt Q3 của GD3 — java-core chốt /internal/** bằng nó)
     MockJavaCoreClient   trong bộ nhớ, không mạng — JAVA_CORE_MODE=mock, CI, test, minh chứng
 
 VÌ SAO CÓ BẢN GIẢ LÀM MẶC ĐỊNH (09/10)
@@ -109,14 +110,20 @@ class HttpJavaCoreClient:
         *,
         base_url: str,
         timeout_s: float,
+        internal_token: str = "",
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         # transport chỉ để test tiêm httpx.MockTransport; đường production để trống.
         self._http = httpx.AsyncClient(base_url=base_url, timeout=timeout_s, transport=transport)
+        # Cùng bí mật INTERNAL_API_TOKEN mà ai-service dùng để chốt /v1/ai/privacy (một token, hai
+        # chiều). Rỗng thì không gửi — java-core trả 401 và lời gọi hỏng rõ ràng, không im lặng.
+        self._token = internal_token
 
-    @staticmethod
-    def _header(tenant_id: str) -> dict[str, str]:
-        return {"X-Tenant-Id": tenant_id, "X-Trace-Id": trace_id_var.get()}
+    def _header(self, tenant_id: str) -> dict[str, str]:
+        h = {"X-Tenant-Id": tenant_id, "X-Trace-Id": trace_id_var.get()}
+        if self._token:
+            h["X-Internal-Token"] = self._token
+        return h
 
     async def _goi(self, phuong_thuc: str, duong_dan: str, tenant_id: str, **kw) -> httpx.Response:
         try:

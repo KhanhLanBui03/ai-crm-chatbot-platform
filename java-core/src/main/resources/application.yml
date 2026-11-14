@@ -155,6 +155,12 @@ crm:
     connect-timeout: 2s
     # ai-service tải cả tệp 20 MiB từ S3 về để kiểm DOCX (danh mục ZIP nằm ở cuối tệp).
     read-timeout: 30s
+  internal:
+    # Bí mật dùng chung với ai-service (Q3, GD3) — CÙNG giá trị INTERNAL_API_TOKEN ở ai-service/.env.
+    # Hai chiều một token: ai-service gửi X-Internal-Token khi gọi /internal/** của java-core; java-core
+    # gửi đúng token đó khi gọi DELETE /v1/ai/privacy/** (UC041). Để trống = /internal/** đóng hẳn (401)
+    # và lượt xoá dữ liệu phía AI bị ai-service từ chối — không bao giờ mở cửa khi thiếu cấu hình.
+    api-token: ${INTERNAL_API_TOKEN:}
 
 management:
   endpoints:

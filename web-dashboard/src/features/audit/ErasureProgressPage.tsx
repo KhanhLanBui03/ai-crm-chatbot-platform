@@ -1,9 +1,11 @@
 import { format } from 'date-fns'
-import { Download, FileCheck2, Play, TriangleAlert } from 'lucide-react'
+import { FileCheck2, Play, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { toast } from 'sonner'
 
-import { useChiTietYeuCauXoaQuery } from '@/api/audit'
+import { useChiTietYeuCauXoaQuery, useXacMinhDanhTinhMutation } from '@/api/audit'
+import { laLoiTruyVan } from '@/api/baseQuery'
 import { DetailPage, HangThongTin } from '@/components/layout/DetailPage'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent } from '@/components/ui/card'
@@ -45,6 +47,8 @@ export function ErasureProgressPage() {
 
   const truyVan = useChiTietYeuCauXoaQuery(id, { skip: !id })
   const y = truyVan.currentData
+  const [xacMinh, ketQuaXacMinh] = useXacMinhDanhTinhMutation()
+  const chuaXacMinh = y?.status === 'PENDING' && !y.identityVerifiedAt
 
   const muc = y?.items ?? []
   const xong = muc.filter((m) => m.status === 'DONE').length
@@ -68,13 +72,36 @@ export function ErasureProgressPage() {
         }
         thaoTacChinh={
           daHoanTat
-            ? { nhan: 'Tải biên bản xác nhận', BieuTuong: Download, onClick: () => {} }
+            ? // Biên bản bản gọn (chốt Q4 của GD3): nằm trong hồ sơ yêu cầu + nhật ký kiểm toán, không xuất tệp
+              { nhan: 'Xem biên bản xác nhận', BieuTuong: FileCheck2, onClick: () => datTab('ho-so') }
             : {
                 nhan: y?.status === 'PARTIALLY_FAILED' ? 'Chạy lại phần còn lại' : 'Thực thi xoá',
                 BieuTuong: Play,
                 bienThe: 'destructive',
                 onClick: () => datMoThucThi(true),
               }
+        }
+        thaoTacPhu={
+          chuaXacMinh
+            ? [
+                {
+                  nhan: ketQuaXacMinh.isLoading ? 'Đang ghi…' : 'Xác minh danh tính',
+                  BieuTuong: ShieldCheck,
+                  bienThe: 'outline',
+                  onClick: () => {
+                    if (!y || ketQuaXacMinh.isLoading) return
+                    xacMinh(y.id)
+                      .unwrap()
+                      .then(() => toast.success('Đã ghi nhận xác minh danh tính.'))
+                      .catch((loi: unknown) =>
+                        toast.error(
+                          laLoiTruyVan(loi) && loi.message ? loi.message : 'Chưa xác minh được.',
+                        ),
+                      )
+                  },
+                },
+              ]
+            : undefined
         }
         tab={[
           {
@@ -174,16 +201,33 @@ export function ErasureProgressPage() {
                   </CardContent>
                 </Card>
 
-                {y?.certificateUri && (
+                {/* UC041 bước 10 — biên bản bản gọn (chốt Q4): tiến độ từng bảng + người/lúc xác minh +
+                    lúc hoàn tất, cùng nội dung đã ghi vào dòng kiểm toán ERASURE_EXECUTED */}
+                {daHoanTat && y && (
                   <Card>
-                    <CardContent className="flex items-center gap-3">
-                      <FileCheck2 className="text-success size-5 shrink-0" />
-                      <div className="flex min-w-0 flex-1 flex-col">
+                    <CardContent className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <FileCheck2 className="text-success size-5 shrink-0" />
                         <span className="text-[13px] font-medium">Biên bản xác nhận đã xoá</span>
+                      </div>
+                      <span className="text-muted-foreground text-xs">
+                        Đã xoá dữ liệu của khách mã{' '}
+                        <span className="font-mono">{y.contactId.slice(0, 8)}</span> trên {muc.length}{' '}
+                        bảng, theo căn cứ đã ghi ở trên. Danh tính do{' '}
+                        {y.identityVerifiedByName ?? '—'} xác minh lúc{' '}
+                        {y.identityVerifiedAt
+                          ? format(new Date(y.identityVerifiedAt), 'HH:mm dd/MM/yyyy')
+                          : '—'}
+                        ; hoàn tất lúc{' '}
+                        {y.completedAt ? format(new Date(y.completedAt), 'HH:mm dd/MM/yyyy') : '—'}.
+                        Bản này lưu trong hồ sơ yêu cầu và nhật ký kiểm toán (hành động{' '}
+                        <span className="font-mono">ERASURE_EXECUTED</span>).
+                      </span>
+                      {y.certificateUri && (
                         <span className="text-muted-foreground truncate font-mono text-xs">
                           {y.certificateUri}
                         </span>
-                      </div>
+                      )}
                     </CardContent>
                   </Card>
                 )}

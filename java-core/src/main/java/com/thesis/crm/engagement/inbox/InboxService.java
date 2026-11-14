@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thesis.crm.common.audit.AuditLogWriter;
 import com.thesis.crm.common.exception.AppException;
+import com.thesis.crm.common.exception.BusinessException;
 import com.thesis.crm.common.response.PageResponse;
 import com.thesis.crm.engagement.assignment.AssignmentRepository.Assignee;
 import com.thesis.crm.engagement.assignment.AssignmentRepository.HandoffEventRow;
@@ -23,6 +24,8 @@ import com.thesis.crm.engagement.inbox.InboxRepository.ConvRow;
 import com.thesis.crm.engagement.inbox.InboxRepository.Filter;
 import com.thesis.crm.engagement.inbox.InboxRepository.MsgRow;
 import com.thesis.crm.engagement.repository.ContactQueryRepository;
+import com.thesis.crm.platform.service.AiInteractionService;
+import com.thesis.crm.platform.service.OutboxService;
 import com.thesis.crm.security.TenantTransactionScope;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -32,9 +35,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * UC012 (hộp thư hợp nhất) + UC013 (nhân viên trả lời), kèm các thao tác khép vòng của UC014/UC015.
@@ -63,21 +69,37 @@ public class InboxService {
             "NEGATIVE_SENTIMENT", "REPEATED_FAILURE", "WRITE_TOOL_APPROVAL");
     private static final Set<String> SYSTEM_REASONS = Set.of("QUOTA_EXCEEDED", "LLM_ERROR");
 
+    /** UC026 — sự kiện kích hoạt tóm tắt {@code CLOSING} (lược đồ {@code docs/events/crm.conversation.closed.v1.json}). */
+    static final String TOPIC_CLOSED = "crm.conversation.closed";
+    static final String EVENT_CLOSED = "ConversationClosed";
+    static final String AGGREGATE_CONVERSATION = "conversation";
+
+    private static final Logger log = LoggerFactory.getLogger(InboxService.class);
+
     private final InboxRepository repo;
     private final ContactQueryRepository contacts;
     private final TenantTransactionScope scope;
     private final AuditLogWriter audit;
     private final ObjectMapper json;
     private final AssignmentService assignment;
+    private final OutboxService outbox;
+    private final SummaryService summaries;
+    private final AiInteractionService aiInteractions;
+    private final TransactionTemplate tx;
 
     public InboxService(InboxRepository repo, ContactQueryRepository contacts, TenantTransactionScope scope,
-                        AuditLogWriter audit, ObjectMapper json, AssignmentService assignment) {
+                        AuditLogWriter audit, ObjectMapper json, AssignmentService assignment, OutboxService outbox,
+                        SummaryService summaries, AiInteractionService aiInteractions, TransactionTemplate tx) {
         this.repo = repo;
         this.contacts = contacts;
         this.scope = scope;
         this.audit = audit;
         this.json = json;
         this.assignment = assignment;
+        this.outbox = outbox;
+        this.summaries = summaries;
+        this.aiInteractions = aiInteractions;
+        this.tx = tx;
     }
 
     // ── UC012: đọc ──────────────────────────────────────────────────────────────
@@ -130,13 +152,31 @@ public class InboxService {
         return messagePage(tenantId, conversationId, before, Math.min(Math.max(1, size), 100));
     }
 
-    @Transactional(readOnly = true)
+    /**
+     * Cột phải của hộp thư — gộp nguồn trong MỘT lời gọi (đặc tả UC026, "REST ra ngoài"). Phần CSDL
+     * (khách + tóm tắt UC026) trong một transaction ngắn; lượt AI gần nhất hỏi ai-service SAU đó, ngoài
+     * transaction. ai-service lỗi thì riêng ô đó {@code null} — tóm tắt và hồ sơ khách vẫn hiện.
+     * Điểm tiềm năng (UC030) chưa có nguồn dữ liệu.
+     */
     public ConversationContext context(UUID tenantId, UUID conversationId) {
-        scope.apply(tenantId);
-        ConvRow r = require(tenantId, conversationId);
-        ContactDto contact = r.contactId() == null ? null : contacts.findById(tenantId, r.contactId()).orElse(null);
-        // Tóm tắt (UC026), lượt AI gần nhất (UC039) và điểm tiềm năng (UC030) chưa có nguồn dữ liệu
-        return new ConversationContext(contact, null, null, null, null);
+        ConversationContext db = tx.execute(st -> {
+            scope.apply(tenantId);
+            ConvRow r = require(tenantId, conversationId);
+            ContactDto contact = r.contactId() == null ? null
+                    : contacts.findById(tenantId, r.contactId()).orElse(null);
+            return new ConversationContext(contact, summaries.current(tenantId, conversationId), null, null, null);
+        });
+        Object lastAi = null;
+        try {
+            // Ô này để nhân viên KIỂM câu trả lời (bám nguồn, trích dẫn, lý do từ chối) — bỏ qua lượt tóm
+            // tắt (UC026 cũng ghi một lượt SUMMARY), lấy lượt trả lời khách mới nhất trong 5 lượt gần nhất.
+            lastAi = aiInteractions.list(null, null, null, conversationId, null, null, 0, 5).items().stream()
+                    .filter(l -> !"SUMMARY".equals(l.route()))
+                    .findFirst().orElse(null);
+        } catch (BusinessException ex) {
+            log.warn("Cột ngữ cảnh {}: không đọc được lượt AI gần nhất ({})", conversationId, ex.getCode());
+        }
+        return new ConversationContext(db.contact(), db.summary(), lastAi, null, null);
     }
 
     /** UC012 bước 10. Không ghi nhật ký: chỉ là trạng thái hiển thị, không phải thao tác nghiệp vụ. */
@@ -336,6 +376,18 @@ public class InboxService {
         audit.recordUserAction(tenantId, actor.userId(), "CONVERSATION_STATUS_CHANGED", "CONVERSATION",
                 conversationId, Map.of("from", r.status(), "to", status));
         ConvRow after = require(tenantId, conversationId);
+        // UC026 bước 1 (trigger CLOSING): sự kiện đi CÙNG transaction với việc đóng (ADR-0003) — rollback thì
+        // không có tóm tắt cho một hội thoại chưa đóng. Không chở nội dung tin: worker đọc lịch sử qua
+        // /internal, sự kiện nằm trên Kafka 7 ngày còn tin nhắn là dữ liệu cá nhân (NĐ 13).
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("conversation_id", conversationId.toString());
+        payload.put("closed_by", actor.userId().toString());
+        if (reason != null && !reason.isBlank()) {
+            payload.put("close_reason", reason);
+        }
+        payload.put("closed_at", Instant.now().toString());
+        payload.put("message_count", after.messageCount());
+        outbox.append(tenantId, AGGREGATE_CONVERSATION, conversationId, EVENT_CLOSED, TOPIC_CLOSED, payload);
         return summary(after, repo.tagsOf(tenantId, after.contactId() == null ? List.of() : List.of(after.contactId())));
     }
 

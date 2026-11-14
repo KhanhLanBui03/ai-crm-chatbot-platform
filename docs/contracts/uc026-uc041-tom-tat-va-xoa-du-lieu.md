@@ -1,5 +1,10 @@
 # Hợp đồng UC026 + UC041 — tóm tắt hội thoại và xoá dữ liệu cá nhân (nháp 09/10/2026)
 
+> **13/11/2026 (GD3):** java-core đã có đủ mục 1–3, ai-service chạy `JAVA_CORE_MODE=remote` được. Mục 6.2, 6.4,
+> 6.6 đã làm (outbox `crm.conversation.closed`, chuỗi bảo mật `/internal/**` bằng `X-Internal-Token`, gateway chặn
+> `privacy`). Bổ sung so với bản này: `ErasureResult` thêm `releasedDocuments`/`releasedStorageBytes`;
+> `PATCH …/summary` không ghi lùi. Xem [`giao-dien-gd.md`](giao-dien-gd.md) mục 5.
+
 ⚠️ Nháp phía Track B. Nguồn sự thật vẫn là `docs/openapi/java-core-to-ai-service.yaml`,
 `docs/openapi/ai-service-to-java-core.yaml` và `docs/events/crm.conversation.closed.v1.json` — **chưa
 sửa**, chờ Dev B xác nhận (mục 6). Căn cứ: đặc tả UC026, UC041;

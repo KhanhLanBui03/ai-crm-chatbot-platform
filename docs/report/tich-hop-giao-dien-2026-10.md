@@ -331,3 +331,120 @@ Kho tenant B về đúng **2 tài liệu** (tài liệu thử "Bảng giá đi�
   lượt khen thành 11% — đo mức sẵn lòng bấm nút chứ không đo chất lượng. Cộng tử với tử, mẫu với mẫu của hai phía
   (không lấy trung bình hai tỉ lệ), và lấy từ `ai.ai_feedback` thay vì `metrics_daily` vì đánh giá đến SAU sự kiện
   lượt — đánh giá lại (2.1) tự đúng vì mỗi phía chỉ có một dòng.
+
+---
+
+## GD3 — Tóm tắt hội thoại + xoá dữ liệu cá nhân: UC026 · UC041 (13/11/2026)
+
+**Nhánh** `feat/giao-dien-gd3-tom-tat-xoa` (tách từ `develop` = `2840347`, sau khi PR #47 GD2 đã merge). Cách kiểm
+như GD1/GD2 (người dùng chốt đầu GD3): Chrome không giao diện do Playwright điều khiển, `VITE_USE_MOCK=false`, mọi
+lời gọi qua gateway `:8080`; không chụp ảnh. Ba điểm chốt đầu phiên: **Q1** `CLOSING` + `MANUAL`, **Q3** một
+`INTERNAL_API_TOKEN` hai chiều, **Q4** biên bản bản gọn (`certificateUri = null`).
+
+| | UC026 | UC041 |
+|---|---|---|
+| (a) luồng chính trên giao diện | ✅ 1–7 | ✅ 1–11 |
+| (b) luồng phụ, mã lỗi | ✅ 1.1 · 1.2 (N12) · 3.1 (test) · 4.1 · 422/502 (test) | ✅ 2.1 · 3.1 (ứng dụng + CSDL) · 5.1 · 8.1 · 9.1 · gateway |
+| (c) kiểm máy | ✅ | ✅ |
+| (d) minh chứng | ✅ | ✅ |
+
+### Môi trường
+
+| Thành phần | Trạng thái |
+|---|---|
+| Hạ tầng · suy luận | postgres · redis · kafka · RustFS healthy; ai-embed · ai-classify (rerank tắt) |
+| CSDL | Track A V139 · Track B V216 — GD3 **không thêm migration** |
+| java-core · gateway | profile `local`; `INTERNAL_API_TOKEN` (32 byte ngẫu nhiên) đặt bằng biến môi trường lúc chạy, không ghi vào `.env` |
+| ai-service API + worker | `JAVA_CORE_MODE=remote`, `LLM_MODE=remote` (Gemini `gemini-3.5-flash-lite`), cùng `INTERNAL_API_TOKEN`, `RERANK_ENABLED=false`, `LLM_TIMEOUT_S=6`, `CHAM_TU_DONG_BAT=false` |
+| web-dashboard :5173 · widget | `VITE_USE_MOCK=false`; khách widget tạo bằng `POST /api/v1/widget/session` + `/messages` qua gateway, khoá `wk_4d68…` |
+
+**Bề mặt nội bộ (kiểm trước, gọi thẳng :8081):** `GET /internal/conversations/{W1}/messages` không token → **401**;
+có token → 200, 6 tin cũ trước (CUSTOMER "Xin chào" → BOT …). Qua gateway: `DELETE /ai/v1/ai/privacy/contacts/…` và
+`POST /ai/v1/ai/summarize` kèm JWT quản trị → **403**; `/internal/**` → 401 (không có route).
+
+### UC026 — Tóm tắt nội dung hội thoại
+
+| Bước đặc tả | Thao tác | Kết quả thấy được |
+|---|---|---|
+| 1–6 | Hộp thư → W1 (chào + C1 + C2 của GD2) → "Đánh dấu xong" | toast "Đã đánh dấu hội thoại đã xử lý xong."; cột phải hiện **"Đang tóm tắt hội thoại vừa kết thúc…"**; outbox `crm.conversation.closed` đã phát; worker log `GET /internal/…/messages 200` → `PATCH /internal/…/summary 200` → "Tóm tắt 7055ed20…: gemini-3.5-flash-lite@tt2, 1 lượt LLM, 1 khối, sửa=False" |
+| 7 | Chờ ở cột phải | **4,7 s** sau khi bấm: khối "Tóm tắt hội thoại" 4 phần — Nhu cầu chính "Khách muốn biết chi phí của dịch vụ niềng răng mắc cài sứ và dịch vụ tẩy trắng răng bằng laser." · Thông tin đã cung cấp "Không có" · Vấn đề chưa giải quyết "Không có" · Bước tiếp theo "Nhân viên chào khách và hỏi thêm …"; chân khối "Sinh khi kết thúc · 18:35 13/11/2026 · `gemini-3.5-flash-lite@tt2`" |
+| 5 | CSDL | `ai.ai_interactions` một lượt `branch = SUMMARY`, 682 token, 1 304 ms |
+| 4.1 | Bấm "Tóm tắt lại" | nút đổi "Đang tóm tắt…"; bản mới thay bản cũ, chân khối "Nhân viên bấm tóm tắt lại"; lượt `SUMMARY` thứ hai (678 token) — bản `CLOSING` vẫn truy được ở lượt cũ |
+| 1.1 | Hội thoại chỉ có "Xin chào" (khách widget mới) → "Đánh dấu xong" | 25 s sau vẫn "Chưa có bản tóm tắt…"; worker log "bỏ qua — 3 tin, quá ngắn"; **không** có lượt `SUMMARY`, không gọi LLM |
+| — | Cột phải sau khi có tóm tắt | "Lượt xử lý gần nhất của AI" vẫn là lượt trả lời khách (RAG · PRICING_POLICY · câu C2), không phải lượt tóm tắt (sửa trong lúc chạy, xem dưới) |
+
+### UC041 — Xử lý yêu cầu xoá dữ liệu cá nhân
+
+**Chuẩn bị:** khách X = "Khách web #B180" (`4bf2870a…`) chào qua widget; tải "Hợp đồng trả góp — Trần Thị Mai"
+(MD, 357 byte, 1 đoạn) → `READY`; gắn `contact_id = X` bằng `PATCH /v1/documents/{id}` (gọi thẳng ai-service). X hỏi
+"Chi phí trả góp niềng răng mỗi kỳ là bao nhiêu tiền?" → "… của khách hàng Trần Thị Mai là 7.700.000 đồng mỗi kỳ
+[1]", nguồn "Hợp đồng trả góp — Trần Thị Mai". Hạn mức lúc này `DOCUMENT` 3, `STORAGE_MB` 4 218 byte.
+
+| Bước đặc tả | Thao tác | Kết quả thấy được |
+|---|---|---|
+| 1–2 | Kiểm toán → Yêu cầu xoá → "Tạo yêu cầu": tìm "B180", nguồn "Khách hàng tự gửi yêu cầu", căn cứ "Điều 16 NĐ 13/2023 …" | `201`; mở thẳng trang yêu cầu, chip "Chờ thực thi", bảng phạm vi 14 dòng; ở danh sách: "Khách web #B180 · Khách hàng tự gửi yêu cầu · **Chưa xác minh** [Xác minh danh tính] · Chờ thực thi" |
+| 2.1 | "Tạo yêu cầu" lần nữa cho X | hộp thoại báo "Khách này đã có một yêu cầu xoá đang xử lý — không tạo yêu cầu thứ hai." (`409 ERASURE_ALREADY_OPEN`) |
+| 3.1 | "Thực thi xoá" → gõ `XOA VINH VIEN` khi chưa xác minh | hộp thoại báo "Chưa xác minh danh tính chủ thể dữ liệu — không thực thi được yêu cầu xoá." (`409 IDENTITY_NOT_VERIFIED`); không gọi ai-service. Lớp CSDL: `UPDATE … SET status = 'IN_PROGRESS'` khi chưa xác minh hỏng ở `ck_erasure_gate` (test) |
+| 3–4 | "Xác minh danh tính" | toast; Hồ sơ pháp lý "Người xác minh danh tính: Quản trị Nha khoa B17", lúc 18:43 |
+| 5–6 | Xem trước phạm vi → chọn X | "Xoá dữ liệu của Khách web #B180 sẽ đụng tới 14 bảng"; cảnh báo **"Phạm vi xoá dừng ở hệ thống này"** (MCP); từng bảng + thao tác (Xoá hẳn · Ẩn danh hoá · Giữ số tổng hợp) |
+| 7–10 | "Thực thi xoá" → hộp thoại nhắc người xác minh + số bảng + ghi chú MCP → gõ `XOA VINH VIEN` | toast "Đã xoá xong. Biên bản xác nhận đã lưu …"; "Đã hoàn tất", **14/14 bảng**: `knowledge_documents` 1 · `knowledge_chunks` 1 · `ai_interactions` 2 · `s3.kb-tai-lieu` 1 · `contacts` 1 · `channel_identities` 1 · `messages` 4 · `conversations` 1 · `metrics_daily` giữ tổng hợp |
+| 10 (biên bản) | "Xem biên bản xác nhận" | thẻ "Đã xoá dữ liệu của khách mã 4bf2870a trên 14 bảng … Danh tính do Quản trị Nha khoa B17 xác minh lúc 18:43; hoàn tất lúc 18:43. Lưu trong hồ sơ yêu cầu và nhật ký kiểm toán (`ERASURE_EXECUTED`)"; `audit_logs`: `ERASURE_REQUESTED` → `ERASURE_IDENTITY_VERIFIED` → `ERASURE_EXECUTED` (`after_data.status = COMPLETED`, 14 mục) |
+| sau | Khách mới hỏi lại câu cũ ở widget | "Dạ hiện em chưa tìm thấy thông tin phù hợp …" — **không** còn trích hợp đồng của X |
+| sau | CSDL / kho tệp | danh bạ X `ANONYMIZED`, "Khách đã ẩn danh", không số điện thoại; 4 tin không phải `SYSTEM` `is_redacted` = "[Nội dung đã xoá theo yêu cầu của chủ thể dữ liệu]"; tài liệu mất; tệp gốc mất khỏi RustFS; hạn mức về `DOCUMENT` **2**, `STORAGE_MB` **3 861** — trả đúng 1 tài liệu / 357 byte |
+| 8.1 · 9.1 | Khách Y ("Khách web #A933"): tạo + xác minh, **tắt ai-service**, "Thực thi xoá" | toast "Xoá dừng lại ở một số bảng …"; "Hỏng giữa chừng", **7/14**; cảnh báo "Xoá dừng lại ở 7 bảng — dữ liệu đang ở trạng thái nửa vời · AI_SERVICE_UNAVAILABLE — Dịch vụ AI tạm thời không phản hồi …"; 7 mục CRM "Xong" |
+| 8.1 | Bật lại ai-service → "Chạy lại phần còn lại" | "Đã hoàn tất", 14/14; 7 mục AI "Xong" (`ai_interactions` 1); 6 mục CRM giữ **nguyên** mốc `11:44:25.344881Z` — không chạy lại |
+| gateway | `curl` `DELETE /ai/v1/ai/privacy/contacts/…` qua :8080 với JWT quản trị | **403** |
+
+### Cổng ra — kiểm máy
+
+| Lệnh | Kết quả |
+|---|---|
+| `mvn -f java-core/pom.xml test` (cả bộ, cần Docker) | **303/303** (296 + 7 ca `TomTatXoaDuLieuIntegrationTest`: `/internal` thiếu/sai token 401 · tenant khác 404 · outbox + ghi tóm tắt luỹ đẳng, không lùi · tóm tắt thiếu phần 422 · "Tóm tắt lại" giữ mã 422/502 · xoá `lead-scores` luỹ đẳng · luồng xoá đủ cổng 409 + `ck_erasure_gate` + chạy lại + trả hạn mức) |
+| `mvn -f gateway/pom.xml compile` | sạch |
+| `npm run typecheck` · `npm run build` (web-dashboard) | sạch; `dashboard-api.yaml` sửa + `npm run gen:api` |
+| ai-service `compileall` · `ruff` (tệp đã sửa) | sạch; không thêm lỗi ruff nào (I001 ở `service.py` có sẵn) |
+| ai-service `pytest tests/unit tests/integration` (Postgres + RustFS thật) | **756 passed · 1 skipped · 0 failed** — ba test đỏ ở GD2 đã được PR #48/#49 sửa; gồm `test_mang_x_internal_token_khi_co_cau_hinh` và kiểm hạn mức mới ở `test_xoa_ca_dong_doi_cung_tep` (3 dòng cùng tệp nhưng chỉ trả 1 tài liệu), `test_chay_lai_luy_dang` (lần hai trả 0) |
+
+### Sửa trong lúc chạy thật (không có trong kế hoạch)
+
+| Hiện tượng | Nguyên nhân | Sửa |
+|---|---|---|
+| Sau khi tóm tắt, ô "Lượt xử lý gần nhất của AI" hiện chính lượt tóm tắt (route `SUMMARY`) | lấy lượt mới nhất của hội thoại, mà UC026 cũng ghi một lượt | lấy lượt mới nhất **không phải** `SUMMARY` trong 5 lượt gần nhất |
+| Màn xem trước ghi "0 dòng bị xoá hẳn" trong khi phía AI sẽ xoá tài liệu, lượt xử lý | phía AI `affectedRows = null` bị cộng như 0 | câu thêm "— chưa tính 6 bảng phía AI, số dòng biết sau khi thực thi" |
+| Test MockMvc của mọi đường `hasRole(...)` trả 403 cho cả quản trị viên | post-processor `jwt()` không chạy `jwtAuthenticationConverter` của ứng dụng | `asUser` ở lớp nền test gắn `ROLE_<role>` như production |
+
+### Thấy khi chạy, ngoài GD3 — báo Dev B, chưa sửa
+
+- `FormDialog` vẫn để lại unhandled rejection sau mỗi lượt 409 (2 lần ở cảnh 2.1 + 3.1) — đã báo ở GD1.
+- Sau khi khởi động lại java-core, gateway trả 503 khoảng 30–60 s tới khi Eureka cập nhật (đúng cảnh báo ADR-0004).
+
+### Dữ liệu sau khi kiểm
+
+Kho tenant B vẫn **2 tài liệu**, `DOCUMENT` 2, `STORAGE_MB` 3 861 byte (tài liệu thử của X đã bị chính UC041 xoá).
+Thêm: 2 danh bạ `ANONYMIZED` (X, Y) cùng 2 yêu cầu xoá `COMPLETED`; W1 nay `RESOLVED` kèm bản tóm tắt `MANUAL`; một
+hội thoại chỉ có câu chào `RESOLVED`, không tóm tắt; một khách widget hỏi lại câu của X (lượt từ chối). `AI_TOKEN`
+16 767 / 500 000. **Gemini: 5 lượt gọi** (2 tóm tắt + 3 lượt trả lời; hai lượt trả lời của X, Y đã bị xoá đúng
+theo UC041).
+
+### Giảm độ sâu — ghi nhận ở GD3
+
+- UC026: chỉ `CLOSING` + `MANUAL` (Q1); `HANDOFF`, `TURN_THRESHOLD` không có nguồn phát. `TOKEN_QUOTA_EXCEEDED` (3.2)
+  chưa có. Cột phải chỉ tự hỏi lại trong 2 phút sau lúc đóng để chờ bản `CLOSING`.
+- UC041: thực thi **đồng bộ**; biên bản bản gọn, không xuất tệp (Q4); phạm vi không vươn tới hệ thống ngoài (MCP đã
+  hoãn) và nhà cung cấp LLM — nói rõ ở `externalSystemsNote`. Liên kết kênh ↔ khách (`external_user_id`) giữ nguyên
+  để khách quay lại không tạo hồ sơ trùng; chỉ tên hiển thị, ảnh, hồ sơ thô bị xoá. Tối đa 500 hội thoại gửi sang
+  ai-service một lượt. ai-service xoá xong mà java-core mất phản hồi giữa chừng thì phần hạn mức của lượt đó không
+  được trả (lượt gọi lại báo 0) — cùng loại lệch bộ đếm ADR-0023 Đánh đổi 1.
+
+### Phải giải thích được
+
+- **Vì sao ai-service ghi tóm tắt qua API chứ không ghi thẳng:** `ai_app` không có quyền trên schema `engagement`
+  (ADR-0002, V206). Đó là ranh giới quyền: mô hình bị tiêm chỉ thị cũng chỉ ghi được đúng năm cột tóm tắt của hội
+  thoại thuộc tenant trong `X-Tenant-Id`, qua một endpoint có token — không phải mọi bảng nghiệp vụ.
+- **Vì sao ẩn danh danh bạ thay vì xoá vật lý:** xoá dòng `contacts` kéo sập các tham chiếu lịch sử (deal, lead, hội
+  thoại) mà nghĩa vụ kế toán và kiểm toán vẫn cần. Ẩn danh bỏ mọi trường quy về cá nhân nhưng giữ quan hệ nghiệp vụ;
+  `ck_contacts_anonymized` bắt `status` và `anonymized_at` đi cùng nhau.
+- **Vì sao gọi ai-service NGOÀI transaction của java-core:** giữa lượt xoá, ai-service gọi ngược
+  `DELETE /internal/contacts/{id}/lead-scores` — giữ transaction (và khoá dòng) quanh lời gọi là tự khoá mình, cộng
+  giữ kết nối pool suốt lượt gọi mạng. Lượt bấm thứ hai bị chặn bằng trạng thái `IN_PROGRESS` đã commit trước đó;
+  hỏng giữa chừng thì tiến độ từng bảng cho biết chính xác phần nào cần chạy lại.

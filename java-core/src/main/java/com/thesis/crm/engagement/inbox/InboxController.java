@@ -19,6 +19,7 @@ import com.thesis.crm.engagement.inbox.InboxDtos.MessageDto;
 import com.thesis.crm.engagement.inbox.InboxDtos.MessagePage;
 import com.thesis.crm.engagement.inbox.InboxDtos.SendMessageRequest;
 import com.thesis.crm.engagement.inbox.InboxDtos.StatusRequest;
+import com.thesis.crm.engagement.inbox.InboxDtos.SummaryDto;
 import com.thesis.crm.engagement.inbox.InboxService.Actor;
 import java.time.Instant;
 import java.util.List;
@@ -42,9 +43,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class InboxController {
 
     private final InboxService service;
+    private final SummaryService summaries;
 
-    public InboxController(InboxService service) {
+    public InboxController(InboxService service, SummaryService summaries) {
         this.service = service;
+        this.summaries = summaries;
     }
 
     @GetMapping
@@ -84,6 +87,15 @@ public class InboxController {
     @GetMapping("/{conversationId}/context")
     public ResponseEntity<ApiResponse<ConversationContext>> context(@PathVariable UUID conversationId) {
         return ResponseEntity.ok(ApiResponse.ok(service.context(requireTenantId(), conversationId)));
+    }
+
+    /**
+     * UC026 trigger {@code MANUAL} — nút "Tóm tắt lại" ở cột phải (chốt Q1 của GD3). Đồng bộ: trả bản
+     * mới ngay để giao diện thay khối tóm tắt. Mọi nhân viên xem được hội thoại thì bấm được.
+     */
+    @PostMapping("/{conversationId}/summary")
+    public ResponseEntity<ApiResponse<SummaryDto>> resummarize(@PathVariable UUID conversationId) {
+        return ResponseEntity.ok(ApiResponse.ok(summaries.resummarize(requireTenantId(), conversationId)));
     }
 
     @GetMapping("/{conversationId}/messages")

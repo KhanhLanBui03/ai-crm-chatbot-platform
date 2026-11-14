@@ -1827,6 +1827,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversationId}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: components["parameters"]["ConversationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tóm tắt lại hội thoại (UC026, trigger MANUAL)
+         * @description Nút "Tóm tắt lại" ở cột phải (chốt Q1 của GD3). **Đồng bộ**: java-core gửi lịch sử (bỏ tin đã
+         *     che theo UC041) sang `POST /v1/ai/summarize`, nhận bốn phần, ghi vào hội thoại và trả bản mới.
+         *     Đường chính `CLOSING` thì bất đồng bộ (`crm.conversation.closed` → worker ai-service).
+         *     Mô hình hỏng thì bản cũ giữ nguyên (UC026 luồng phụ 3.1). Mọi nhân viên xem được hội thoại.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    conversationId: components["parameters"]["ConversationId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Bản tóm tắt mới */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"] & {
+                            data?: components["schemas"]["TomTatHoiThoai"];
+                        };
+                    };
+                };
+                404: components["responses"]["KhongThay"];
+                /**
+                 * @description `CONVERSATION_TOO_SHORT` — chưa đủ tin của khách để tóm tắt (UC026 luồng phụ 1.1).
+                 *     `SUMMARY_SCHEMA_INVALID` — mô hình không sinh đủ bốn phần sau một vòng sửa; bản cũ giữ nguyên.
+                 */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
+                    };
+                };
+                502: components["responses"]["AiKhongPhanHoi"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{conversationId}/messages": {
         parameters: {
             query?: never;
@@ -5334,7 +5396,60 @@ export interface paths {
             };
         };
         put?: never;
-        post?: never;
+        /**
+         * SCR056 — tạo yêu cầu xoá dữ liệu cá nhân
+         * @description UC041 bước 1–2. Tạo yêu cầu ở trạng thái `PENDING` kèm căn cứ pháp lý (bắt buộc) và phạm vi dự
+         *     kiến (`items` — như `/preview`, mọi mục `PENDING`). Mọi nhân viên tạo được (thay mặt khách);
+         *     xác minh và thực thi chỉ quản trị viên.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TaoYeuCauXoa"];
+                };
+            };
+            responses: {
+                /** @description Đã tạo yêu cầu */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"] & {
+                            data?: components["schemas"]["YeuCauXoaChiTiet"];
+                        };
+                    };
+                };
+                404: components["responses"]["KhongThay"];
+                /**
+                 * @description `ERASURE_ALREADY_OPEN` — khách đã có một yêu cầu đang xử lý (UC041 luồng phụ 2.1).
+                 *     `CONTACT_ALREADY_ANONYMIZED` — hồ sơ đã ẩn danh. `CONTACT_MERGED` — hồ sơ đã gộp vào hồ sơ khác.
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
+                    };
+                };
+                /** @description `LEGAL_BASIS_REQUIRED` · `LEGAL_BASIS_TOO_LONG` · `INVALID_REQUESTED_BY` · `CONTACT_REQUIRED` */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -5431,6 +5546,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/erasure-requests/{requestId}/verify-identity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Xác minh danh tính chủ thể dữ liệu
+         * @description UC041 bước 3–4. Ghi người xác minh (người đang đăng nhập) và thời điểm — hai giá trị đi cùng nhau
+         *     (`ck_erasure_verified`). Chỉ yêu cầu `PENDING`. Thiếu bước này thì `execute` bị chặn cả ở ứng dụng
+         *     lẫn ở CSDL (`ck_erasure_gate`).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    requestId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Đã xác minh */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"] & {
+                            data?: components["schemas"]["YeuCauXoaChiTiet"];
+                        };
+                    };
+                };
+                403: components["responses"]["KhongDuQuyen"];
+                404: components["responses"]["KhongThay"];
+                /** @description `ERASURE_NOT_PENDING` · `IDENTITY_ALREADY_VERIFIED` */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/erasure-requests/{requestId}/execute": {
         parameters: {
             query?: never;
@@ -5442,7 +5613,12 @@ export interface paths {
         put?: never;
         /**
          * SCR058 — thực thi yêu cầu xóa
-         * @description Chạy bất đồng bộ. Xong thì sinh biên bản xác nhận (`certificateUri`).
+         * @description **Đồng bộ** (giảm độ sâu GD3): chạy hết rồi trả kết quả cuối — `COMPLETED`, hoặc
+         *     `PARTIALLY_FAILED` khi một phần hỏng (vd. ai-service không phản hồi — UC041 luồng phụ 9.1).
+         *     Nhận `PENDING` hoặc `PARTIALLY_FAILED`: chạy lại chỉ làm các mục chưa `DONE` (luồng phụ 8.1).
+         *
+         *     Biên bản xác nhận bản gọn (chốt Q4): `items` + người/lúc xác minh + lúc hoàn tất, lưu trên yêu
+         *     cầu và trong dòng kiểm toán `ERASURE_EXECUTED`; `certificateUri` luôn `null`.
          *
          *     Phạm vi xóa **không vươn tới hệ thống bên ngoài** đã nhận dữ liệu qua MCP — giới hạn này
          *     ghi vào `externalSystemsNote` và phải hiển thị cho người duyệt, không được im lặng bỏ qua.
@@ -5458,8 +5634,8 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Đã bắt đầu thực thi */
-                202: {
+                /** @description Kết quả thực thi */
+                200: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5470,7 +5646,11 @@ export interface paths {
                     };
                 };
                 403: components["responses"]["KhongDuQuyen"];
-                /** @description Yêu cầu không ở trạng thái PENDING */
+                404: components["responses"]["KhongThay"];
+                /**
+                 * @description `IDENTITY_NOT_VERIFIED` — chưa xác minh danh tính (UC041 luồng phụ 3.1).
+                 *     `ERASURE_NOT_EXECUTABLE` — yêu cầu đang chạy hoặc đã hoàn tất.
+                 */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -7052,17 +7232,31 @@ export interface components {
             /** Format: date-time */
             occurredAt: string;
         };
+        TaoYeuCauXoa: {
+            /** Format: uuid */
+            contactId: string;
+            /** @description Bắt buộc (UC041) — vd. "Điều 16 Nghị định 13/2023/NĐ-CP, khách gửi thư ngày …" */
+            legalBasis: string;
+            /**
+             * @description `CONTACT` — khách tự gửi; `STAFF` — nhân viên tạo thay mặt khách
+             * @default STAFF
+             * @enum {string}
+             */
+            requestedBy: "CONTACT" | "STAFF";
+        };
         YeuCauXoa: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
             contactId: string;
             contactName?: string | null;
+            /** @enum {string} */
+            requestedBy?: "CONTACT" | "STAFF";
             legalBasis?: string;
             status: components["schemas"]["TrangThaiYeuCauXoa"];
-            identityVerifiedByName?: string;
+            identityVerifiedByName?: string | null;
             /** Format: date-time */
-            identityVerifiedAt?: string;
+            identityVerifiedAt?: string | null;
             /** Format: date-time */
             requestedAt: string;
             /** Format: date-time */
