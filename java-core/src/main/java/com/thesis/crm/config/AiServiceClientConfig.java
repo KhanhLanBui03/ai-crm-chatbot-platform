@@ -22,7 +22,7 @@ import org.springframework.web.client.RestClient;
  * mà uvicorn của ai-service không nói HTTP/2.
  */
 @Configuration
-@EnableConfigurationProperties({AiServiceProperties.class, KbProperties.class})
+@EnableConfigurationProperties({AiServiceProperties.class, KbProperties.class, InternalApiProperties.class})
 public class AiServiceClientConfig {
 
     @Bean

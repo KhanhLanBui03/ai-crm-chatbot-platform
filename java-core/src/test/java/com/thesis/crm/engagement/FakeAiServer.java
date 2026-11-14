@@ -47,6 +47,13 @@ final class FakeAiServer {
             new Script(200, "{\"items\": [], \"total\": 0, \"page\": 0, \"size\": 25}", 0));
     final AtomicReference<Script> quality = new AtomicReference<>(new Script(200, "{\"danh_gia\": []}", 0));
     final AtomicReference<String> lastQualityQuery = new AtomicReference<>();
+    /** GD3 — POST /v1/ai/summarize (UC026 MANUAL) và DELETE /v1/ai/privacy/contacts/{id} (UC041). */
+    final AtomicReference<Script> summarize = new AtomicReference<>(new Script(500, "{}", 0));
+    final AtomicReference<String> lastSummarizeBody = new AtomicReference<>();
+    final AtomicReference<Script> privacy = new AtomicReference<>(new Script(500, "{}", 0));
+    final AtomicReference<String> lastPrivacyQuery = new AtomicReference<>();
+    final AtomicReference<String> lastPrivacyToken = new AtomicReference<>();
+    final AtomicInteger privacyCalls = new AtomicInteger();
 
     private FakeAiServer(HttpServer server) {
         this.server = server;
@@ -112,6 +119,16 @@ final class FakeAiServer {
                 }
             });
             s.createContext("/v1/knowledge-gaps", ex -> tra(ex, fake.gaps.get()));
+            s.createContext("/v1/ai/summarize", ex -> {
+                fake.lastSummarizeBody.set(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                tra(ex, fake.summarize.get());
+            });
+            s.createContext("/v1/ai/privacy/contacts", ex -> {
+                fake.privacyCalls.incrementAndGet();
+                fake.lastPrivacyQuery.set(ex.getRequestURI().getRawQuery());
+                fake.lastPrivacyToken.set(ex.getRequestHeaders().getFirst("X-Internal-Token"));
+                tra(ex, fake.privacy.get());
+            });
             s.createContext("/v1/ai/quality", ex -> {
                 fake.lastQualityQuery.set(ex.getRequestURI().getRawQuery());
                 tra(ex, fake.quality.get());
