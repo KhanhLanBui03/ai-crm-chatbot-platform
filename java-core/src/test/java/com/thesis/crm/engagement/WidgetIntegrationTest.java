@@ -43,6 +43,9 @@ class WidgetIntegrationTest extends EngagementIntegrationTestBase {
     /** UC006 — hạn mức hội thoại 5, đã dùng 3: hội thoại mới đưa lên 4/5 = 80%. */
     static final UUID TENANT_M = UUID.randomUUID();
     static final String KEY_M = "wk_m_" + UUID.randomUUID().toString().substring(0, 8);
+    /** UC006 — doanh nghiệp không còn thuê bao nào mở chu kỳ. */
+    static final UUID TENANT_E = UUID.randomUUID();
+    static final String KEY_E = "wk_e_" + UUID.randomUUID().toString().substring(0, 8);
 
     static final String ORIGIN_W = "https://shop-w.vn";
     static final String ORIGIN_X = "https://shop-x.vn";
@@ -76,6 +79,8 @@ class WidgetIntegrationTest extends EngagementIntegrationTestBase {
             }
             tenant(c, TENANT_M, "ACTIVE", 5, 3);
             channel(c, TENANT_M, KEY_M, "[\"shop-m.vn\"]");
+            tenant(c, TENANT_E, "ACTIVE", 200, 0);
+            channel(c, TENANT_E, KEY_E, "[\"shop-e.vn\"]");
         }
         AI.respond(FakeAiServer.answer("Gói Pro giá 3.990.000đ mỗi tháng."));
     }
@@ -352,6 +357,24 @@ class WidgetIntegrationTest extends EngagementIntegrationTestBase {
         assertThat(turn.get("conversationStatus").asText()).isEqualTo("PENDING_AGENT");
         assertThat(handoverReason(turn)).isEqualTo("QUOTA_EXCEEDED");
         assertThat(turn.get("messages")).hasSize(2);   // tin khách vẫn được lưu + câu báo
+    }
+
+    @Test
+    void thueBaoHetHan_widgetDongHanPhien_khongGoiAi() throws Exception {
+        // UC006 tiền đề: doanh nghiệp phải có thuê bao đang hoạt động. Từ V140 job nền mới thật sự
+        // chuyển thuê bao sang EXPIRED, nên nhánh này mới chạy thật — khoá lại hành vi: widget đóng hẳn
+        // phiên (403, và mở phiên mới không được cấp token) chứ không chuyển giao, và không gọi AI.
+        String token = newToken(KEY_E, "https://shop-e.vn");
+        try (Connection c = owner(); PreparedStatement ps = c.prepareStatement(
+                "UPDATE platform.tenant_subscriptions SET status = 'EXPIRED' WHERE tenant_id = ?")) {
+            ps.setObject(1, TENANT_E);
+            ps.executeUpdate();
+        }
+        int before = AI.calls.get();
+        send(token, "https://shop-e.vn", "còn hàng không?").andExpect(status().isForbidden());
+        session(KEY_E, "https://shop-e.vn").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.token").doesNotExist());
+        assertThat(AI.calls.get()).isEqualTo(before);
     }
 
     @Test
