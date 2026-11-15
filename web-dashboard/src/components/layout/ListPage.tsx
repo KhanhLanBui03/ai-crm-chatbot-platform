@@ -108,9 +108,13 @@ export function ListPage<T extends RowData>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tuKhoaTriHoan])
 
-  const idDaChon = Object.keys(daChon).filter((id) => daChon[id])
-  const dangLoc = Boolean(oNhap) || Object.values(giaTriBoLoc).some(Boolean)
   const muc = trang?.items ?? []
+  // Chỉ tính dòng còn trên trang đang hiện: sau thao tác hàng loạt, dòng vừa gỡ rời danh sách nhưng
+  // id của nó vẫn nằm trong `daChon` — không lọc thì lần chọn kế tiếp gửi lại cả id cũ (GD4: gỡ một
+  // tài liệu hai lần, nhật ký kiểm toán ghi hai dòng DOCUMENT_ARCHIVED).
+  const idTrenTrang = new Set(muc.map((dong) => (layId ? layId(dong) : String((dong as { id?: unknown }).id ?? ''))))
+  const idDaChon = Object.keys(daChon).filter((id) => daChon[id] && idTrenTrang.has(id))
+  const dangLoc = Boolean(oNhap) || Object.values(giaTriBoLoc).some(Boolean)
 
   function goHetBoLoc() {
     datONhap('')

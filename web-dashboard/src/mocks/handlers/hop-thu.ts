@@ -121,6 +121,25 @@ export const hopThuHandlers = [
     return HttpResponse.json(ok(nguCanh))
   }),
 
+  // UC026 — "Tóm tắt lại" (GD3): trả một bản MANUAL dựng sẵn và gắn vào ngữ cảnh
+  http.post('/api/v1/conversations/:id/summary', async ({ params }) => {
+    await delay(1_200)
+    const nguCanh = nguCanhHoiThoai[params.id as string]
+    if (!nguCanh) return HttpResponse.json(loi('Không tìm thấy hội thoại.'), { status: 404 })
+    const tomTat = {
+      trigger: 'MANUAL' as const,
+      mainNeed: 'Khách hỏi giá dịch vụ và lịch hẹn.',
+      providedInfo: 'Không có',
+      unresolvedIssues: 'Chưa chốt lịch hẹn.',
+      nextSteps: 'Gọi lại xác nhận lịch hẹn.',
+      isStale: false,
+      modelVersion: 'mo-hinh-gia@tt2',
+      generatedAt: new Date().toISOString(),
+    }
+    nguCanhHoiThoai[params.id as string] = { ...nguCanh, summary: tomTat }
+    return HttpResponse.json(ok(tomTat))
+  }),
+
   http.get('/api/v1/conversations/:id', async ({ params }) => {
     await delay(250)
     const chiTiet = chiTietHoiThoai[params.id as string]

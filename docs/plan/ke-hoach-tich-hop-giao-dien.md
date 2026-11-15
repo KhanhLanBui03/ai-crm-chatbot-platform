@@ -13,7 +13,7 @@
 | **GD1** | UC018 · UC019 · UC020 | tải lên → tiến độ tới `DONE` → danh sách → xem đoạn → sửa → nạp lại → gỡ |
 | **GD2** | UC023 · UC025 · UC027 | hỏi ở widget → có trích dẫn · hỏi ngoài kho → từ chối, chuyển nhân viên · 👍/👎 → hiện ở dashboard · khoảng trống tri thức |
 | **GD3** | UC026 · UC041 | đóng hội thoại → tóm tắt 4 phần ở cột phải · tạo → xác minh → xem trước → thực thi xoá → câu trả lời sau không còn dữ liệu khách |
-| **GD4** | cả 8 | diễn tập một lèo, sửa chỗ vỡ, minh chứng cuối, ôn tập, cập nhật artifact bản đồ luồng |
+| **GD4** | cả 8 | diễn tập một lèo, sửa chỗ vỡ, minh chứng cuối, ôn tập, cập nhật artifact bản đồ luồng — ✅ 14/11 |
 
 ---
 
@@ -318,20 +318,20 @@ chạy `JAVA_CORE_MODE=remote`, `LLM_MODE=remote`.
 
 ### Bề mặt `/internal/**` (dùng chung cho cả hai UC)
 
-- [ ] java-core: chuỗi bảo mật riêng cho `/internal/**`: không cần JWT, **bắt buộc** `X-Internal-Token` khớp; đặt
+- [x] java-core: chuỗi bảo mật riêng cho `/internal/**`: không cần JWT, **bắt buộc** `X-Internal-Token` khớp; đặt
       phạm vi tenant từ `X-Tenant-Id` bằng `TenantTransactionScope` (đường này chỉ ai-service gọi, gateway không định tuyến tới)
-- [ ] ai-service: `HttpJavaCoreClient` gửi thêm `X-Internal-Token` — xem **Điểm chốt Q3**
+- [x] ai-service: `HttpJavaCoreClient` gửi thêm `X-Internal-Token` — xem **Điểm chốt Q3**
 
 ### UC026 — Tóm tắt nội dung hội thoại
 
 | Việc | Tầng |
 |---|---|
-| [ ] `changeStatus` → `CLOSED`/`RESOLVED`: ghi outbox `crm.conversation.closed` **cùng transaction**; payload `conversation_id, closed_by, close_reason, closed_at, message_count`, khoá `tenant_id` | java-core |
-| [ ] `GET /internal/conversations/{id}/messages?page&size` — cũ trước, có `isRedacted`; không có/khác tenant → 404 | java-core |
-| [ ] `PATCH /internal/conversations/{id}/summary` → `summary_data` (4 khoá), `summary_trigger`, `summary_model_version`, `summarized_at`, `summary`; luỹ đẳng | java-core |
-| [ ] `context()` trả `summary` (đọc 5 cột trên, `isStale` = có tin mới sau `summarized_at`) và `lastAiInteraction` (lượt mới nhất qua `GET /v1/ai-interactions?conversation_id=…&size=1` của GD2) | java-core |
-| [ ] `ContextPanel`: khối "Tóm tắt" 4 phần + `trigger` + `modelVersion` + thời điểm + chỉ báo `isStale` | dashboard |
-| [ ] Nút "Tóm tắt lại" (`MANUAL`) — chỉ làm nếu chốt ở **Q1** | java-core + dashboard |
+| [x] `changeStatus` → `CLOSED`/`RESOLVED`: ghi outbox `crm.conversation.closed` **cùng transaction**; payload `conversation_id, closed_by, close_reason, closed_at, message_count`, khoá `tenant_id` | java-core |
+| [x] `GET /internal/conversations/{id}/messages?page&size` — cũ trước, có `isRedacted`; không có/khác tenant → 404 | java-core |
+| [x] `PATCH /internal/conversations/{id}/summary` → `summary_data` (4 khoá), `summary_trigger`, `summary_model_version`, `summarized_at`, `summary`; luỹ đẳng | java-core |
+| [x] `context()` trả `summary` (đọc 5 cột trên, `isStale` = có tin mới sau `summarized_at`) và `lastAiInteraction` (lượt mới nhất qua `GET /v1/ai-interactions?conversation_id=…&size=1` của GD2) | java-core |
+| [x] `ContextPanel`: khối "Tóm tắt" 4 phần + `trigger` + `modelVersion` + thời điểm + chỉ báo `isStale` | dashboard |
+| [x] Nút "Tóm tắt lại" (`MANUAL`) — chốt ở **Q1** (13/11): `POST /api/v1/conversations/{id}/summary` | java-core + dashboard |
 
 | Bước đặc tả | Thao tác | Phải thấy |
 |---|---|---|
@@ -345,15 +345,15 @@ chạy `JAVA_CORE_MODE=remote`, `LLM_MODE=remote`.
 
 | Việc | Tầng |
 |---|---|
-| [ ] Gói `platform/erasure/`: `GET /api/v1/erasure-requests` (lọc `status`) · `GET /{id}` · `POST` (tạo `PENDING`, `legalBasis` bắt buộc, `requestedBy` CONTACT/STAFF, **chặn yêu cầu thứ hai** khi khách đã có yêu cầu đang mở — 2.1) | java-core |
-| [ ] `POST /{id}/verify-identity` → `identity_verified_by` + `identity_verified_at` cùng lúc | java-core |
-| [ ] `GET /preview?contactId=` → `MucXoa[]`: phía CRM đếm thật (`engagement.contacts` ANONYMIZE · `engagement.messages` che nội dung · `sales.lead_scores` DELETE); phía AI `affectedRows = null` ("biết sau khi thực thi") | java-core |
-| [ ] `POST /{id}/execute` **đồng bộ**, nhận `PENDING` hoặc `PARTIALLY_FAILED`; chưa xác minh → 409 `IDENTITY_NOT_VERIFIED` | java-core |
-| [ ] Thứ tự thực thi: `IN_PROGRESS` → lấy mọi `conversationId` của khách → `DELETE /v1/ai/privacy/contacts/{id}?conversationId=…` kèm `X-Internal-Token`, **ngoài** transaction (ai-service gọi ngược `DELETE /internal/contacts/{id}/lead-scores`) → ẩn danh danh bạ (`ANONYMIZED` + `anonymized_at`) → che tin nhắn (`is_redacted`) → gộp `items` → `COMPLETED`/`PARTIALLY_FAILED` → `externalSystemsNote` ← `note` của ai-service → audit `ERASURE_EXECUTED` | java-core |
-| [ ] `DELETE /internal/contacts/{id}/lead-scores` → `{deleted: n}`, luỹ đẳng | java-core |
-| [ ] Chặn `/ai/v1/ai/privacy/**` ở gateway | gateway |
-| [ ] `ErasureRequestsPage`: nút "Tạo yêu cầu" (chọn khách, căn cứ pháp lý, nguồn) + nút "Xác minh danh tính" trên dòng `PENDING` | dashboard |
-| [ ] Biên bản xác nhận — xem **Điểm chốt Q4** | java-core |
+| [x] Gói `platform/erasure/`: `GET /api/v1/erasure-requests` (lọc `status`) · `GET /{id}` · `POST` (tạo `PENDING`, `legalBasis` bắt buộc, `requestedBy` CONTACT/STAFF, **chặn yêu cầu thứ hai** khi khách đã có yêu cầu đang mở — 2.1) | java-core |
+| [x] `POST /{id}/verify-identity` → `identity_verified_by` + `identity_verified_at` cùng lúc | java-core |
+| [x] `GET /preview?contactId=` → `MucXoa[]`: phía CRM đếm thật (`engagement.contacts` ANONYMIZE · `engagement.messages` che nội dung · `sales.lead_scores` DELETE); phía AI `affectedRows = null` ("biết sau khi thực thi") | java-core |
+| [x] `POST /{id}/execute` **đồng bộ**, nhận `PENDING` hoặc `PARTIALLY_FAILED`; chưa xác minh → 409 `IDENTITY_NOT_VERIFIED` | java-core |
+| [x] Thứ tự thực thi: `IN_PROGRESS` → lấy mọi `conversationId` của khách → `DELETE /v1/ai/privacy/contacts/{id}?conversationId=…` kèm `X-Internal-Token`, **ngoài** transaction (ai-service gọi ngược `DELETE /internal/contacts/{id}/lead-scores`) → ẩn danh danh bạ (`ANONYMIZED` + `anonymized_at`) → che tin nhắn (`is_redacted`) → gộp `items` → `COMPLETED`/`PARTIALLY_FAILED` → `externalSystemsNote` ← `note` của ai-service → audit `ERASURE_EXECUTED` | java-core |
+| [x] `DELETE /internal/contacts/{id}/lead-scores` → `{deleted: n}`, luỹ đẳng | java-core |
+| [x] Chặn `/ai/v1/ai/privacy/**` ở gateway | gateway |
+| [x] `ErasureRequestsPage`: nút "Tạo yêu cầu" (chọn khách, căn cứ pháp lý, nguồn) + nút "Xác minh danh tính" trên dòng `PENDING` | dashboard |
+| [x] Biên bản xác nhận — xem **Điểm chốt Q4** | java-core |
 
 | Bước đặc tả | Thao tác | Phải thấy |
 |---|---|---|
@@ -370,26 +370,36 @@ chạy `JAVA_CORE_MODE=remote`, `LLM_MODE=remote`.
 
 ### Cổng ra GD3
 
-- [ ] UC026, UC041 đủ 4 điều ở mục 0
-- [ ] Test java-core: cổng xác minh (409), luỹ đẳng `lead-scores`, `/internal/**` thiếu token → 401/403
-- [ ] `mvn compile` · `npm run typecheck` · ai-service `ruff` + `compileall` + `pytest` (đổi header client)
-- [ ] Tắt hết tiến trình
+- [x] UC026, UC041 đủ 4 điều ở mục 0
+- [x] Test java-core: cổng xác minh (409), luỹ đẳng `lead-scores`, `/internal/**` thiếu token → 401/403
+- [x] `mvn compile` · `npm run typecheck` · ai-service `ruff` + `compileall` + `pytest` (đổi header client)
+- [x] Tắt hết tiến trình
 
 **Phải giải thích được:** vì sao ai-service ghi tóm tắt qua API chứ không ghi thẳng · vì sao ẩn danh danh bạ
 thay vì xoá vật lý · vì sao gọi ai-service **ngoài** transaction của java-core.
+
+✅ **GD3 đóng 13/11/2026** — UC026, UC041 đủ 4 điều. Minh chứng: mục GD3 của
+`docs/report/tich-hop-giao-dien-2026-10.md`; hợp đồng: mục 5 của `docs/contracts/giao-dien-gd.md`.
 
 ---
 
 ## GD4 — Diễn tập trọn luồng + hoàn thiện
 
-- [ ] Bật stack từ đầu theo thứ tự GD1, đi lại **8 UC một lèo** theo đúng thứ tự: đăng nhập → tải → tiến độ →
+> **✅ Đóng 14/11/2026** — minh chứng: [`docs/report/tich-hop-giao-dien-2026-10.md`](../report/tich-hop-giao-dien-2026-10.md)
+> mục GD4; ôn tập: [`docs/on-tap/tich-hop-giao-dien.md`](../on-tap/tich-hop-giao-dien.md). Người dùng chốt đầu GD4:
+> **không chụp ảnh**, diễn tập trên **tenant mới** "Nha khoa Diễn tập GD4", có đo độ trễ, lỗi phần Dev B chỉ ghi + báo.
+> Ba chỗ vỡ: `ListPage` gửi lại id đã gỡ (sửa) · `ai-interactions` 500 khi chỉ khách đánh giá (sửa + test) · đua phiên
+> widget UC009 (Dev B, báo ở `docs/contracts/giao-dien-gd.md` mục 0.3). `mvn test` 304/304.
+
+- [x] Bật stack từ đầu theo thứ tự GD1, đi lại **8 UC một lèo** theo đúng thứ tự: đăng nhập → tải → tiến độ →
       quản lý kho → chat (trích dẫn / từ chối / chuyển giao) → 👍/👎 → khoảng trống → đóng → tóm tắt → xoá
-- [ ] Sửa chỗ vỡ. Mỗi chỗ vỡ một dòng: hiện tượng · nguyên nhân · cách sửa
-- [ ] Bảng minh chứng cuối: 8 UC × "bước đặc tả → thao tác → kết quả", kèm ảnh chụp `docs/report/scr-gd-*.png`
-- [ ] `docs/on-tap/tich-hop-giao-dien.md`: luồng từng UC qua bốn tầng, lớp chuyển tiếp, ánh xạ trường, gộp các câu "Phải giải thích được" của GD1–GD3
-- [ ] Cập nhật artifact "Bản đồ luồng AI CRM" (https://claude.ai/artifact/9ne7Td2SmgB5owL6FhrdpB): sửa ô chuyển giao, thêm đường giao diện. **Không hoãn**
-- [ ] Còn giờ: đo nhanh độ trễ thao tác trên giao diện, ghi số thật (không phải cổng)
-- [ ] Chạy `/handoff`; soạn lệnh commit/push; PR trên web sau `git pull origin develop`
+- [x] Sửa chỗ vỡ. Mỗi chỗ vỡ một dòng: hiện tượng · nguyên nhân · cách sửa
+- [x] Bảng minh chứng cuối: 8 UC × "bước đặc tả → thao tác → kết quả" — ~~kèm ảnh chụp `docs/report/scr-gd-*.png`~~
+      (người dùng chốt không chụp, như GD1–GD3)
+- [x] `docs/on-tap/tich-hop-giao-dien.md`: luồng từng UC qua bốn tầng, lớp chuyển tiếp, ánh xạ trường, gộp các câu "Phải giải thích được" của GD1–GD3
+- [x] Cập nhật artifact "Bản đồ luồng AI CRM" (https://claude.ai/artifact/9ne7Td2SmgB5owL6FhrdpB): sửa ô chuyển giao, thêm đường giao diện. **Không hoãn**
+- [x] Còn giờ: đo nhanh độ trễ thao tác trên giao diện, ghi số thật (không phải cổng) — cột "Độ trễ" của bảng minh chứng GD4
+- [x] Chạy `/handoff`; soạn lệnh commit/push; PR trên web sau `git pull origin develop`
 
 ---
 
@@ -397,10 +407,10 @@ thay vì xoá vật lý · vì sao gọi ai-service **ngoài** transaction của
 
 | # | Câu hỏi | Đề xuất | GD |
 |---|---|---|---|
-| Q1 | UC026 làm những trigger nào? Đặc tả có 4: chuyển giao · kết thúc · ngưỡng số lượt · thủ công | `CLOSING` (bắt buộc) + `MANUAL` (ai-service đã có `POST /v1/ai/summarize`, java-core thêm 1 endpoint + 1 nút). `HANDOFF`, `TURN_THRESHOLD` ghi vào "giảm độ sâu" | GD3 |
+| Q1 | UC026 làm những trigger nào? Đặc tả có 4: chuyển giao · kết thúc · ngưỡng số lượt · thủ công | **✅ chốt 13/11 theo đề xuất:** `CLOSING` (bắt buộc) + `MANUAL` (ai-service đã có `POST /v1/ai/summarize`, java-core thêm 1 endpoint + 1 nút). `HANDOFF`, `TURN_THRESHOLD` ghi vào "giảm độ sâu" | GD3 |
 | Q2 | Tỉ lệ tích cực UC027 bước 7 hiện ở đâu? `AiPerformancePage` là màn của UC039 (Dev B) | **✅ chốt 10/11 — hướng B:** ô "Phản hồi tích cực" của `GET /api/v1/analytics/ai-performance` lấy từ `/v1/ai/quality` (khách + nhân viên, cộng tử/mẫu, bỏ `AUTO_EVAL`, mẫu số đếm theo lượt bấm); ai-service lỗi thì riêng ô này trống kèm `errorMessage`, màn vẫn mở. Các ô khác giữ `metrics_daily`. Loại hướng A (java-core cộng vào `metrics_daily`: đánh giá lại phải trừ/cộng, thiếu khoá nhánh/mô hình) và C (chỉ hiện ở màn của mình: màn UC039 vẫn báo 0) | GD2 |
-| Q3 | Bảo vệ `/internal/**` bằng gì? | Dùng chung `INTERNAL_API_TOKEN` cả hai chiều, ai-service gửi thêm `X-Internal-Token` | GD3 |
-| Q4 | Biên bản xác nhận UC041 làm tới đâu? | Bản gọn: biên bản = `items` + thời điểm + người xác minh, lưu trong yêu cầu và dòng kiểm toán; `certificateUri = null`, ghi vào "giảm độ sâu" | GD3 |
+| Q3 | Bảo vệ `/internal/**` bằng gì? | **✅ chốt 13/11 theo đề xuất:** dùng chung `INTERNAL_API_TOKEN` cả hai chiều, ai-service gửi thêm `X-Internal-Token` | GD3 |
+| Q4 | Biên bản xác nhận UC041 làm tới đâu? | **✅ chốt 13/11 theo đề xuất — bản gọn:** biên bản = `items` + thời điểm + người xác minh, lưu trong yêu cầu và dòng kiểm toán; `certificateUri = null`, ghi vào "giảm độ sâu" | GD3 |
 | Q5 | Màn "Tìm thử" (SCR031 `knowledge/search`) không thuộc luồng chính UC020 và ai-service chưa có endpoint | Để ngoài đợt, ghi rõ; không ẩn màn — **✅ chốt 24/10 theo đề xuất** | GD1 |
 | Q6 | Dev B chưa trả lời mục 1 thì có làm trước không? | **✅ chốt 24/10:** 8 UC AI là việc của Dev A từ dashboard → java-core → ai-service — làm đúng, chạy chuẩn luôn, kể cả file dùng chung; chỉ **báo** Dev B (tin ở `docs/contracts/giao-dien-gd.md` mục 0) | GD1 |
 
@@ -412,7 +422,9 @@ thay vì xoá vật lý · vì sao gọi ai-service **ngoài** transaction của
   chưa có lược đồ). Không có trạng thái `PAUSED`. Không có `tokensUsed`/`costVnd` cho việc nạp.
 - UC023: không có semantic cache (bỏ cùng N16). `ai.turn.completed` chưa phát.
 - UC025: số "khách khác nhau" xấp xỉ bằng số hội thoại khác nhau (`ai_interactions` không có `contact_id`).
-- UC026: theo Q1. `TOKEN_QUOTA_EXCEEDED` chưa có.
-- UC041: thực thi đồng bộ; biên bản theo Q4; phạm vi xoá không vươn tới hệ thống ngoài (MCP đã hoãn).
+- UC026: chỉ `CLOSING` + `MANUAL` (Q1); `HANDOFF`, `TURN_THRESHOLD` không có nguồn phát. `TOKEN_QUOTA_EXCEEDED` chưa có.
+- UC041: thực thi đồng bộ; biên bản bản gọn, `certificateUri = null` (Q4); phạm vi xoá không vươn tới hệ thống ngoài
+  (MCP đã hoãn) và nhà cung cấp LLM; liên kết kênh ↔ khách (`external_user_id`) giữ nguyên; tối đa 500 hội thoại
+  một lượt gửi ai-service.
 - Lỗ hổng `contact_id` (tài liệu riêng của khách bị trích cho khách khác) **chưa vá** — làm sau đợt, ADR-0036.
 - `mask_pii` không che họ tên (phát hiện N17).

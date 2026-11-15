@@ -29,7 +29,9 @@ def tao_java_core_client(settings: Settings | None = None) -> JavaCoreClient:
             _GIA = MockJavaCoreClient()
         return _GIA
     return HttpJavaCoreClient(
-        base_url=settings.java_core_url, timeout_s=settings.java_core_timeout_s
+        base_url=settings.java_core_url,
+        timeout_s=settings.java_core_timeout_s,
+        internal_token=settings.internal_api_token,
     )
 
 

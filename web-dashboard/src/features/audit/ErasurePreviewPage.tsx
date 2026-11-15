@@ -99,6 +99,8 @@ export function ErasurePreviewPage() {
     .filter((m) => m.action === 'ANONYMIZE')
     .reduce((t, m) => t + (m.affectedRows ?? 0), 0)
   const soGiuLai = muc.filter((m) => m.action === 'KEEP_AGGREGATE').length
+  // Phía AI java-core không đếm được (ADR-0002) — nói rõ thay vì để "0 dòng" bị hiểu là không có gì
+  const soChuaBiet = muc.filter((m) => m.affectedRows == null && m.action !== 'KEEP_AGGREGATE').length
 
   return (
     <StatusPage
@@ -111,7 +113,7 @@ export function ErasurePreviewPage() {
       moTa={
         phamVi.isLoading
           ? 'Quét qua toàn bộ lược đồ để tìm những bảng có tham chiếu tới khách hàng này.'
-          : `${soXoaHan.toLocaleString('vi-VN')} dòng bị xoá hẳn, ${soAnDanh.toLocaleString('vi-VN')} dòng được ẩn danh hoá, ${soGiuLai} bảng số liệu tổng hợp giữ nguyên. Chưa có gì bị xoá ở bước này.`
+          : `${soXoaHan.toLocaleString('vi-VN')} dòng bị xoá hẳn, ${soAnDanh.toLocaleString('vi-VN')} dòng được ẩn danh hoá, ${soGiuLai} bảng số liệu tổng hợp giữ nguyên${soChuaBiet > 0 ? ` — chưa tính ${soChuaBiet} bảng phía AI, số dòng biết sau khi thực thi` : ''}. Chưa có gì bị xoá ở bước này.`
       }
       thaoTacChinh={{
         nhan: 'Tới danh sách yêu cầu xoá',

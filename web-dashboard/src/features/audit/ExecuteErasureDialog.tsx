@@ -72,8 +72,13 @@ export function ExecuteErasureDialog({
       nhanGui={chayLai ? 'Chạy lại phần còn lại' : 'Xoá vĩnh viễn'}
       nhanHuy="Không xoá"
       onGui={async () => {
-        await thucThi(yeuCau.id).unwrap()
-        toast.success('Đã thực thi xoá. Biên bản xác nhận đã sẵn sàng để tải về.')
+        // Đồng bộ: phản hồi là kết quả CUỐI. Hỏng một phần vẫn là 200 — báo rõ để người duyệt chạy lại.
+        const kq = await thucThi(yeuCau.id).unwrap()
+        if (kq.status === 'COMPLETED') {
+          toast.success('Đã xoá xong. Biên bản xác nhận đã lưu vào hồ sơ yêu cầu và nhật ký kiểm toán.')
+        } else {
+          toast.warning('Xoá dừng lại ở một số bảng — xem tiến độ rồi bấm "Chạy lại phần còn lại".')
+        }
         onDong()
       }}
     >

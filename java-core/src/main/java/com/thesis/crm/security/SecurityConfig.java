@@ -1,5 +1,6 @@
 package com.thesis.crm.security;
 
+import com.thesis.crm.config.InternalApiProperties;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -19,6 +20,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.util.StringUtils;
 
 @Configuration
@@ -27,10 +29,13 @@ public class SecurityConfig {
 
     private final RsaKeyProperties rsaKeyProperties;
     private final TenantRlsFilter tenantRlsFilter;
+    private final InternalApiProperties internalApi;
 
-    public SecurityConfig(RsaKeyProperties rsaKeyProperties, TenantRlsFilter tenantRlsFilter) {
+    public SecurityConfig(RsaKeyProperties rsaKeyProperties, TenantRlsFilter tenantRlsFilter,
+            InternalApiProperties internalApi) {
         this.rsaKeyProperties = rsaKeyProperties;
         this.tenantRlsFilter = tenantRlsFilter;
+        this.internalApi = internalApi;
     }
 
     @Bean
@@ -41,6 +46,29 @@ public class SecurityConfig {
     @Bean
     public JwtDecoder jwtDecoder() {
         return NimbusJwtDecoder.withPublicKey(rsaKeyProperties.getPublicKey()).build();
+    }
+
+    /**
+     * Bề mặt chỉ ai-service gọi (UC026, UC041 — Q3 của GD3): không JWT người dùng, bắt buộc
+     * {@code X-Internal-Token} khớp {@code crm.internal.api-token}. Thiếu/sai token → 401; có token
+     * mà vẫn bị chặn (không có) → 403. Gateway không định tuyến {@code /internal/**} (chỉ mở
+     * {@code /api/v1/**}), token là lớp chặn thứ hai cho trường hợp ai đó gọi thẳng cổng java-core.
+     *
+     * <p>Đứng TRƯỚC hai chuỗi kia: chuỗi có {@code securityMatcher} hẹp nhất phải được xét trước, nếu
+     * không thì {@code anyRequest().authenticated()} của chuỗi JWT nuốt mất đường này.
+     */
+    @Bean
+    @org.springframework.core.annotation.Order(0)
+    public SecurityFilterChain internalSecurityFilterChain(HttpSecurity http, JsonSecurityErrorHandler loi)
+            throws Exception {
+        http
+                .securityMatcher("/internal/**")
+                .csrf(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(new InternalTokenFilter(internalApi), AnonymousAuthenticationFilter.class)
+                .authorizeHttpRequests(auth -> auth.anyRequest().hasRole(InternalTokenFilter.ROLE))
+                .exceptionHandling(e -> e.authenticationEntryPoint(loi).accessDeniedHandler(loi));
+        return http.build();
     }
 
     @Bean
@@ -105,6 +133,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/documents/*").hasRole("TENANT_ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/documents/*").hasRole("TENANT_ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/documents/*/reindex").hasRole("TENANT_ADMIN")
+                        // UC041: tạo yêu cầu xoá thì mọi nhân viên (thay mặt khách); đọc, xem trước, xác minh danh
+                        // tính và thực thi chỉ quản trị viên — thao tác không đảo ngược được.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/erasure-requests").authenticated()
+                        .requestMatchers("/api/v1/erasure-requests", "/api/v1/erasure-requests/**")
+                                .hasRole("TENANT_ADMIN")
                         // Bảng giá trên trang chủ công khai: chỉ tên gói, giá, hạn mức — thông tin vốn để quảng
                         // cáo. Để ở CHUỖI NÀY (không phải chuỗi công khai) để người đã đăng nhập vẫn được đọc
                         // token và đánh dấu "gói hiện tại" (SCR013).

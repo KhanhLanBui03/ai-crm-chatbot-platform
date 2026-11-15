@@ -35,7 +35,10 @@ public final class AiServiceErrors {
             "DOCUMENT_BUSY", "Tài liệu đang được xử lý (nạp hoặc nạp lại). Thử lại khi việc nạp xong.",
             "DOCUMENT_ARCHIVED", "Tài liệu đã được gỡ khỏi kho tri thức.",
             "INTERACTION_NOT_FOUND", "Không tìm thấy lượt trả lời này.",
-            "REASON_REQUIRED", "Đánh giá chưa ổn cần chọn một lý do.");
+            "REASON_REQUIRED", "Đánh giá chưa ổn cần chọn một lý do.",
+            // UC026 — nút "Tóm tắt lại"
+            "CONVERSATION_TOO_SHORT", "Hội thoại còn quá ngắn để tóm tắt — cần thêm tin nhắn của khách.",
+            "SUMMARY_SCHEMA_INVALID", "Mô hình chưa sinh được đủ bốn phần tóm tắt. Bản cũ được giữ nguyên, thử lại sau.");
 
     private AiServiceErrors() {
     }

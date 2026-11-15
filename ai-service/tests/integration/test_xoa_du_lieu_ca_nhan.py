@@ -231,6 +231,10 @@ async def test_xoa_ca_dong_doi_cung_tep(ha_tang, kho_s3):
     assert _muc(kq, "knowledge.knowledge_documents").affected_rows == 3
     for doc in (cu, moi, bong):
         assert not await _con_tai_lieu(factory, tenant, doc)
+    # Hạn mức (GD3): ba dòng nhưng chỉ MỘT tài liệu đang được đếm — bản cũ đã ARCHIVED (đã trả lúc
+    # bản mới thế chỗ), bản bóng còn PENDING chưa từng được đếm. Cùng luật với gỡ UC020.
+    assert kq.released_documents == 1
+    assert kq.released_storage_bytes == len(HOP_DONG_X)
 
 
 async def test_chay_lai_luy_dang(ha_tang, kho_s3):
@@ -246,6 +250,9 @@ async def test_chay_lai_luy_dang(ha_tang, kho_s3):
     assert lan1.status == lan2.status == "COMPLETED"
     assert sum(m.affected_rows for m in lan1.items) > 0
     assert all(m.affected_rows == 0 and m.status == "DONE" for m in lan2.items)
+    # Chạy lại không trả hạn mức lần hai — java-core trừ theo đúng số này
+    assert (lan1.released_documents, lan1.released_storage_bytes) == (1, len(HOP_DONG_X))
+    assert (lan2.released_documents, lan2.released_storage_bytes) == (0, 0)
 
 
 async def test_java_core_sap_thi_partially_failed_ma_phan_ai_van_xong(ha_tang, kho_s3):

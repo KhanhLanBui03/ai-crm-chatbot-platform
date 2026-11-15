@@ -95,6 +95,36 @@ class AiInteractionRelayIntegrationTest extends EngagementIntegrationTestBase {
         assertThat(l.get("feedback").get("id").asText()).isEqualTo("77777777-7777-7777-7777-777777777777");
     }
 
+    /**
+     * GD4 — hội thoại mới chỉ có khách đánh giá: không có nhân viên nào để tra tên nên bảng tên là
+     * {@code Map.of()}, và {@code Map.of().get(null)} ném NPE → cột ngữ cảnh hộp thư 500 trước khi sửa.
+     */
+    @Test
+    void danhSachLuot_chiCoKhachDanhGia_200() throws Exception {
+        AI.interactions.set(new FakeAiServer.Script(200, """
+                {"items": [{
+                  "id": "%s", "conversation_id": "%s", "message_id": null, "route": "RAG",
+                  "intent": "PRICING_POLICY", "intent_confidence": 0.93,
+                  "user_query": "tẩy trắng bao nhiêu", "answer_text": "Dạ 2,5 triệu [1].",
+                  "refused": false, "status": "SUCCESS", "citations": [],
+                  "feedback": [
+                    {"id": "88888888-8888-8888-8888-888888888888", "rater_type": "CUSTOMER",
+                     "rater_user_id": null, "rating": "NEGATIVE", "reason_code": "INCOMPLETE", "comment": null,
+                     "corrected_answer": null, "rated_at": "2026-11-14T02:03:27Z"}],
+                  "created_at": "2026-11-14T02:03:26Z"}],
+                 "total": 1, "page": 0, "size": 100}
+                """.formatted(LUOT, HOI_THOAI), 0));
+
+        JsonNode trang = data(mvc.perform(get("/api/v1/ai-interactions")
+                        .param("conversationId", HOI_THOAI).param("size", "100").with(as(TENANT_A)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+
+        JsonNode dg = trang.get("items").get(0).get("feedbacks");
+        assertThat(dg).hasSize(1);
+        assertThat(dg.get(0).get("ratedByType").asText()).isEqualTo("CUSTOMER");
+        assertThat(dg.get(0).get("ratedByName").isNull()).isTrue();
+    }
+
     @Test
     void danhGia_cheThieuLyDo_422_khongGoiAiService() throws Exception {
         int truoc = AI.feedbackCalls.get();

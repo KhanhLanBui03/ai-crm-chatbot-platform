@@ -64,9 +64,18 @@ export const NHAN_HANH_DONG: Record<string, string> = {
   DOCUMENT_UPDATED: 'Sửa thông tin tài liệu tri thức',
   DOCUMENT_REINDEXED: 'Nạp lại tài liệu tri thức',
   DOCUMENT_ARCHIVED: 'Gỡ tài liệu khỏi kho tri thức',
-  // UC041 (Dev A) — sắp ghi qua AuditLogWriter.recordWithPersonalData
+  // Sắp ghi qua AuditLogWriter.recordWithPersonalData
   CONTACT_MERGED: 'Hợp nhất hồ sơ khách hàng',
+  // UC041 (Dev A, GD3) — platform/erasure/ErasureService
+  ERASURE_REQUESTED: 'Tạo yêu cầu xoá dữ liệu cá nhân',
+  ERASURE_IDENTITY_VERIFIED: 'Xác minh danh tính chủ thể dữ liệu',
   ERASURE_EXECUTED: 'Thực thi xoá dữ liệu cá nhân',
+}
+
+/** UC041 — hai nguồn yêu cầu (V109 `requested_by`). */
+export const NHAN_NGUON_YEU_CAU: Record<'CONTACT' | 'STAFF', string> = {
+  CONTACT: 'Khách hàng tự gửi yêu cầu',
+  STAFF: 'Nhân viên tạo thay mặt khách',
 }
 
 export const NHAN_TRANG_THAI_XOA: Record<

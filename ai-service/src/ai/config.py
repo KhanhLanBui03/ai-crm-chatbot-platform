@@ -47,14 +47,18 @@ class Settings(BaseSettings):
 
     # ── java-core: bề mặt DUY NHẤT để chạm dữ liệu nghiệp vụ ─────────────
     java_core_url: str = "http://java-core:8081"
-    # mock: client giả trong bộ nhớ (src/ai/integrations/java_core/client.py). Ba endpoint
-    # /internal/* mà UC026/UC041 cần CHƯA có ở java-core (09/10) — nháp ở
-    # docs/contracts/uc026-uc041-tom-tat-va-xoa-du-lieu.md. Có rồi thì đổi sang remote.
+    # mock: client giả trong bộ nhớ (src/ai/integrations/java_core/client.py) — test, CI, chạy không
+    # có java-core. remote: ba endpoint /internal/* của java-core (có từ GD3, 13/11/2026; hình
+    # dạng ở docs/contracts/uc026-uc041-tom-tat-va-xoa-du-lieu.md), cần INTERNAL_API_TOKEN khớp.
     java_core_mode: Literal["remote", "mock"] = "mock"
     java_core_timeout_s: float = Field(default=5.0, gt=0)
-    # Bí mật dùng chung cho endpoint CHỈ java-core được gọi (DELETE /v1/ai/privacy/…). Rỗng =
-    # endpoint đóng hẳn (403). Gateway mở /ai/v1/** cho mọi JWT của tenant: không có chốt này thì
-    # nhân viên bất kỳ xoá được dữ liệu cá nhân mà bỏ qua bước xác minh danh tính của UC041.
+    # Bí mật dùng chung với java-core, MỘT token cho cả hai chiều (chốt Q3 của GD3):
+    #  - chiều vào: endpoint CHỈ java-core được gọi (DELETE /v1/ai/privacy/…) — rỗng = đóng
+    #    hẳn (403).
+    #    Gateway chặn thêm /ai/v1/ai/privacy/**; không có chốt này thì nhân viên bất kỳ xoá được dữ
+    #    liệu cá nhân mà bỏ qua bước xác minh danh tính của UC041.
+    #  - chiều ra: HttpJavaCoreClient gửi X-Internal-Token khi gọi /internal/** của java-core.
+    # Phải CÙNG giá trị INTERNAL_API_TOKEN của java-core (crm.internal.api-token).
     internal_api_token: str = ""
 
     # ── MCP: repository riêng mcp-server-mock ────────────────────────────

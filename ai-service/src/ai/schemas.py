@@ -589,6 +589,11 @@ class ErasureResult(BaseModel):
     items: list[ErasureItem]
     # Giới hạn PHẢI hiện cho người duyệt (đặc tả UC041 bước 6) — java-core hiển thị nguyên văn.
     note: str
+    # Hạn mức tồn kho (ADR-0023) mà lượt này vừa giải phóng — java-core trừ ``DOCUMENT`` và
+    # ``STORAGE_MB`` theo đúng hai số này, như ``quotaReleased`` của đường gỡ UC020. Gọi lại thì 0
+    # (tài liệu đã mất).
+    released_documents: int = Field(default=0, alias="releasedDocuments")
+    released_storage_bytes: int = Field(default=0, alias="releasedStorageBytes")
 
 
 # ── UC040 bước 8 — cảnh báo an toàn phía AI (java-core gộp với audit_logs CRITICAL) ─────────────

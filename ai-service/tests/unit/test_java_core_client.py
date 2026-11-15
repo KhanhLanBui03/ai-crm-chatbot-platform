@@ -54,6 +54,30 @@ async def test_lay_tin_nhan_doc_het_cac_trang_va_mang_header():
     assert da_goi[0].headers["X-Trace-Id"] == "trace-uc026"
 
 
+async def test_mang_x_internal_token_khi_co_cau_hinh():
+    """Chốt Q3 của GD3: java-core bảo vệ /internal/** bằng CÙNG INTERNAL_API_TOKEN. Có token thì
+    mọi lời gọi mang nó; không cấu hình thì không gửi header rỗng (java-core trả 401, hỏng rõ
+    ràng)."""
+    da_goi: list[httpx.Request] = []
+
+    def xu_ly(req: httpx.Request) -> httpx.Response:
+        da_goi.append(req)
+        return httpx.Response(200, json=_vo({"deleted": 2}))
+
+    co = HttpJavaCoreClient(base_url="http://java-core:8081", timeout_s=1.0,
+                            internal_token="bi-mat-chung", transport=httpx.MockTransport(xu_ly))
+    khong = _client(xu_ly)
+    try:
+        assert await co.xoa_dac_trung_lead(TENANT, uuid4()) == 2
+        await khong.xoa_dac_trung_lead(TENANT, uuid4())
+    finally:
+        await co.aclose()
+        await khong.aclose()
+
+    assert da_goi[0].headers["X-Internal-Token"] == "bi-mat-chung"
+    assert "X-Internal-Token" not in da_goi[1].headers
+
+
 async def test_hoi_thoai_khong_co_tra_rong():
     c = _client(lambda req: httpx.Response(404, json={"success": False}))
     try:

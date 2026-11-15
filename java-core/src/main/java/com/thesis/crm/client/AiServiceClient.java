@@ -82,6 +82,15 @@ public class AiServiceClient {
     }
 
     /**
+     * Như {@link #delete} nhưng gắn thêm header — hiện chỉ để mang {@code X-Internal-Token} tới endpoint
+     * chỉ java-core được gọi (UC041, {@code AiPrivacyClient}). Header tenant/trace vẫn do lớp này đặt.
+     */
+    public <T> T delete(UUID tenantId, Function<UriBuilder, URI> uri, Map<String, String> themHeader,
+            Class<T> kieu) {
+        return goi(HttpMethod.DELETE, tenantId, uri, null, themHeader, kieu);
+    }
+
+    /**
      * Một lượt gọi: gắn {@code X-Tenant-Id} (tham số, do service lấy từ JWT — không
      * bao giờ từ
      * request của người dùng) và {@code X-Trace-Id} (từ MDC), ghi thân bằng
@@ -93,10 +102,16 @@ public class AiServiceClient {
      */
     private <T> T goi(HttpMethod method, UUID tenantId, Function<UriBuilder, URI> uri, Object than,
             Class<T> kieu) {
+        return goi(method, tenantId, uri, than, Map.of(), kieu);
+    }
+
+    private <T> T goi(HttpMethod method, UUID tenantId, Function<UriBuilder, URI> uri, Object than,
+            Map<String, String> themHeader, Class<T> kieu) {
         RestClient.RequestBodySpec yeuCau = rest.method(method)
                 .uri(uri)
                 .header(HEADER_TENANT, tenantId.toString())
                 .accept(MediaType.APPLICATION_JSON);
+        themHeader.forEach(yeuCau::header);
         String trace = MDC.get(TraceIdFilter.MDC_KEY);
         if (trace != null) {
             yeuCau.header(HEADER_TRACE, trace);

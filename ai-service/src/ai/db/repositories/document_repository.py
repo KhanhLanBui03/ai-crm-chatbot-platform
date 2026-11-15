@@ -687,6 +687,20 @@ class KetQuaXoaTaiLieu:
     so_doan: int
     # Đường dẫn tệp gốc (``s3://…``) đã mất dòng trỏ tới — nơi gọi xoá object SAU khi commit.
     cac_tep: list[str]
+    # Phần hạn mức tồn kho (ADR-0023) mà lượt xoá vừa giải phóng: tài liệu ĐƯỢC ĐẾM trong bộ đếm
+    # ``DOCUMENT``/``STORAGE_MB`` của java-core. Cùng luật với ``quota_released`` của đường gỡ
+    # UC020.
+    so_tai_lieu_duoc_dem: int = 0
+    so_byte_duoc_dem: int = 0
+
+
+def _duoc_dem(status: str, replaces_document_id: UUID | None) -> bool:
+    """Tài liệu có đang chiếm hạn mức tồn kho không. ``ARCHIVED`` đã trả lúc gỡ (UC020). Bản bóng
+    nạp lại chỉ thế chỗ bản cũ trong bộ đếm khi đã ``READY`` (lúc đó bản cũ ``ARCHIVED``); bản
+    bóng đang nạp hay đã hỏng thì chưa từng được đếm — cùng luật với ``service.delete_document``."""
+    if status == "ARCHIVED":
+        return False
+    return replaces_document_id is None or status == "READY"
 
 
 async def xoa_tai_lieu_theo_khach(session: AsyncSession, contact_id: UUID) -> KetQuaXoaTaiLieu:
@@ -716,10 +730,17 @@ async def xoa_tai_lieu_theo_khach(session: AsyncSession, contact_id: UUID) -> Ke
             f"""
             DELETE FROM knowledge.knowledge_documents
              WHERE id IN ({muc_tieu})
-            RETURNING file_path
+            RETURNING file_path, status, replaces_document_id, file_size_bytes
             """
         ),
         {"contact_id": contact_id},
     )
     dong = tai_lieu.all()
-    return KetQuaXoaTaiLieu(len(dong), doan.rowcount, sorted({d[0] for d in dong if d[0]}))
+    dem = [d for d in dong if _duoc_dem(d[1], d[2])]
+    return KetQuaXoaTaiLieu(
+        len(dong),
+        doan.rowcount,
+        sorted({d[0] for d in dong if d[0]}),
+        so_tai_lieu_duoc_dem=len(dem),
+        so_byte_duoc_dem=sum(d[3] or 0 for d in dem),
+    )

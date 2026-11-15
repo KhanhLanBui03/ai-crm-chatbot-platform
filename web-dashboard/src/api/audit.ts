@@ -4,6 +4,7 @@ import type {
   BanGhiKiemToan,
   MucNghiemTrongKiemToan,
   MucXoa,
+  TaoYeuCauXoa,
   TrangThaiYeuCauXoa,
   YeuCauXoa,
   YeuCauXoaChiTiet,
@@ -99,8 +100,27 @@ export const auditApi = apiSlice.injectEndpoints({
       providesTags: (_kq, _loi, id) => [{ type: 'NhatKyKiemToan', id }],
     }),
 
+    /** UC041 bước 1–2 — tạo yêu cầu `PENDING`. Chặn yêu cầu thứ hai cho cùng khách (409, luồng 2.1). */
+    taoYeuCauXoa: build.mutation<YeuCauXoaChiTiet, TaoYeuCauXoa>({
+      query: (than) => ({ url: '/api/v1/erasure-requests', method: 'POST', body: than }),
+      invalidatesTags: [CA_YEU_CAU_XOA, 'NhatKyKiemToan'],
+    }),
+
+    /** UC041 bước 3–4 — người xác minh là người đang đăng nhập; máy chủ ghi người + lúc cùng nhau. */
+    xacMinhDanhTinh: build.mutation<YeuCauXoaChiTiet, string>({
+      query: (id) => ({ url: `/api/v1/erasure-requests/${id}/verify-identity`, method: 'POST' }),
+      invalidatesTags: (_kq, _loi, id) => [
+        { type: 'NhatKyKiemToan', id },
+        CA_YEU_CAU_XOA,
+        'NhatKyKiemToan',
+      ],
+    }),
+
     // ── SCR058 — thực thi yêu cầu xoá ─────────────────────────────────────────
-    /** Thao tác **không đảo ngược được**. Làm mới cả nhật ký kiểm toán vì nó sinh ra `ERASURE_EXECUTED`. */
+    /**
+     * Thao tác **không đảo ngược được**. Làm mới cả nhật ký kiểm toán vì nó sinh ra `ERASURE_EXECUTED`.
+     * Đồng bộ: phản hồi là kết quả CUỐI (`COMPLETED` hoặc `PARTIALLY_FAILED`), không phải "đã bắt đầu".
+     */
     thucThiYeuCauXoa: build.mutation<YeuCauXoaChiTiet, string>({
       query: (id) => ({ url: `/api/v1/erasure-requests/${id}/execute`, method: 'POST' }),
       invalidatesTags: (_kq, _loi, id) => [
@@ -119,5 +139,7 @@ export const {
   useDanhSachYeuCauXoaQuery,
   useXemTruocPhamViXoaQuery,
   useChiTietYeuCauXoaQuery,
+  useTaoYeuCauXoaMutation,
+  useXacMinhDanhTinhMutation,
   useThucThiYeuCauXoaMutation,
 } = auditApi
