@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * Chỗ DUY NHẤT dịch ngoại lệ thành phản hồi HTTP. Mọi lỗi ra ngoài đều là {@code ApiResponse} có
@@ -124,6 +125,12 @@ public class GlobalExceptionHandler {
             HttpServletRequest request) {
         return body(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Chưa đăng nhập hoặc phiên đã hết hạn", null,
                 request);
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Object>> handleNotFound(NoResourceFoundException ex,
+            HttpServletRequest request) {
+        return body(HttpStatus.NOT_FOUND, "NOT_FOUND", "Không tìm thấy tài nguyên yêu cầu.", null, request);
     }
 
     /** Lỗi chưa lường trước. Chi tiết chỉ vào log; phía gọi nhận thông điệp chung. */

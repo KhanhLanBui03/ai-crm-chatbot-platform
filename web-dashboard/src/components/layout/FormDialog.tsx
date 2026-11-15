@@ -73,7 +73,11 @@ export function FormDialog<T extends FieldValues>({
            */
           noValidate
           onSubmit={form.handleSubmit(async (giaTri) => {
-            await onGui(giaTri)
+            try {
+              await onGui(giaTri)
+            } catch {
+              // Lỗi từ máy chủ (409/422…) đã được hiển thị qua prop `loi`; nuốt ở đây để tránh unhandled rejection.
+            }
           })}
           className="flex flex-col gap-5"
         >
