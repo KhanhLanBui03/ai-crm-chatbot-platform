@@ -30,6 +30,7 @@ class WidgetApp {
   private moc: string | null = null
   private hoi: number | undefined
   private daKhoiTao = false
+  private dangKhoiTao: Promise<void> | null = null
   /** Đã tự bật ô "để lại thông tin" một lần (lúc chuyển sang nhân viên) — không bật lại liên tục. */
   private daHoiThongTin = false
   private readonly ui: GiaoDienChat
@@ -52,7 +53,16 @@ class WidgetApp {
     })
   }
 
-  async khoiTao(): Promise<void> {
+  khoiTao(): Promise<void> {
+    if (this.daKhoiTao) return Promise.resolve()
+    // Dùng chung một promise để khách gửi tin trước khi mở phiên xong không tạo hai phiên song song (UC009/UC041).
+    this.dangKhoiTao ??= this.thucHienKhoiTao().finally(() => {
+      this.dangKhoiTao = null
+    })
+    return this.dangKhoiTao
+  }
+
+  private async thucHienKhoiTao(): Promise<void> {
     try {
       const p = await this.api.moPhien(this.key, this.token)
       this.daKhoiTao = true
@@ -98,7 +108,7 @@ class WidgetApp {
 
   private async deLaiThongTin(tt: ThongTinLienHe): Promise<void> {
     if (!this.token) {
-      if (!this.daKhoiTao) await this.khoiTao()
+      await this.khoiTao()
       if (!this.token) return
     }
     try {
@@ -120,7 +130,7 @@ class WidgetApp {
 
   private async gui(noiDung: string): Promise<void> {
     if (!this.token) {
-      if (!this.daKhoiTao) await this.khoiTao()
+      await this.khoiTao()
       if (!this.token) return
     }
     this.ui.baoLoi(null)
