@@ -80,7 +80,12 @@ minio>=7.2
 py-eureka-client>=0.11
 
 # --- Nạp tài liệu: trích xuất văn bản. THUẦN PYTHON, không phải ML ---
-pymupdf>=1.24
+# TRẦN <2 LÀ BẮT BUỘC, không phải cho gọn: pymupdf 2.x kéo theo pymupdf4llm + pymupdf_layout, và hai
+# gói đó phụ thuộc ONNXRUNTIME. Để `>=1.24` trống trần thì một lần build lại bất kỳ cũng đưa
+# onnxruntime vào image — vi phạm luật 5 và làm đỏ cả hai cổng chặn CI ở đầu tệp này (đo 13/11/2026:
+# image 232 MB → 1,3 GB). Không ai sửa gì, chỉ là thư viện lên bản mới.
+# Muốn nâng lên 2.x thì phải cài với --no-deps và tự chịu phần phụ thuộc, hoặc đổi sang thư viện khác.
+pymupdf>=1.24,<2
 python-docx>=1.1
 trafilatura>=1.12
 
